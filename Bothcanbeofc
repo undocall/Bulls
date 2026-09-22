@@ -57,7 +57,7 @@ if not success or not uiLibrary then
 end
 
 -- Configure UI
-uiLibrary:SetTitle("Hitblox (v5.0)")
+uiLibrary:SetTitle("Hitblox (v5.5)")
 uiLibrary:SetIcon("http://www.roblox.com/asset/?id=91738788645337")
 uiLibrary:SetTheme("HighContrast")
 task.wait(0.1)
@@ -472,45 +472,61 @@ uiLibrary:AddToggle("Fly", function(enabled)
     toggleFly(enabled)
 end, false)
 
--- Anti-Fling & Hitback Toggle
+-- Updated God Mode & Repulsor Shield Logic
 uiLibrary:AddToggle("Anti-Fling & Hitback", function(enabled)
     antiFlingEnabled = enabled
     playSound("rbxassetid://12221976")
     
     if enabled then
-        antiFlingConnection = RunService.Stepped:Connect(function()
+        antiFlingConnection = RunService.Heartbeat:Connect(function()
             local char = localPlayer.Character
             local root = char and char:FindFirstChild("HumanoidRootPart")
+            if not char or not root then return end
             
-            if char and root then
-                -- 1. Anti-Fling: Nullify Spin so you don't get twirled out of the map
-                root.AssemblyAngularVelocity = Vector3.zero
-                
-                -- 2. Anti-Fling: Nullify intense velocity spikes (Unless you are flying)
-                if not flyEnabled and root.AssemblyLinearVelocity.Magnitude > 250 then
-                    root.AssemblyLinearVelocity = Vector3.zero
-                end
-                
-                -- 3. Hitback: Make anyone who touches you bounce away
-                for _, p in ipairs(Players:GetPlayers()) do
-                    if p ~= localPlayer and p.Character then
-                        local enemyRoot = p.Character:FindFirstChild("HumanoidRootPart")
-                        if enemyRoot then
-                            local dist = (enemyRoot.Position - root.Position).Magnitude
-                            
-                            -- If they get too close (Melee range)
-                            if dist < 4.5 then
-                                -- Prevent them from colliding with you to stop them transferring physics glitches
-                                for _, part in ipairs(p.Character:GetDescendants()) do
-                                    if part:IsA("BasePart") then
-                                        part.CanCollide = false
-                                    end
+            -- 1. Anti-Fling: Keep yourself completely grounded against exploits
+            root.AssemblyAngularVelocity = Vector3.zero
+            if not flyEnabled and root.AssemblyLinearVelocity.Magnitude > 150 then
+                -- Neutralize massive velocity spikes (unless you are flying intentionally)
+                root.AssemblyLinearVelocity = Vector3.zero
+            end
+            
+            -- Scan enemies
+            for _, p in ipairs(Players:GetPlayers()) do
+                if p ~= localPlayer and p.Character then
+                    local enemyRoot = p.Character:FindFirstChild("HumanoidRootPart")
+                    local enemyHum = p.Character:FindFirstChildOfClass("Humanoid")
+                    
+                    -- 2. Anti-Damage: Destroy hit detection on their weapons locally
+                    for _, desc in ipairs(p.Character:GetDescendants()) do
+                        if desc:IsA("TouchTransmitter") then
+                            desc:Destroy()
+                        end
+                    end
+                    
+                    -- 3. Hitback: Fling them if they get close
+                    if enemyRoot and enemyHum then
+                        local dist = (enemyRoot.Position - root.Position).Magnitude
+                        
+                        if dist < 6 then -- 6-stud repulsor radius
+                            -- Prevent their character model from physically touching yours
+                            for _, part in ipairs(p.Character:GetDescendants()) do
+                                if part:IsA("BasePart") then
+                                    part.CanCollide = false
                                 end
-                                
-                                -- Apply the Hitback (Knocks them backwards & up locally)
-                                local pushDir = (enemyRoot.Position - root.Position).Unit
-                                enemyRoot.AssemblyLinearVelocity = Vector3.new(pushDir.X * 100, 50, pushDir.Z * 100)
                             end
+                            
+                            -- Ragdoll and violently throw them back and up
+                            enemyHum.PlatformStand = true 
+                            local pushDir = (enemyRoot.Position - root.Position).Unit
+                            
+                            -- Launch velocity
+                            enemyRoot.AssemblyLinearVelocity = Vector3.new(pushDir.X * 250, 150, pushDir.Z * 250)
+                            enemyRoot.AssemblyAngularVelocity = Vector3.new(math.random(-250, 250), math.random(-250, 250), math.random(-250, 250))
+                            
+                            -- Allow them to get back up after a split second
+                            task.delay(0.6, function()
+                                if enemyHum then enemyHum.PlatformStand = false end
+                            end)
                         end
                     end
                 end
