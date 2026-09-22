@@ -87,6 +87,72 @@ uiLibrary:SetTheme("HighContrast")
 task.wait(0.1)
 playSound("rbxassetid://195868961")
 
+-- Fly system variables
+local flyEnabled = false
+local flySpeed = 50
+local flyConnection
+local bodyGyro
+local bodyVelocity
+
+uiLibrary:AddToggle("Fly", function(enabled)
+    flyEnabled = enabled
+    playSound("rbxassetid://12221976")
+    
+    local character = localPlayer.Character
+    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+    local rootPart = character and character:FindFirstChild("HumanoidRootPart")
+    
+    if enabled then
+        if not (character and humanoid and rootPart) then return end
+        
+        -- Setup flight physics movers
+        bodyGyro = Instance.new("BodyGyro")
+        bodyGyro.P = 9e4
+        bodyGyro.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
+        bodyGyro.CFrame = rootPart.CFrame
+        bodyGyro.Parent = rootPart
+        
+        bodyVelocity = Instance.new("BodyVelocity")
+        bodyVelocity.MaxForce = Vector3.new(9e9, 9e9, 9e9)
+        bodyVelocity.Velocity = Vector3.new(0, 0, 0)
+        bodyVelocity.Parent = rootPart
+        
+        humanoid.PlatformStand = true -- Prevents standard falling/walking animations
+        
+        flyConnection = RunService.RenderStepped:Connect(function()
+            if not (character and humanoid and rootPart) then return end
+            
+            local camera = workspace.CurrentCamera
+            local moveDir = humanoid.MoveDirection
+            
+            -- Lock character orientation to camera
+            bodyGyro.CFrame = camera.CFrame
+            
+            if moveDir.Magnitude > 0 then
+                -- This math grabs your joystick movement and angles it based on camera pitch
+                -- Allowing you to fly up by looking up, or down by looking down while moving
+                local flatCam = CFrame.new(Vector3.zero, Vector3.new(camera.CFrame.LookVector.X, 0, camera.CFrame.LookVector.Z))
+                local localMove = flatCam:VectorToObjectSpace(moveDir)
+                
+                bodyVelocity.Velocity = camera.CFrame:VectorToWorldSpace(localMove) * flySpeed
+            else
+                bodyVelocity.Velocity = Vector3.new(0, 0, 0)
+            end
+        end)
+    else
+        -- Clean up physics when toggled off
+        if flyConnection then
+            flyConnection:Disconnect()
+            flyConnection = nil
+        end
+        if bodyGyro then bodyGyro:Destroy() end
+        if bodyVelocity then bodyVelocity:Destroy() end
+        if humanoid then
+            humanoid.PlatformStand = false
+        end
+    end
+end, false)
+
 -- Configuration variables
 local hitboxSize = 10
 local hitboxTransparency = 0.9
