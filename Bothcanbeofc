@@ -57,7 +57,7 @@ if not success or not uiLibrary then
 end
 
 -- Configure UI
-uiLibrary:SetTitle("Hitblox (v5.5 Extended)")
+uiLibrary:SetTitle("Hitblox (v6.0 Clean)")
 uiLibrary:SetIcon("http://www.roblox.com/asset/?id=91738788645337")
 uiLibrary:SetTheme("HighContrast")
 task.wait(0.1)
@@ -77,14 +77,8 @@ local flyEnabled = false
 local flySpeed = 50
 local flyConnection = nil
 
-local antiFlingEnabled = false
-local antiFlingConnection = nil
-
-local attackPower = 15 -- Min 15, Max 100
-local attackPowerEnabled = false
-local attackPowerConnection = nil
-
-local hitboxIncreaseButton, hitboxDecreaseButton, fovIncreaseButton, fovDecreaseButton
+local godModeEnabled = false
+local godModeConnection = nil
 
 -- ==============================================
 -- Hitbox System
@@ -251,7 +245,7 @@ local function toggleESP(enabled)
 end
 
 -- ==============================================
--- Player Tracking (Respawns/Deaths)
+-- Player Tracking
 -- ==============================================
 
 local function trackPlayer(player)
@@ -359,47 +353,26 @@ end
 -- UI Elements (Buttons & Toggles)
 -- ==============================================
 
-fovIncreaseButton = uiLibrary:AddButton("(Fov +)", function()
+uiLibrary:AddButton("(Fov +)", function()
     playSound("rbxassetid://12221967")
     workspace.CurrentCamera.FieldOfView = math.clamp(workspace.CurrentCamera.FieldOfView + 5, 1, 120)
 end)
 
-fovDecreaseButton = uiLibrary:AddButton("(Fov -)", function()
+uiLibrary:AddButton("(Fov -)", function()
     playSound("rbxassetid://12221967")
     workspace.CurrentCamera.FieldOfView = math.clamp(workspace.CurrentCamera.FieldOfView - 5, 1, 120)
 end)
 
-hitboxIncreaseButton = uiLibrary:AddButton("(Hitbox +)", function()
+uiLibrary:AddButton("(Hitbox +)", function()
     playSound("rbxassetid://12221967")
     hitboxSize = math.clamp(hitboxSize + 5, 1, 50)
     if hitboxEnabled then applyHitboxesToAllPlayers() end
 end)
 
-hitboxDecreaseButton = uiLibrary:AddButton("(Hitbox -)", function()
+uiLibrary:AddButton("(Hitbox -)", function()
     playSound("rbxassetid://12221967")
     hitboxSize = math.clamp(hitboxSize - 5, 1, 50)
     if hitboxEnabled then applyHitboxesToAllPlayers() end
-end)
-
--- Attack Power Adjusters
-uiLibrary:AddButton("(Power +)", function()
-    playSound("rbxassetid://12221967")
-    attackPower = math.clamp(attackPower + 5, 15, 100)
-    StarterGui:SetCore("SendNotification", {
-        Title = "Hitblox",
-        Text = "Attack Power set to: " .. tostring(attackPower),
-        Duration = 2
-    })
-end)
-
-uiLibrary:AddButton("(Power -)", function()
-    playSound("rbxassetid://12221967")
-    attackPower = math.clamp(attackPower - 5, 15, 100)
-    StarterGui:SetCore("SendNotification", {
-        Title = "Hitblox",
-        Text = "Attack Power set to: " .. tostring(attackPower),
-        Duration = 2
-    })
 end)
 
 uiLibrary:AddButton("FullBright", function()
@@ -441,84 +414,44 @@ uiLibrary:AddToggle("Fly", function(enabled)
     toggleFly(enabled)
 end, false)
 
--- Anti-Fling (Stops you from being flung by removing local collisions with enemies)
-uiLibrary:AddToggle("Anti-Fling", function(enabled)
-    antiFlingEnabled = enabled
+-- Pseudo God Mode (Deletes enemy weapon touch transmitters locally)
+uiLibrary:AddToggle("Pseudo God Mode", function(enabled)
+    godModeEnabled = enabled
     playSound("rbxassetid://12221976")
     
     if enabled then
-        antiFlingConnection = RunService.Heartbeat:Connect(function()
-            local char = localPlayer.Character
-            local root = char and char:FindFirstChild("HumanoidRootPart")
-            if not char or not root then return end
-            
-            -- Prevent self rotational velocity spikes
-            root.AssemblyAngularVelocity = Vector3.zero
-            if not flyEnabled and root.AssemblyLinearVelocity.Magnitude > 200 then
-                root.AssemblyLinearVelocity = Vector3.zero
-            end
-            
-            -- Disable collisions on all enemy character parts relative to local player
+        godModeConnection = RunService.RenderStepped:Connect(function()
+            -- Scan all enemies and remove the hitboxes from their tools/weapons
             for _, player in ipairs(Players:GetPlayers()) do
                 if player ~= localPlayer and player.Character then
-                    for _, part in ipairs(player.Character:GetChildren()) do
-                        if part:IsA("BasePart") then
-                            part.CanCollide = false
-                            part.AssemblyAngularVelocity = Vector3.zero
+                    for _, descendant in ipairs(player.Character:GetDescendants()) do
+                        if descendant:IsA("TouchTransmitter") then
+                            descendant:Destroy()
                         end
                     end
                 end
             end
+            
+            -- Prevent self from dying to basic void/fall damage bounds locally
+            if localPlayer.Character then
+                local humanoid = localPlayer.Character:FindFirstChildOfClass("Humanoid")
+                if humanoid then
+                    humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
+                    humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
+                end
+            end
         end)
     else
-        if antiFlingConnection then
-            antiFlingConnection:Disconnect()
-            antiFlingConnection = nil
+        if godModeConnection then
+            godModeConnection:Disconnect()
+            godModeConnection = nil
         end
-    end
-end, false)
-
--- Attack Power Multiplier Toggle
-uiLibrary:AddToggle("Attack Power", function(enabled)
-    attackPowerEnabled = enabled
-    playSound("rbxassetid://12221976")
-    
-    if enabled then
-        attackPowerConnection = RunService.Heartbeat:Connect(function()
-            if not attackPowerEnabled then return end
-            
-            local char = localPlayer.Character
-            if not char then return end
-            
-            local tool = char:FindFirstChildOfClass("Tool")
-            if not tool then return end
-            
-            local handle = tool:FindFirstChild("Handle") or tool:FindFirstChildWhichIsA("BasePart")
-            if not handle then return end
-            
-            -- Multi-hit trigger loop based on configured attackPower level
-            for _, player in ipairs(Players:GetPlayers()) do
-                if isEnemy(player) and player.Character then
-                    local enemyRoot = player.Character:FindFirstChild("HumanoidRootPart")
-                    if enemyRoot then
-                        local distance = (enemyRoot.Position - handle.Position).Magnitude
-                        if distance <= (hitboxSize + 2) then
-                            local hitCount = math.clamp(math.floor(attackPower / 10), 2, 10)
-                            for i = 1, hitCount do
-                                if firetouchinterest then
-                                    firetouchinterest(handle, enemyRoot, 0)
-                                    firetouchinterest(handle, enemyRoot, 1)
-                                end
-                            end
-                        end
-                    end
-                end
+        if localPlayer.Character then
+            local humanoid = localPlayer.Character:FindFirstChildOfClass("Humanoid")
+            if humanoid then
+                humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, true)
+                humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, true)
             end
-        end)
-    else
-        if attackPowerConnection then
-            attackPowerConnection:Disconnect()
-            attackPowerConnection = nil
         end
     end
 end, false)
