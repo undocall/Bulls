@@ -1,6 +1,5 @@
 -- ==============================================
--- ⚡ HITBLOX V5: ISLAND BRAWLER & METEOR DIVE 
--- (CUSTOM MOBILE UI INCLUDED)
+-- ⚡ HITBLOX V6: ISLAND BRAWLER "INTIMIDATOR" BUILD
 -- ==============================================
 
 local Players = game:GetService("Players")
@@ -23,10 +22,11 @@ local states = {
     Noclip = false,
     AimLock = false,
     MeteorDive = false,
-    BrawlMagnet = false
+    BrawlMagnet = false,
+    ShockwaveAura = false
 }
 
-local hitboxSize = 15
+local hitboxSize = 25 -- Massive threat range
 local espGuis = {}
 local flyConnection = nil
 local noclipConnection = nil
@@ -39,11 +39,15 @@ local isMeteorStriking = false
 -- ==============================================
 local function getClosestEnemy()
     local closest, shortest = nil, math.huge
+    local char = localPlayer.Character
+    if not char or not char:FindFirstChild("HumanoidRootPart") then return nil end
+    local myRoot = char.HumanoidRootPart
+
     for _, p in ipairs(Players:GetPlayers()) do
         if p ~= localPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
             local hum = p.Character:FindFirstChildOfClass("Humanoid")
             if hum and hum.Health > 0 then
-                local dist = (p.Character.HumanoidRootPart.Position - localPlayer.Character.HumanoidRootPart.Position).Magnitude
+                local dist = (p.Character.HumanoidRootPart.Position - myRoot.Position).Magnitude
                 if dist < shortest then closest, shortest = p, dist end
             end
         end
@@ -51,34 +55,33 @@ local function getClosestEnemy()
     return closest
 end
 
-local function applyHitbox()
+-- ==============================================
+-- 1. BADASS FEATURE: SHOCKWAVE PERIMETER AURA
+-- Pushes enemies away automatically if they get too close to your ledge
+-- ==============================================
+RunService.Heartbeat:Connect(function()
+    if not states.ShockwaveAura then return end
+    local char = localPlayer.Character
+    if not char or not char:FindFirstChild("HumanoidRootPart") then return end
+    local myRoot = char.HumanoidRootPart
+
     for _, p in ipairs(Players:GetPlayers()) do
-        if p ~= localPlayer and p.Character then
-            local hrp = p.Character:FindFirstChild("HumanoidRootPart")
-            if hrp then
-                if not hrp:FindFirstChild("OgSize") then
-                    local og = Instance.new("Vector3Value", hrp)
-                    og.Name = "OgSize"
-                    og.Value = hrp.Size
-                end
-                if states.Hitbox then
-                    hrp.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
-                    hrp.Transparency = 0.8
-                    hrp.BrickColor = BrickColor.new("Dark red")
-                    hrp.Material = Enum.Material.ForceField
-                    hrp.CanCollide = false
-                else
-                    hrp.Size = hrp.OgSize.Value
-                    hrp.Transparency = 1
-                    hrp.CanCollide = true
-                end
+        if p ~= localPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+            local enemyRoot = p.Character.HumanoidRootPart
+            local dist = (myRoot.Position - enemyRoot.Position).Magnitude
+            
+            -- If someone approaches within 16 studs to attack you
+            if dist < 16 then
+                -- Violently fling them backward away from you
+                local awayDir = (enemyRoot.Position - myRoot.Position).Unit
+                enemyRoot.AssemblyLinearVelocity = (awayDir + Vector3.new(0, 0.5, 0)) * 120
             end
         end
     end
-end
+end)
 
 -- ==============================================
--- 1. NEW BADASS FEATURE: ANTI-VOID METEOR DIVE
+-- 2. BADASS FEATURE: ANTI-VOID METEOR DIVE
 -- ==============================================
 RunService.Heartbeat:Connect(function()
     if not states.MeteorDive or isMeteorStriking then return end
@@ -87,67 +90,77 @@ RunService.Heartbeat:Connect(function()
     if not char or not char:FindFirstChild("HumanoidRootPart") then return end
     local hrp = char.HumanoidRootPart
     
-    -- Detect if you've been knocked off the island (Falling fast downwards)
     if hrp.Velocity.Y < -65 then
         isMeteorStriking = true
-        
-        -- 1. Stop falling and launch into the stratosphere
         hrp.Velocity = Vector3.zero
         hrp.CFrame = hrp.CFrame + Vector3.new(0, 300, 0)
         
-        -- 2. Add visual Meteor Flames
         local fire = Instance.new("Fire", hrp)
-        fire.Size = 15
+        fire.Size = 20
         fire.Color = Color3.fromRGB(255, 50, 0)
         
-        -- 3. Hover for 0.5s to assert dominance
         hrp.Anchored = true
-        task.wait(0.5)
+        task.wait(0.4)
         hrp.Anchored = false
         
-        -- 4. Find the closest enemy still on the island
         local target = getClosestEnemy()
         if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
-            -- 5. Divebomb directly onto their head
             hrp.CFrame = target.Character.HumanoidRootPart.CFrame * CFrame.new(0, 4, 0)
             local tool = char:FindFirstChildOfClass("Tool")
-            if tool then tool:Activate() end -- Auto Attack on impact
+            if tool then tool:Activate() end
         end
         
         task.wait(0.5)
         if fire then fire:Destroy() end
-        task.wait(2) -- Cooldown before you can meteor again
+        task.wait(1.5)
         isMeteorStriking = false
     end
 end)
 
 -- ==============================================
--- 2. FLOATING ISLAND BRAWL MAGNET
+-- 3. FLOATING ISLAND BRAWL MAGNET & HITBOXES
 -- ==============================================
 RunService.Stepped:Connect(function()
-    if not states.BrawlMagnet then return end
     local char = localPlayer.Character
     if not char or not char:FindFirstChild("HumanoidRootPart") then return end
-    
+    local myRoot = char.HumanoidRootPart
     local tool = char:FindFirstChildOfClass("Tool")
-    if not tool then return end 
 
     for _, p in ipairs(Players:GetPlayers()) do
-        if p ~= localPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
-            local myRoot = char.HumanoidRootPart
-            local enemyRoot = p.Character.HumanoidRootPart
-            
-            -- If in close chaotic brawl range (30 studs), pull them slightly towards your hits
-            if (myRoot.Position - enemyRoot.Position).Magnitude < 30 then
-                enemyRoot.CFrame = myRoot.CFrame * CFrame.new(0, 0, -4)
-                tool:Activate()
+        if p ~= localPlayer and p.Character then
+            local enemyRoot = p.Character:FindFirstChild("HumanoidRootPart")
+            if enemyRoot then
+                -- Hitbox Expansion
+                if not enemyRoot:FindFirstChild("OgSize") then
+                    local og = Instance.new("Vector3Value", enemyRoot)
+                    og.Name = "OgSize"
+                    og.Value = enemyRoot.Size
+                end
+                
+                if states.Hitbox then
+                    enemyRoot.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
+                    enemyRoot.Transparency = 0.8
+                    enemyRoot.BrickColor = BrickColor.new("Dark red")
+                    enemyRoot.Material = Enum.Material.ForceField
+                    enemyRoot.CanCollide = false
+                else
+                    enemyRoot.Size = enemyRoot.OgSize.Value
+                    enemyRoot.Transparency = 1
+                    enemyRoot.CanCollide = true
+                end
+
+                -- Brawl Magnet (Drags them into your swings automatically)
+                if states.BrawlMagnet and tool and (myRoot.Position - enemyRoot.Position).Magnitude < 35 then
+                    enemyRoot.CFrame = myRoot.CFrame * CFrame.new(0, 0, -3)
+                    tool:Activate()
+                end
             end
         end
     end
 end)
 
 -- ==============================================
--- 3. CORE SYSTEMS (Fly, ESP, Noclip, Hitbox)
+-- 4. CORE SYSTEMS (Fly, ESP, Noclip, AimLock)
 -- ==============================================
 local function toggleFly(state)
     local char = localPlayer.Character
@@ -186,7 +199,6 @@ local function toggleFly(state)
 end
 
 RunService.RenderStepped:Connect(function()
-    -- ESP Loop
     if states.ESP then
         for _, p in ipairs(Players:GetPlayers()) do
             if p ~= localPlayer and p.Character then
@@ -206,7 +218,6 @@ RunService.RenderStepped:Connect(function()
         espGuis = {}
     end
 
-    -- AimLock Loop
     if states.AimLock then
         local target = getClosestEnemy()
         if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
@@ -215,10 +226,8 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
-RunService.Heartbeat:Connect(applyHitbox)
-
 -- ==============================================
--- 4. CUSTOM MOBILE UI (Avoids Joystick)
+-- 5. COMPACT MOBILE UI (Bottom Left, Clear of Joystick)
 -- ==============================================
 local function createUI()
     if CoreGui:FindFirstChild("BrawlUI") then CoreGui.BrawlUI:Destroy() end
@@ -229,10 +238,9 @@ local function createUI()
     pcall(function() gui.Parent = CoreGui end)
     if gui.Parent == nil then gui.Parent = localPlayer:WaitForChild("PlayerGui") end
 
-    -- Main Frame (Compact, left side, clears the joystick)
     local frame = Instance.new("Frame", gui)
-    frame.Size = UDim2.new(0, 150, 0, 240)
-    frame.Position = UDim2.new(0.20, 0, 0.55, 0) -- Perfect mobile sweet spot
+    frame.Size = UDim2.new(0, 150, 0, 260)
+    frame.Position = UDim2.new(0.20, 0, 0.50, 0) -- Safely above mobile movement joystick
     frame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
     frame.BackgroundTransparency = 0.15
     frame.BorderSizePixel = 0
@@ -240,23 +248,22 @@ local function createUI()
     frame.Draggable = true
 
     local corner = Instance.new("UICorner", frame) corner.CornerRadius = UDim.new(0, 10)
-    local stroke = Instance.new("UIStroke", frame) stroke.Color = Color3.fromRGB(255, 100, 0) stroke.Thickness = 2
+    local stroke = Instance.new("UIStroke", frame) stroke.Color = Color3.fromRGB(255, 50, 50) stroke.Thickness = 2
 
     local title = Instance.new("TextLabel", frame)
     title.Size = UDim2.new(1, 0, 0, 30)
     title.BackgroundTransparency = 1
-    title.Text = "🔥 BRAWL GOD"
-    title.TextColor3 = Color3.fromRGB(255, 150, 0)
+    title.Text = "⚡ INTIMIDATOR"
+    title.TextColor3 = Color3.fromRGB(255, 50, 50)
     title.Font = Enum.Font.GothamBold
     title.TextSize = 14
 
-    -- Scrollable area for buttons
     local scroll = Instance.new("ScrollingFrame", frame)
     scroll.Size = UDim2.new(1, 0, 1, -35)
     scroll.Position = UDim2.new(0, 0, 0, 35)
     scroll.BackgroundTransparency = 1
     scroll.ScrollBarThickness = 3
-    scroll.CanvasSize = UDim2.new(0, 0, 0, 300)
+    scroll.CanvasSize = UDim2.new(0, 0, 0, 350)
 
     local layout = Instance.new("UIListLayout", scroll)
     layout.Padding = UDim.new(0, 5)
@@ -275,7 +282,7 @@ local function createUI()
         btn.MouseButton1Click:Connect(function()
             states[stateKey] = not states[stateKey]
             if states[stateKey] then
-                btn.BackgroundColor3 = Color3.fromRGB(255, 100, 0)
+                btn.BackgroundColor3 = Color3.fromRGB(200, 30, 30)
                 btn.Text = "ON | " .. name
                 btn.TextColor3 = Color3.fromRGB(255, 255, 255)
             else
@@ -287,11 +294,11 @@ local function createUI()
         end)
     end
 
-    -- Add Toggles to UI
-    createToggle("Mobile Fly", "Fly", toggleFly)
-    createToggle("Meteor Dive (Anti-Void)", "MeteorDive")
+    createToggle("Shockwave Aura", "ShockwaveAura")
+    createToggle("Meteor Dive", "MeteorDive")
     createToggle("Brawl Magnet", "BrawlMagnet")
     createToggle("Hitboxes", "Hitbox")
+    createToggle("Mobile Fly", "Fly", toggleFly)
     createToggle("AimLock", "AimLock")
     createToggle("ESP", "ESP")
     
@@ -311,3 +318,4 @@ local function createUI()
 end
 
 createUI()
+
