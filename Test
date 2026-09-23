@@ -1,0 +1,93 @@
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local VirtualUser = game:GetService("VirtualUser")
+
+local localPlayer = Players.LocalPlayer
+
+-- ==========================================
+-- TEST SETTINGS
+-- ==========================================
+local AuraRange = 15       -- Distance before they get hit and flung
+local FlingPower = 50000   -- Insane rotational force to launch them to the edge
+
+print("Raw Auto-Hit & Fling Aura Loaded!")
+
+-- Helper to find enemies
+local function isEnemy(player)
+    if player == localPlayer then return false end
+    if localPlayer.Team and player.Team then
+        return localPlayer.Team ~= player.Team
+    end
+    return true
+end
+
+-- The main loop
+RunService.Heartbeat:Connect(function()
+    local char = localPlayer.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    
+    if not char or not root or not hum or hum.Health <= 0 then return end
+
+    local target = nil
+    local closestDist = AuraRange
+
+    -- Find the closest enemy within range
+    for _, p in ipairs(Players:GetPlayers()) do
+        if isEnemy(p) and p.Character then
+            local eRoot = p.Character:FindFirstChild("HumanoidRootPart")
+            local eHum = p.Character:FindFirstChildOfClass("Humanoid")
+            
+            if eRoot and eHum and eHum.Health > 0 then
+                local dist = (eRoot.Position - root.Position).Magnitude
+                if dist <= closestDist then
+                    target = p.Character
+                    closestDist = dist
+                end
+            end
+        end
+    end
+
+    if target then
+        local eRoot = target:FindFirstChild("HumanoidRootPart")
+        
+        -- ==========================================
+        -- 1. CONSTANT AUTO-HIT
+        -- ==========================================
+        local tool = char:FindFirstChildOfClass("Tool")
+        if not tool then
+            -- Force equip if hands are empty
+            local backpackTool = localPlayer.Backpack:FindFirstChildOfClass("Tool")
+            if backpackTool then hum:EquipTool(backpackTool) end
+        else
+            -- Spam tool activation
+            pcall(function() tool:Activate() end)
+        end
+        -- Spam hardware click as backup
+        VirtualUser:ClickButton1(Vector2.new(0,0)) 
+        
+        -- ==========================================
+        -- 2. FAR EDGE FLING
+        -- ==========================================
+        -- Force collisions ON so physics momentum transfers correctly
+        root.CanCollide = true
+        eRoot.CanCollide = true
+        
+        -- Make your character incredibly heavy so YOU don't bounce back
+        root.CustomPhysicalProperties = PhysicalProperties.new(100, 0.3, 0.5)
+
+        -- Spin your physics at max speed (this is what launches them away)
+        root.AssemblyAngularVelocity = Vector3.new(FlingPower, FlingPower, FlingPower)
+        
+        -- Dash your character slightly into them to force the physical collision
+        local dashDirection = (eRoot.Position - root.Position).Unit
+        root.AssemblyLinearVelocity = dashDirection * 50
+    else
+        -- ==========================================
+        -- RESET (When nobody is near)
+        -- ==========================================
+        -- Stop spinning and reset weight so you can walk normally
+        root.AssemblyAngularVelocity = Vector3.zero
+        root.CustomPhysicalProperties = PhysicalProperties.new(0.7, 0.3, 0.5) 
+    end
+end)
