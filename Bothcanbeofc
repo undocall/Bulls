@@ -3,6 +3,7 @@ local StarterGui = game:GetService("StarterGui")
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local Lighting = game:GetService("Lighting")
+local VirtualUser = game:GetService("VirtualUser")
 
 -- Player variables
 local localPlayer = Players.LocalPlayer
@@ -70,7 +71,7 @@ if not success or not uiLibrary then
 end
 
 -- Configure UI
-uiLibrary:SetTitle("Hitblox (v5.5 - God Edition)")
+uiLibrary:SetTitle("Hitblox (Bull Battle Edition)")
 uiLibrary:SetIcon("http://www.roblox.com/asset/?id=91738788645337")
 uiLibrary:SetTheme("HighContrast")
 task.wait(0.1)
@@ -502,136 +503,8 @@ uiLibrary:AddToggle("Fly", function(enabled)
 end, false)
 
 -- ==============================================
--- BRAWL GOD FEATURES
--- ==============================================
-
--- 1. Anti-Void (Auto Teleport Back to Island)
-uiLibrary:AddToggle("Anti-Void Saver", function(enabled)
-    antiVoidEnabled = enabled
-    playSound("rbxassetid://12221976")
-    if enabled then
-        antiVoidConnection = RunService.Heartbeat:Connect(function()
-            local char = localPlayer.Character
-            local root = char and char:FindFirstChild("HumanoidRootPart")
-            if root and root.Position.Y < -30 then
-                root.AssemblyLinearVelocity = Vector3.zero
-                root.CFrame = CFrame.new(safePosition)
-            end
-        end)
-    else
-        if antiVoidConnection then
-            antiVoidConnection:Disconnect()
-            antiVoidConnection = nil
-        end
-    end
-end, false)
-
--- 2. Anti-Knockback (The Anchor)
-uiLibrary:AddToggle("Anti-Knockback", function(enabled)
-    antiKnockbackEnabled = enabled
-    playSound("rbxassetid://12221976")
-    if enabled then
-        antiKnockbackConnection = RunService.Heartbeat:Connect(function()
-            local char = localPlayer.Character
-            local root = char and char:FindFirstChild("HumanoidRootPart")
-            local hum = char and char:FindFirstChildOfClass("Humanoid")
-            if root and hum then
-                if hum.MoveDirection.Magnitude == 0 and not flyEnabled then
-                    root.AssemblyLinearVelocity = Vector3.new(0, root.AssemblyLinearVelocity.Y, 0)
-                end
-            end
-        end)
-    else
-        if antiKnockbackConnection then
-            antiKnockbackConnection:Disconnect()
-            antiKnockbackConnection = nil
-        end
-    end
-end, false)
-
--- 3. Kill Aura (Auto-Hit nearby enemies)
-uiLibrary:AddToggle("Kill Aura (Auto-Hit)", function(enabled)
-    killAuraEnabled = enabled
-    playSound("rbxassetid://12221976")
-    if enabled then
-        killAuraConnection = RunService.Heartbeat:Connect(function()
-            local char = localPlayer.Character
-            local root = char and char:FindFirstChild("HumanoidRootPart")
-            if not char or not root then return end
-
-            local tool = char:FindFirstChildOfClass("Tool")
-            if not tool then return end
-
-            for _, p in ipairs(Players:GetPlayers()) do
-                if isEnemy(p) and p.Character then
-                    local enemyRoot = p.Character:FindFirstChild("HumanoidRootPart")
-                    local enemyHum = p.Character:FindFirstChildOfClass("Humanoid")
-                    if enemyRoot and enemyHum and enemyHum.Health > 0 then
-                        local dist = (enemyRoot.Position - root.Position).Magnitude
-                        if dist <= killAuraRange then
-                            tool:Activate()
-                            break
-                        end
-                    end
-                end
-            end
-        end)
-    else
-        if killAuraConnection then
-            killAuraConnection:Disconnect()
-            killAuraConnection = nil
-        end
-    end
-end, false)
-
--- 4. Target Strafe (Orbit Target)
-uiLibrary:AddToggle("Target Strafe (Orbit)", function(enabled)
-    targetStrafeEnabled = enabled
-    playSound("rbxassetid://12221976")
-    if enabled then
-        targetStrafeConnection = RunService.RenderStepped:Connect(function(dt)
-            local target = getClosestEnemyToCursor()
-            local char = localPlayer.Character
-            local root = char and char:FindFirstChild("HumanoidRootPart")
-            
-            if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") and root then
-                local targetRoot = target.Character.HumanoidRootPart
-                strafeAngle = strafeAngle + (strafeSpeed * dt)
-                
-                local offsetX = math.cos(strafeAngle) * strafeRadius
-                local offsetZ = math.sin(strafeAngle) * strafeRadius
-                local desiredPos = targetRoot.Position + Vector3.new(offsetX, 0, offsetZ)
-                
-                root.CFrame = CFrame.new(desiredPos, targetRoot.Position)
-            end
-        end)
-    else
-        if targetStrafeConnection then
-            targetStrafeConnection:Disconnect()
-            targetStrafeConnection = nil
-        end
-    end
-end, false)
-
--- 5. God Mode & Fling Aura
-uiLibrary:AddToggle("God Mode & Fling Aura", function(enabled)
-    antiFlingEnabled = enabled
-    playSound("rbxassetid://12221976")
-    
-    if enabled then
-        antiFlingConnection = RunService.Stepped:Connect(function()
-            local char = localPlayer.Character
-            local root = char and char:FindFirstChild("HumanoidRootPart")
-            if not char or not root then return end
-            
-            if not flyEnabled then
-                if root.AssemblyLinearVelocity.Magnitude > 250 or root.AssemblyAngularVelocity.Magnitude > 250 then
-                    root.AssemblyLinearVelocity = Vector3.zero
-
--- ==============================================
 -- BRAWL GOD FEATURES (AGGRESSIVE BYPASS EDITION)
 -- ==============================================
-local VirtualUser = game:GetService("VirtualUser")
 
 -- 1. Anti-Void (Auto Teleport Back to Island)
 uiLibrary:AddToggle("Anti-Void Saver", function(enabled)
