@@ -585,4 +585,90 @@ uiLibrary:AddToggle("Kill Aura (Auto-Hit)", function(enabled)
 end, false)
 
 -- 4. Target Strafe (Orbit Target)
-uiLibrary:AddToggle("Target Strafe (Orbit
+uiLibrary:AddToggle("Target Strafe (Orbit)", function(enabled)
+    targetStrafeEnabled = enabled
+    playSound("rbxassetid://12221976")
+    if enabled then
+        targetStrafeConnection = RunService.RenderStepped:Connect(function(dt)
+            local target = getClosestEnemyToCursor()
+            local char = localPlayer.Character
+            local root = char and char:FindFirstChild("HumanoidRootPart")
+            
+            if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") and root then
+                local targetRoot = target.Character.HumanoidRootPart
+                strafeAngle = strafeAngle + (strafeSpeed * dt)
+                
+                local offsetX = math.cos(strafeAngle) * strafeRadius
+                local offsetZ = math.sin(strafeAngle) * strafeRadius
+                local desiredPos = targetRoot.Position + Vector3.new(offsetX, 0, offsetZ)
+                
+                root.CFrame = CFrame.new(desiredPos, targetRoot.Position)
+            end
+        end)
+    else
+        if targetStrafeConnection then
+            targetStrafeConnection:Disconnect()
+            targetStrafeConnection = nil
+        end
+    end
+end, false)
+
+-- 5. God Mode & Fling Aura
+uiLibrary:AddToggle("God Mode & Fling Aura", function(enabled)
+    antiFlingEnabled = enabled
+    playSound("rbxassetid://12221976")
+    
+    if enabled then
+        antiFlingConnection = RunService.Stepped:Connect(function()
+            local char = localPlayer.Character
+            local root = char and char:FindFirstChild("HumanoidRootPart")
+            if not char or not root then return end
+            
+            if not flyEnabled then
+                if root.AssemblyLinearVelocity.Magnitude > 250 or root.AssemblyAngularVelocity.Magnitude > 250 then
+                    root.AssemblyLinearVelocity = Vector3.zero
+                    root.AssemblyAngularVelocity = Vector3.zero
+                end
+            end
+            
+            for _, p in ipairs(Players:GetPlayers()) do
+                if p ~= localPlayer and p.Character then
+                    local enemyRoot = p.Character:FindFirstChild("HumanoidRootPart")
+                    
+                    for _, part in ipairs(p.Character:GetDescendants()) do
+                        if part:IsA("BasePart") and part.CanCollide then
+                            part.CanCollide = false
+                        end
+                    end
+                    
+                    if enemyRoot then
+                        local dist = (enemyRoot.Position - root.Position).Magnitude
+                        if dist < 7 then
+                            root.AssemblyAngularVelocity = Vector3.new(0, 50000, 0)
+                        end
+                    end
+                end
+            end
+        end)
+    else
+        if antiFlingConnection then
+            antiFlingConnection:Disconnect()
+            antiFlingConnection = nil
+        end
+        local char = localPlayer.Character
+        local root = char and char:FindFirstChild("HumanoidRootPart")
+        if root then
+            root.AssemblyAngularVelocity = Vector3.zero
+        end
+    end
+end, false)
+
+uiLibrary:AddToggle("Fpp Toggle", function(enabled)
+    playSound("rbxassetid://12221976")
+    if enabled then
+        workspace.CurrentCamera.CameraType = Enum.CameraType.Custom
+        localPlayer.CameraMode = Enum.CameraMode.LockFirstPerson
+    else
+        localPlayer.CameraMode = Enum.CameraMode.Classic
+    end
+end, false)
