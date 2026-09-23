@@ -71,7 +71,7 @@ if not success or not uiLibrary then
 end
 
 -- Configure UI
-uiLibrary:SetTitle("Hitblox (Bull Battle Edition)")
+uiLibrary:SetTitle("Hitblox (Bull Battle God Edition)")
 uiLibrary:SetIcon("http://www.roblox.com/asset/?id=91738788645337")
 uiLibrary:SetTheme("HighContrast")
 task.wait(0.1)
@@ -104,7 +104,7 @@ local antiKnockbackConnection = nil
 
 local killAuraEnabled = false
 local killAuraConnection = nil
-local killAuraRange = 12
+local killAuraRange = 14
 
 local targetStrafeEnabled = false
 local targetStrafeConnection = nil
@@ -503,7 +503,7 @@ uiLibrary:AddToggle("Fly", function(enabled)
 end, false)
 
 -- ==============================================
--- BRAWL GOD FEATURES (AGGRESSIVE BYPASS EDITION)
+-- BRAWL GOD FEATURES (MAX SKY FLING ENGINE)
 -- ==============================================
 
 -- 1. Anti-Void (Auto Teleport Back to Island)
@@ -527,7 +527,7 @@ uiLibrary:AddToggle("Anti-Void Saver", function(enabled)
     end
 end, false)
 
--- 2. Anti-Knockback (The Anchor - Destroys physics movers)
+-- 2. Anti-Knockback (Forces velocity override)
 uiLibrary:AddToggle("Anti-Knockback", function(enabled)
     antiKnockbackEnabled = enabled
     playSound("rbxassetid://12221976")
@@ -537,16 +537,14 @@ uiLibrary:AddToggle("Anti-Knockback", function(enabled)
             local root = char and char:FindFirstChild("HumanoidRootPart")
             if not root then return end
             
-            -- Destroy forces applied by the game
             for _, obj in ipairs(root:GetChildren()) do
                 if obj:IsA("BodyMover") or obj:IsA("LinearVelocity") or obj:IsA("VectorForce") or obj:IsA("BodyVelocity") or obj:IsA("BodyThrust") then
                     obj:Destroy()
                 end
             end
             
-            -- Anchor velocity if not trying to move
             local hum = char:FindFirstChildOfClass("Humanoid")
-            if hum and hum.MoveDirection.Magnitude == 0 and not flyEnabled then
+            if hum and hum.MoveDirection.Magnitude == 0 and not flyEnabled and not antiFlingEnabled then
                 root.AssemblyLinearVelocity = Vector3.new(0, root.AssemblyLinearVelocity.Y, 0)
             end
         end)
@@ -558,7 +556,7 @@ uiLibrary:AddToggle("Anti-Knockback", function(enabled)
     end
 end, false)
 
--- 3. Kill Aura (Hardware Click Simulation)
+-- 3. Kill Aura (Auto-Equip + Auto-Hit)
 uiLibrary:AddToggle("Kill Aura (Auto-Hit)", function(enabled)
     killAuraEnabled = enabled
     playSound("rbxassetid://12221976")
@@ -566,7 +564,8 @@ uiLibrary:AddToggle("Kill Aura (Auto-Hit)", function(enabled)
         killAuraConnection = RunService.Heartbeat:Connect(function()
             local char = localPlayer.Character
             local root = char and char:FindFirstChild("HumanoidRootPart")
-            if not char or not root then return end
+            local hum = char and char:FindFirstChildOfClass("Humanoid")
+            if not char or not root or not hum then return end
 
             local enemyInRange = false
             for _, p in ipairs(Players:GetPlayers()) do
@@ -584,11 +583,18 @@ uiLibrary:AddToggle("Kill Aura (Auto-Hit)", function(enabled)
             end
             
             if enemyInRange then
-                -- 1. Try standard tool activation
+                -- Auto-equip tool from backpack if holding nothing
                 local tool = char:FindFirstChildOfClass("Tool")
-                if tool then pcall(function() tool:Activate() end) end
+                if not tool then
+                    local backpackTool = localPlayer.Backpack:FindFirstChildOfClass("Tool")
+                    if backpackTool then
+                        hum:EquipTool(backpackTool)
+                    end
+                else
+                    pcall(function() tool:Activate() end)
+                end
                 
-                -- 2. Simulate an actual mouse/screen click (Bypasses custom combat scripts)
+                -- Hardware click simulation
                 pcall(function()
                     VirtualUser:ClickButton1(Vector2.new(0,0))
                 end)
@@ -631,8 +637,9 @@ uiLibrary:AddToggle("Target Strafe (Orbit)", function(enabled)
     end
 end, false)
 
--- 5. God Mode & Fling Aura (Physics Instance Bypass)
-uiLibrary:AddToggle("God Mode & Fling Aura", function(enabled)
+-- 5. MAX SKY FLING AURA (Instant Launch to Sky)
+local skyFlingPower = 99999999
+uiLibrary:AddToggle("MAX SKY FLING AURA", function(enabled)
     antiFlingEnabled = enabled
     playSound("rbxassetid://12221976")
     
@@ -642,43 +649,42 @@ uiLibrary:AddToggle("God Mode & Fling Aura", function(enabled)
             local root = char and char:FindFirstChild("HumanoidRootPart")
             if not char or not root then return end
             
-            -- Prevent getting flung yourself
-            if not flyEnabled then
-                if root.AssemblyLinearVelocity.Magnitude > 250 then
-                    root.AssemblyLinearVelocity = Vector3.zero
+            local oldCFrame = root.CFrame
+            local enemyNearby = false
+            
+            for _, p in ipairs(Players:GetPlayers()) do
+                if isEnemy(p) and p.Character then
+                    local enemyRoot = p.Character:FindFirstChild("HumanoidRootPart")
+                    if enemyRoot then
+                        local dist = (enemyRoot.Position - root.Position).Magnitude
+                        if dist <= 12 then
+                            enemyNearby = true
+                            
+                            -- Force collisions back ON for physics transmission
+                            for _, part in ipairs(p.Character:GetDescendants()) do
+                                if part:IsA("BasePart") then
+                                    part.CanCollide = true
+                                end
+                            end
+                            for _, part in ipairs(char:GetDescendants()) do
+                                if part:IsA("BasePart") then
+                                    part.CanCollide = true
+                                end
+                            end
+                        end
+                    end
                 end
             end
             
-            for _, p in ipairs(Players:GetPlayers()) do
-                if p ~= localPlayer and p.Character then
-                    local enemyRoot = p.Character:FindFirstChild("HumanoidRootPart")
-                    
-                    -- Phantom Mode (Disable enemy collisions)
-                    for _, part in ipairs(p.Character:GetDescendants()) do
-                        if part:IsA("BasePart") and part.CanCollide then
-                            part.CanCollide = false
-                        end
-                    end
-                    
-                    if enemyRoot then
-                        local dist = (enemyRoot.Position - root.Position).Magnitude
-                        if dist < 7 then
-                            -- Create physical rotation instance to force server replication
-                            local spinner = root:FindFirstChild("FlingSpinner")
-                            if not spinner then
-                                spinner = Instance.new("BodyAngularVelocity")
-                                spinner.Name = "FlingSpinner"
-                                spinner.MaxTorque = Vector3.new(0, math.huge, 0)
-                                spinner.P = math.huge
-                                spinner.AngularVelocity = Vector3.new(0, 50000, 0)
-                                spinner.Parent = root
-                            end
-                        else
-                            local spinner = root:FindFirstChild("FlingSpinner")
-                            if spinner then spinner:Destroy() end
-                        end
-                    end
-                end
+            if enemyNearby then
+                -- Apply skyward linear force and rotational speed
+                root.AssemblyAngularVelocity = Vector3.new(0, skyFlingPower, 0)
+                root.AssemblyLinearVelocity = Vector3.new(0, skyFlingPower, 0)
+                
+                -- Anchor local player to ground so only enemy flies up
+                root.CFrame = oldCFrame
+            else
+                root.AssemblyAngularVelocity = Vector3.zero
             end
         end)
     else
@@ -689,9 +695,8 @@ uiLibrary:AddToggle("God Mode & Fling Aura", function(enabled)
         local char = localPlayer.Character
         local root = char and char:FindFirstChild("HumanoidRootPart")
         if root then
-            local spinner = root:FindFirstChild("FlingSpinner")
-            if spinner then spinner:Destroy() end
             root.AssemblyAngularVelocity = Vector3.zero
+            root.AssemblyLinearVelocity = Vector3.zero
         end
     end
 end, false)
