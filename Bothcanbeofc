@@ -1,493 +1,114 @@
 -- ==============================================
--- ⚡ HITBLOX: THE ULTIMATE MASTER BUILD (ALL FEATURES)
+-- 💣 ALL-IN-ONE MAX KILL AURA & MAGNET
 -- ==============================================
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local Lighting = game:GetService("Lighting")
-local CoreGui = game:GetService("CoreGui")
-
 local localPlayer = Players.LocalPlayer
-while not localPlayer do task.wait() localPlayer = Players.LocalPlayer end
-local camera = workspace.CurrentCamera
 
--- ==============================================
--- Variables & Toggles State
--- ==============================================
-local hitboxSize = 15
-local hitboxTransparency = 0.8
-local hitboxEnabled = false
-local espEnabled = false
-local aimLockEnabled = false
-local noclipEnabled = false
-local flyEnabled = false
-local flySpeed = 50
-local domainEnabled = false
-local preCogEnabled = false
+-- Master Settings
+local auraEnabled = false
+local autoEquipEnabled = true
+local magnetEnabled = true
+local teamCheck = true
+local hitboxSize = Vector3.new(300, 300, 300)
 
--- Storage
-local espGuis = {} 
-local trajectoryBeams = {}
-local flyConnection = nil
-local noclipConnection = nil
-local aimLockConnection = nil
-local hitboxCoroutine = nil
-local blinkButtonUI = nil
-
-local originalLighting = {
-    Ambient = Lighting.Ambient,
-    OutdoorAmbient = Lighting.OutdoorAmbient,
-    Brightness = Lighting.Brightness,
-    ClockTime = Lighting.ClockTime,
-    FogEnd = Lighting.FogEnd,
-    FogColor = Lighting.FogColor
-}
-
--- ==============================================
--- Helper Functions
--- ==============================================
+-- Target Validator
 local function isEnemy(player)
-    if player == localPlayer then return false end
-    local teams = game:GetService("Teams"):GetTeams()
-    if #teams > 1 then
-        if localPlayer.Team == nil or player.Team == nil then return true end
+    if player == localPlayer or not player.Character then return false end
+    local enemyHum = player.Character:FindFirstChild("Humanoid")
+    if not enemyHum or enemyHum.Health <= 0 then return false end
+    
+    if teamCheck and localPlayer.Team and player.Team then
         return localPlayer.Team ~= player.Team
     end
     return true
 end
 
-local function playSound(soundId)
-    local sound = Instance.new("Sound")
-    sound.SoundId = soundId
-    sound.Parent = workspace
-    pcall(function() sound:Play() end)
-    sound.Ended:Connect(function() sound:Destroy() end)
-end
+-- RenderStepped Main Loop (Fires on every frame)
+RunService.RenderStepped:Connect(function()
+    if not auraEnabled then return end
 
--- ==============================================
--- 1. Standard Core Systems (Hitbox, ESP, Aimbot, Fly, Noclip)
--- ==============================================
-local function applyHitbox(character)
-    if not character then return end
-    local humanoid = character:FindFirstChildOfClass("Humanoid")
-    if not humanoid or humanoid.Health <= 0 then return end
-    
-    local partsToAdjust = humanoid.RigType == Enum.HumanoidRigType.R15 
-        and {"UpperTorso", "LowerTorso", "LeftUpperArm", "RightUpperArm", "LeftUpperLeg", "RightUpperLeg", "Head", "HumanoidRootPart"} 
-        or {"HumanoidRootPart", "Head"}
-    
-    for _, partName in ipairs(partsToAdjust) do
-        local part = character:FindFirstChild(partName)
-        if part then
-            if not part:FindFirstChild("OriginalSize") then
-                local originalSize = Instance.new("Vector3Value")
-                originalSize.Name = "OriginalSize"
-                originalSize.Value = part.Size
-                originalSize.Parent = part
-            end
-            part.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
-            part.Transparency = hitboxTransparency
-            part.BrickColor = BrickColor.new("Dark red")
-            part.Material = Enum.Material.ForceField
-            part.CanCollide = false
-            if part.Name == "Head" then part.Massless = true end
-        end
-    end
-end
-
-local function resetHitbox(character)
-    if not character then return end
-    for _, part in ipairs(character:GetChildren()) do
-        if part:IsA("BasePart") and part:FindFirstChild("OriginalSize") then
-            part.Size = part.OriginalSize.Value
-            part.Transparency = 1
-            part.BrickColor = BrickColor.new("Medium stone grey")
-            part.Material = Enum.Material.Plastic
-            part.CanCollide = true
-            if part.Name == "Head" then part.Massless = false end
-        end
-    end
-end
-
-local function toggleHitboxes(enabled)
-    hitboxEnabled = enabled
-    if enabled then
-        if not hitboxCoroutine then
-            hitboxCoroutine = coroutine.create(function()
-                while hitboxEnabled and task.wait(0.5) do
-                    for _, player in ipairs(Players:GetPlayers()) do
-                        if isEnemy(player) and player.Character then applyHitbox(player.Character) end
-                    end
-                end
-            end)
-            coroutine.resume(hitboxCoroutine)
-        end
-    else
-        if hitboxCoroutine then coroutine.close(hitboxCoroutine); hitboxCoroutine = nil end
-        for _, player in ipairs(Players:GetPlayers()) do
-            if player.Character then resetHitbox(player.Character) end
-        end
-    end
-end
-
-local function updateESP()
-    for _, player in ipairs(Players:GetPlayers()) do
-        if isEnemy(player) and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-            if not espGuis[player] then
-                local hl = Instance.new("Highlight")
-                hl.Name = "ESP_Highlight"
-                hl.FillColor = Color3.new(1, 0, 0)
-                hl.OutlineColor = Color3.new(1, 1, 1)
-                hl.FillTransparency = 0.5
-                hl.OutlineTransparency = 0
-                hl.Parent = player.Character
-                espGuis[player] = hl
-            else
-                espGuis[player].Parent = player.Character
-            end
-        elseif espGuis[player] then
-            espGuis[player]:Destroy()
-            espGuis[player] = nil
-        end
-    end
-end
-
-local function getClosestEnemyToCenter()
-    local closestPlayer = nil
-    local shortestDistance = math.huge
-    local screenCenter = Vector2.new(camera.ViewportSize.X / 2, camera.ViewportSize.Y / 2)
-    
-    for _, player in ipairs(Players:GetPlayers()) do
-        if isEnemy(player) and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-            local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
-            if humanoid and humanoid.Health > 0 then
-                local pos = player.Character.HumanoidRootPart.Position
-                local vector, onScreen = camera:WorldToViewportPoint(pos)
-                if onScreen then
-                    local distance = (screenCenter - Vector2.new(vector.X, vector.Y)).Magnitude
-                    if distance < shortestDistance then
-                        closestPlayer = player
-                        shortestDistance = distance
-                    end
-                end
-            end
-        end
-    end
-    return closestPlayer
-end
-
-local function toggleFly(enabled)
-    flyEnabled = enabled
-    local character = localPlayer.Character
-    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-    local rootPart = character and character:FindFirstChild("HumanoidRootPart")
-    
-    if flyConnection then flyConnection:Disconnect(); flyConnection = nil end
-    if rootPart then
-        if rootPart:FindFirstChild("FlyGyro") then rootPart.FlyGyro:Destroy() end
-        if rootPart:FindFirstChild("FlyVelocity") then rootPart.FlyVelocity:Destroy() end
-    end
-    if humanoid then humanoid.PlatformStand = false end
-    
-    if enabled and rootPart and humanoid then
-        local bodyGyro = Instance.new("BodyGyro", rootPart)
-        bodyGyro.Name = "FlyGyro"
-        bodyGyro.P = 9e4
-        bodyGyro.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
-        bodyGyro.CFrame = rootPart.CFrame
-        
-        local bodyVelocity = Instance.new("BodyVelocity", rootPart)
-        bodyVelocity.Name = "FlyVelocity"
-        bodyVelocity.MaxForce = Vector3.new(9e9, 9e9, 9e9)
-        bodyVelocity.Velocity = Vector3.zero
-        
-        humanoid.PlatformStand = true
-        
-        flyConnection = RunService.RenderStepped:Connect(function()
-            if not character.Parent or humanoid.Health <= 0 then toggleFly(false) return end
-            local moveDir = humanoid.MoveDirection
-            bodyGyro.CFrame = camera.CFrame
-            
-            if moveDir.Magnitude > 0 then
-                local flatCam = CFrame.new(Vector3.zero, Vector3.new(camera.CFrame.LookVector.X, 0, camera.CFrame.LookVector.Z))
-                local localMove = flatCam:VectorToObjectSpace(moveDir)
-                bodyVelocity.Velocity = camera.CFrame:VectorToWorldSpace(localMove) * flySpeed
-            else
-                bodyVelocity.Velocity = Vector3.zero
-            end
-        end)
-    end
-end
-
--- ==============================================
--- 2. God-Tier Systems (Pre-Cog, Domain, Blink Button)
--- ==============================================
-local function updatePreCog()
-    for _, player in ipairs(Players:GetPlayers()) do
-        if isEnemy(player) and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-            local root = player.Character.HumanoidRootPart
-            
-            if not trajectoryBeams[player] then
-                local att0 = Instance.new("Attachment", root)
-                local att1 = Instance.new("Attachment", root)
-                
-                local beam = Instance.new("Beam", root)
-                beam.Attachment0 = att0
-                beam.Attachment1 = att1
-                beam.Color = ColorSequence.new(Color3.new(1, 0, 0), Color3.new(1, 1, 0))
-                beam.FaceCamera = true
-                beam.Width0 = 0.2
-                beam.Width1 = 0.05
-                beam.LightEmission = 1
-                beam.Transparency = NumberSequence.new(0, 1)
-                
-                trajectoryBeams[player] = {att0 = att0, att1 = att1, beam = beam}
-            else
-                local velocity = root.AssemblyLinearVelocity
-                if velocity.Magnitude > 1 then
-                    trajectoryBeams[player].att1.Position = Vector3.new(velocity.X * 0.75, velocity.Y * 0.75, velocity.Z * 0.75)
-                    trajectoryBeams[player].beam.Enabled = true
-                else
-                    trajectoryBeams[player].beam.Enabled = false
-                end
-            end
-        elseif trajectoryBeams[player] then
-            trajectoryBeams[player].att0:Destroy()
-            trajectoryBeams[player].att1:Destroy()
-            trajectoryBeams[player].beam:Destroy()
-            trajectoryBeams[player] = nil
-        end
-    end
-end
-
-local function toggleDomain(state)
-    domainEnabled = state
-    if state then
-        Lighting.Ambient = Color3.new(0, 0, 0)
-        Lighting.OutdoorAmbient = Color3.new(0, 0, 0)
-        Lighting.Brightness = 0
-        Lighting.ClockTime = 0
-        Lighting.FogEnd = 500
-        Lighting.FogColor = Color3.new(0, 0, 0)
-        
-        for _, player in ipairs(Players:GetPlayers()) do
-            if isEnemy(player) and player.Character then
-                local hl = Instance.new("Highlight")
-                hl.Name = "VoidGlow"
-                hl.FillColor = Color3.new(1, 1, 1)
-                hl.OutlineColor = Color3.new(1, 0, 0)
-                hl.FillTransparency = 0.2
-                hl.OutlineTransparency = 0
-                hl.Parent = player.Character
-            end
-        end
-    else
-        Lighting.Ambient = originalLighting.Ambient
-        Lighting.OutdoorAmbient = originalLighting.OutdoorAmbient
-        Lighting.Brightness = originalLighting.Brightness
-        Lighting.ClockTime = originalLighting.ClockTime
-        Lighting.FogEnd = originalLighting.FogEnd
-        Lighting.FogColor = originalLighting.FogColor
-        
-        for _, player in ipairs(Players:GetPlayers()) do
-            if player.Character and player.Character:FindFirstChild("VoidGlow") then
-                player.Character.VoidGlow:Destroy()
-            end
-        end
-    end
-end
-
-local function getClosestEnemyForBlink()
-    local closest, shortest = nil, math.huge
-    for _, p in ipairs(Players:GetPlayers()) do
-        if isEnemy(p) and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
-            local dist = (p.Character.HumanoidRootPart.Position - localPlayer.Character.HumanoidRootPart.Position).Magnitude
-            if dist < shortest and dist < 300 then
-                closest, shortest = p.Character.HumanoidRootPart, dist
-            end
-        end
-    end
-    return closest
-end
-
-local function executeShadowStrike()
     local char = localPlayer.Character
-    local root = char and char:FindFirstChild("HumanoidRootPart")
-    if not root then return end
-    
-    local targetRoot = getClosestEnemyForBlink()
-    if not targetRoot then return end
-    
-    local safePosition = root.CFrame
-    root.CFrame = targetRoot.CFrame * CFrame.new(0, 0, 3)
-    
+    if not char or not char:FindFirstChild("HumanoidRootPart") then return end
+
+    -- 1. Auto-Equip Tool
     local tool = char:FindFirstChildOfClass("Tool")
-    if tool then tool:Activate() end
-    
-    task.wait(0.2)
-    root.CFrame = safePosition
-end
+    if not tool and autoEquipEnabled then
+        local bpTool = localPlayer.Backpack:FindFirstChildOfClass("Tool")
+        if bpTool then
+            char.Humanoid:EquipTool(bpTool)
+            tool = bpTool
+        end
+    end
 
-local function createBlinkButton()
-    if blinkButtonUI then blinkButtonUI:Destroy() end
-    
-    blinkButtonUI = Instance.new("ScreenGui")
-    blinkButtonUI.Name = "ShadowStrikeUI"
-    blinkButtonUI.ResetOnSpawn = false
-    pcall(function() blinkButtonUI.Parent = CoreGui end)
-    if blinkButtonUI.Parent == nil then blinkButtonUI.Parent = localPlayer:WaitForChild("PlayerGui") end
-    
-    local btn = Instance.new("TextButton", blinkButtonUI)
-    btn.Size = UDim2.new(0, 110, 0, 110)
-    btn.Position = UDim2.new(0.8, 0, 0.45, 0)
-    btn.BackgroundColor3 = Color3.new(0, 0, 0)
-    btn.BackgroundTransparency = 0.3
-    btn.Text = "⚡\nBLINK\nSTRIKE"
-    btn.TextColor3 = Color3.new(1, 0, 0)
-    btn.TextScaled = true
-    btn.Font = Enum.Font.GothamBold
-    
-    local corner = Instance.new("UICorner", btn)
-    corner.CornerRadius = UDim.new(1, 0)
-    
-    local stroke = Instance.new("UIStroke", btn)
-    stroke.Color = Color3.new(1, 0, 0)
-    stroke.Thickness = 3
-    
-    btn.MouseButton1Click:Connect(executeShadowStrike)
-end
+    -- 2. Frame-Perfect Auto Swing
+    if tool then
+        pcall(function()
+            tool:Activate()
+        end)
+    end
 
--- ==============================================
--- 3. UI Menu Initialization
--- ==============================================
-task.wait()
-playSound("rbxassetid://12221831")
-
-local uiLibrary
-local success = pcall(function()
-    uiLibrary = loadstring(game:HttpGet("https://raw.githubusercontent.com/AZYsGithub/Arceus-X-UI-Library/main/source.lua"))()
+    -- 3. Hitbox Expansion & Magnet Teleportation
+    for _, player in ipairs(Players:GetPlayers()) do
+        if isEnemy(player) then
+            local root = player.Character:FindFirstChild("HumanoidRootPart")
+            if root then
+                -- Resize & Style Hitbox
+                root.Size = hitboxSize
+                root.Transparency = 0.8
+                root.BrickColor = BrickColor.new("Really red")
+                root.Material = Enum.Material.Neon
+                root.CanCollide = false
+                
+                -- Teleport Hitbox in front of character
+                if magnetEnabled then
+                    root.CFrame = char.HumanoidRootPart.CFrame * CFrame.new(0, 0, -2.5)
+                end
+            end
+        end
+    end
 end)
 
-if not success or not uiLibrary then return end
-
-uiLibrary:SetTitle("Hitblox ⚡ (Master Build)")
-uiLibrary:SetIcon("http://www.roblox.com/asset/?id=91738788645337")
+-- ==============================================
+-- 📱 UI CONTROLS
+-- ==============================================
+local uiLibrary = loadstring(game:HttpGet("https://raw.githubusercontent.com/AZYsGithub/Arceus-X-UI-Library/main/source.lua"))()
+uiLibrary:SetTitle("ALL-IN-ONE AUTO-HIT")
 uiLibrary:SetTheme("HighContrast")
-task.wait(0.1)
-playSound("rbxassetid://195868961")
 
--- God-Tier Toggles
-uiLibrary:AddToggle("Pre-Cog Trajectory ESP ⚡", function(state)
-    playSound("rbxassetid://12221976")
-    preCogEnabled = state
-    if state then
-        getgenv().PreCogConnection = RunService.RenderStepped:Connect(updatePreCog)
-    else
-        if getgenv().PreCogConnection then getgenv().PreCogConnection:Disconnect() end
-        for _, p in pairs(trajectoryBeams) do p.att0:Destroy() p.att1:Destroy() p.beam:Destroy() end
-        trajectoryBeams = {}
-    end
+uiLibrary:AddToggle("💣 ENABLE MAX KILL AURA", function(state)
+    auraEnabled = state
 end, false)
 
-uiLibrary:AddToggle("Domain Expansion: The Void ⚡", function(state)
-    playSound("rbxassetid://12221976")
-    toggleDomain(state)
-end, false)
+uiLibrary:AddToggle("🧲 Hitbox Magnet", function(state)
+    magnetEnabled = state
+end, true)
 
-uiLibrary:AddToggle("Show Shadow Strike Button ⚡", function(state)
-    playSound("rbxassetid://12221976")
-    if state then createBlinkButton() else if blinkButtonUI then blinkButtonUI:Destroy() blinkButtonUI = nil end end
-end, false)
+uiLibrary:AddToggle("⚔️ Auto-Equip Weapon", function(state)
+    autoEquipEnabled = state
+end, true)
 
--- Standard Toggles
-uiLibrary:AddToggle("AimLock (Nearest to Center)", function(enabled)
-    playSound("rbxassetid://12221976")
-    aimLockEnabled = enabled
-    if enabled then
-        aimLockConnection = RunService.RenderStepped:Connect(function()
-            if aimLockEnabled then
-                local target = getClosestEnemyToCenter()
-                if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
-                    camera.CFrame = CFrame.new(camera.CFrame.Position, target.Character.HumanoidRootPart.Position)
-                end
-            end
-        end)
-    else
-        if aimLockConnection then aimLockConnection:Disconnect(); aimLockConnection = nil end
-    end
-end, false)
+uiLibrary:AddToggle("🛡️ Team Check", function(state)
+    teamCheck = state
+end, true)
 
-uiLibrary:AddToggle("ESP (Highlights)", function(enabled)
-    playSound("rbxassetid://12221976")
-    espEnabled = enabled
-    if enabled then
-        getgenv().ESPConnection = RunService.RenderStepped:Connect(updateESP)
-    else
-        if getgenv().ESPConnection then getgenv().ESPConnection:Disconnect() end
-        for _, gui in pairs(espGuis) do gui:Destroy() end
-        espGuis = {}
-    end
-end, false)
-
-uiLibrary:AddToggle("Expand Hitboxes", function(enabled)
-    playSound("rbxassetid://12221976")
-    toggleHitboxes(enabled)
-end, false)
-
-uiLibrary:AddToggle("Noclip (Walk through walls)", function(enabled)
-    playSound("rbxassetid://12221976")
-    noclipEnabled = enabled
-    if enabled then
-        noclipConnection = RunService.Stepped:Connect(function()
-            if localPlayer.Character then
-                for _, part in ipairs(localPlayer.Character:GetDescendants()) do
-                    if part:IsA("BasePart") and part.CanCollide then part.CanCollide = false end
-                end
-            end
-        end)
-    else
-        if noclipConnection then noclipConnection:Disconnect(); noclipConnection = nil end
-    end
-end, false)
-
-uiLibrary:AddToggle("Mobile Fly", function(enabled)
-    playSound("rbxassetid://12221976")
-    toggleFly(enabled)
-end, false)
-
-uiLibrary:AddToggle("FPP (First Person)", function(enabled)
-    playSound("rbxassetid://12221976")
-    if enabled then
-        camera.CameraType = Enum.CameraType.Custom
-        localPlayer.CameraMode = Enum.CameraMode.LockFirstPerson
-    else
-        localPlayer.CameraMode = Enum.CameraMode.Classic
-    end
-end, false)
-
--- Buttons & Utilities
-uiLibrary:AddButton("Hitbox Size +", function() hitboxSize = math.clamp(hitboxSize + 5, 5, 100) end)
-uiLibrary:AddButton("Hitbox Size -", function() hitboxSize = math.clamp(hitboxSize - 5, 5, 100) end)
-uiLibrary:AddButton("FOV +", function() camera.FieldOfView = math.clamp(camera.FieldOfView + 10, 1, 120) end)
-uiLibrary:AddButton("FOV -", function() camera.FieldOfView = math.clamp(camera.FieldOfView - 10, 1, 120) end)
-uiLibrary:AddButton("Speed Boost (WalkSpeed 50)", function()
-    local hum = localPlayer.Character and localPlayer.Character:FindFirstChildOfClass("Humanoid")
-    if hum then hum.WalkSpeed = 50 end
+uiLibrary:AddButton("Size: Medium (50)", function()
+    hitboxSize = Vector3.new(50, 50, 50)
 end)
-uiLibrary:AddButton("Jump Boost (JumpPower 100)", function()
-    local hum = localPlayer.Character and localPlayer.Character:FindFirstChildOfClass("Humanoid")
-    if hum then hum.UseJumpPower = true hum.JumpPower = 100 end
+
+uiLibrary:AddButton("Size: Large (150)", function()
+    hitboxSize = Vector3.new(150, 150, 150)
 end)
-uiLibrary:AddButton("FullBright", function()
-    Lighting.Brightness = 2
-    Lighting.ClockTime = 14
-    Lighting.FogEnd = 100000
-    Lighting.GlobalShadows = false
-    Lighting.OutdoorAmbient = Color3.fromRGB(255, 255, 255)
+
+uiLibrary:AddButton("Size: MAX (500)", function()
+    hitboxSize = Vector3.new(500, 500, 500)
 end)
-uiLibrary:AddButton("AntiLag", function()
-    pcall(function() loadstring(game:HttpGet("https://raw.githubusercontent.com/OBFhm5650lol/Al/refs/heads/main/AntiLag", true))() end)
-end)
-uiLibrary:AddButton("AntiKick", function()
-    pcall(function() loadstring(game:HttpGet("https://raw.githubusercontent.com/OBFhm5650lol/AntkickLol/refs/heads/main/Antikicklol"))() end)
+
+uiLibrary:AddButton("🧹 Fix Lag (Clear Dead Bodies)", function()
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj:IsA("Model") and obj:FindFirstChild("Humanoid") and obj.Humanoid.Health <= 0 then
+            obj:Destroy()
+        end
+    end
 end)
