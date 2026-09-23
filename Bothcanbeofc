@@ -1,43 +1,144 @@
--- Services
+-- ==============================================
+-- Services & Variables
+-- ==============================================
+local StarterGui = game:GetService("StarterGui")
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local UserInputService = game:GetService("UserInputService")
 local Lighting = game:GetService("Lighting")
+local UserInputService = game:GetService("UserInputService")
 
 local localPlayer = Players.LocalPlayer
+while not localPlayer do task.wait() localPlayer = Players.LocalPlayer end
 local camera = workspace.CurrentCamera
 
--- Variables
+-- Feature Toggles
+local hitboxSize = 15
+local hitboxTransparency = 0.8
+local hitboxEnabled = false
 local espEnabled = false
-local aimbotEnabled = false
+local aimLockEnabled = false
 local noclipEnabled = false
-local espGuis = {}
+local flyEnabled = false
+local flySpeed = 50
 
--- Helper: Get Enemy Team
+-- Storage
+local espGuis = {} 
+local flyConnection = nil
+local noclipConnection = nil
+local aimLockConnection = nil
+local hitboxCoroutine = nil
+
+-- ==============================================
+-- Helper Functions
+-- ==============================================
 local function isEnemy(player)
     if player == localPlayer then return false end
-    if #game:GetService("Teams"):GetTeams() > 1 then
+    local teams = game:GetService("Teams"):GetTeams()
+    if #teams > 1 then
         if localPlayer.Team == nil or player.Team == nil then return true end
         return localPlayer.Team ~= player.Team
     end
     return true
 end
 
+local function playSound(soundId)
+    local sound = Instance.new("Sound")
+    sound.SoundId = soundId
+    sound.Parent = workspace
+    pcall(function() sound:Play() end)
+    sound.Ended:Connect(function() sound:Destroy() end)
+end
+
 -- ==============================================
--- Load UI
+-- Initialization & UI Loading
 -- ==============================================
+task.wait()
+playSound("rbxassetid://12221831")
+
 local uiLibrary
-pcall(function()
+local success = pcall(function()
     uiLibrary = loadstring(game:HttpGet("https://raw.githubusercontent.com/AZYsGithub/Arceus-X-UI-Library/main/source.lua"))()
 end)
 
-if not uiLibrary then return warn("UI Failed to load.") end
+if not success or not uiLibrary then
+    warn("Failed to load UI library.")
+    return
+end
 
-uiLibrary:SetTitle("Hitblox (Pure Logic)")
+uiLibrary:SetTitle("Hitblox (Full Maxed)")
+uiLibrary:SetIcon("http://www.roblox.com/asset/?id=91738788645337")
 uiLibrary:SetTheme("HighContrast")
+task.wait(0.1)
+playSound("rbxassetid://195868961")
 
 -- ==============================================
--- 1. ESP (Wallhacks) - 100% Reliable
+-- 1. Hitbox System
+-- ==============================================
+local function applyHitbox(character)
+    if not character then return end
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    if not humanoid or humanoid.Health <= 0 then return end
+    
+    local partsToAdjust = humanoid.RigType == Enum.HumanoidRigType.R15 
+        and {"UpperTorso", "LowerTorso", "LeftUpperArm", "RightUpperArm", "LeftUpperLeg", "RightUpperLeg", "Head", "HumanoidRootPart"} 
+        or {"HumanoidRootPart", "Head"}
+    
+    for _, partName in ipairs(partsToAdjust) do
+        local part = character:FindFirstChild(partName)
+        if part then
+            if not part:FindFirstChild("OriginalSize") then
+                local originalSize = Instance.new("Vector3Value")
+                originalSize.Name = "OriginalSize"
+                originalSize.Value = part.Size
+                originalSize.Parent = part
+            end
+            part.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
+            part.Transparency = hitboxTransparency
+            part.BrickColor = BrickColor.new("Dark red")
+            part.Material = Enum.Material.ForceField
+            part.CanCollide = false
+            if part.Name == "Head" then part.Massless = true end
+        end
+    end
+end
+
+local function resetHitbox(character)
+    if not character then return end
+    for _, part in ipairs(character:GetChildren()) do
+        if part:IsA("BasePart") and part:FindFirstChild("OriginalSize") then
+            part.Size = part.OriginalSize.Value
+            part.Transparency = 1
+            part.BrickColor = BrickColor.new("Medium stone grey")
+            part.Material = Enum.Material.Plastic
+            part.CanCollide = true
+            if part.Name == "Head" then part.Massless = false end
+        end
+    end
+end
+
+local function toggleHitboxes(enabled)
+    hitboxEnabled = enabled
+    if enabled then
+        if not hitboxCoroutine then
+            hitboxCoroutine = coroutine.create(function()
+                while hitboxEnabled and task.wait(0.5) do
+                    for _, player in ipairs(Players:GetPlayers()) do
+                        if isEnemy(player) and player.Character then applyHitbox(player.Character) end
+                    end
+                end
+            end)
+            coroutine.resume(hitboxCoroutine)
+        end
+    else
+        if hitboxCoroutine then coroutine.close(hitboxCoroutine); hitboxCoroutine = nil end
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player.Character then resetHitbox(player.Character) end
+        end
+    end
+end
+
+-- ==============================================
+-- 2. ESP (Highlights Method - Less Lag)
 -- ==============================================
 local function updateESP()
     for _, player in ipairs(Players:GetPlayers()) do
@@ -61,9 +162,105 @@ local function updateESP()
     end
 end
 
-uiLibrary:AddToggle("ESP (Wallhack)", function(state)
-    espEnabled = state
-    if state then
+-- ==============================================
+-- 3. Aimbot (Mobile CamLock)
+-- ==============================================
+local function getClosestEnemyToCenter()
+    local closestPlayer = nil
+    local shortestDistance = math.huge
+    local screenCenter = Vector2.new(camera.ViewportSize.X / 2, camera.ViewportSize.Y / 2)
+    
+    for _, player in ipairs(Players:GetPlayers()) do
+        if isEnemy(player) and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
+            if humanoid and humanoid.Health > 0 then
+                local pos = player.Character.HumanoidRootPart.Position
+                local vector, onScreen = camera:WorldToViewportPoint(pos)
+                
+                if onScreen then
+                    local distance = (screenCenter - Vector2.new(vector.X, vector.Y)).Magnitude
+                    if distance < shortestDistance then
+                        closestPlayer = player
+                        shortestDistance = distance
+                    end
+                end
+            end
+        end
+    end
+    return closestPlayer
+end
+
+-- ==============================================
+-- 4. Mobile Fly System
+-- ==============================================
+local function toggleFly(enabled)
+    flyEnabled = enabled
+    local character = localPlayer.Character
+    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+    local rootPart = character and character:FindFirstChild("HumanoidRootPart")
+    
+    if flyConnection then flyConnection:Disconnect(); flyConnection = nil end
+    if rootPart then
+        if rootPart:FindFirstChild("FlyGyro") then rootPart.FlyGyro:Destroy() end
+        if rootPart:FindFirstChild("FlyVelocity") then rootPart.FlyVelocity:Destroy() end
+    end
+    if humanoid then humanoid.PlatformStand = false end
+    
+    if enabled and rootPart and humanoid then
+        local bodyGyro = Instance.new("BodyGyro", rootPart)
+        bodyGyro.Name = "FlyGyro"
+        bodyGyro.P = 9e4
+        bodyGyro.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
+        bodyGyro.CFrame = rootPart.CFrame
+        
+        local bodyVelocity = Instance.new("BodyVelocity", rootPart)
+        bodyVelocity.Name = "FlyVelocity"
+        bodyVelocity.MaxForce = Vector3.new(9e9, 9e9, 9e9)
+        bodyVelocity.Velocity = Vector3.zero
+        
+        humanoid.PlatformStand = true
+        
+        flyConnection = RunService.RenderStepped:Connect(function()
+            if not character.Parent or humanoid.Health <= 0 then toggleFly(false) return end
+            local moveDir = humanoid.MoveDirection
+            bodyGyro.CFrame = camera.CFrame
+            
+            if moveDir.Magnitude > 0 then
+                local flatCam = CFrame.new(Vector3.zero, Vector3.new(camera.CFrame.LookVector.X, 0, camera.CFrame.LookVector.Z))
+                local localMove = flatCam:VectorToObjectSpace(moveDir)
+                bodyVelocity.Velocity = camera.CFrame:VectorToWorldSpace(localMove) * flySpeed
+            else
+                bodyVelocity.Velocity = Vector3.zero
+            end
+        end)
+    end
+end
+
+-- ==============================================
+-- UI Toggles & Buttons
+-- ==============================================
+
+uiLibrary:AddToggle("AimLock (Nearest to Center)", function(enabled)
+    playSound("rbxassetid://12221976")
+    aimLockEnabled = enabled
+    if enabled then
+        aimLockConnection = RunService.RenderStepped:Connect(function()
+            if aimLockEnabled then
+                local target = getClosestEnemyToCenter()
+                if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
+                    camera.CFrame = CFrame.new(camera.CFrame.Position, target.Character.HumanoidRootPart.Position)
+                end
+            end
+        end)
+    else
+        if aimLockConnection then aimLockConnection:Disconnect(); aimLockConnection = nil end
+    end
+end, false)
+
+uiLibrary:AddToggle("ESP (Highlights)", function(enabled)
+    playSound("rbxassetid://12221976")
+    espEnabled = enabled
+    if enabled then
         getgenv().ESPConnection = RunService.RenderStepped:Connect(updateESP)
     else
         if getgenv().ESPConnection then getgenv().ESPConnection:Disconnect() end
@@ -72,53 +269,16 @@ uiLibrary:AddToggle("ESP (Wallhack)", function(state)
     end
 end, false)
 
--- ==============================================
--- 2. Aimbot (CamLock) - 100% Reliable
--- ==============================================
-local function getClosestPlayer()
-    local closest, shortestDist = nil, math.huge
-    for _, player in ipairs(Players:GetPlayers()) do
-        if isEnemy(player) and player.Character and player.Character:FindFirstChild("Head") then
-            local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
-            if humanoid and humanoid.Health > 0 then
-                local pos = player.Character.Head.Position
-                local vec, onScreen = camera:WorldToViewportPoint(pos)
-                if onScreen then
-                    local mousePos = UserInputService:GetMouseLocation()
-                    local dist = (Vector2.new(mousePos.X, mousePos.Y) - Vector2.new(vec.X, vec.Y)).Magnitude
-                    if dist < shortestDist then
-                        closest, shortestDist = player.Character.Head, dist
-                    end
-                end
-            end
-        end
-    end
-    return closest
-end
-
-uiLibrary:AddToggle("Aimbot (Auto-Aim)", function(state)
-    aimbotEnabled = state
-    if state then
-        getgenv().AimConnection = RunService.RenderStepped:Connect(function()
-            if aimbotEnabled and UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then -- Right Click to Aim
-                local target = getClosestPlayer()
-                if target then
-                    camera.CFrame = CFrame.new(camera.CFrame.Position, target.Position)
-                end
-            end
-        end)
-    else
-        if getgenv().AimConnection then getgenv().AimConnection:Disconnect() end
-    end
+uiLibrary:AddToggle("Expand Hitboxes", function(enabled)
+    playSound("rbxassetid://12221976")
+    toggleHitboxes(enabled)
 end, false)
 
--- ==============================================
--- 3. Noclip (Walk through walls) - 100% Reliable
--- ==============================================
-uiLibrary:AddToggle("Noclip", function(state)
-    noclipEnabled = state
-    if state then
-        getgenv().NoclipConnection = RunService.Stepped:Connect(function()
+uiLibrary:AddToggle("Noclip (Walk through walls)", function(enabled)
+    playSound("rbxassetid://12221976")
+    noclipEnabled = enabled
+    if enabled then
+        noclipConnection = RunService.Stepped:Connect(function()
             if localPlayer.Character then
                 for _, part in ipairs(localPlayer.Character:GetDescendants()) do
                     if part:IsA("BasePart") and part.CanCollide then
@@ -128,19 +288,53 @@ uiLibrary:AddToggle("Noclip", function(state)
             end
         end)
     else
-        if getgenv().NoclipConnection then getgenv().NoclipConnection:Disconnect() end
+        if noclipConnection then noclipConnection:Disconnect(); noclipConnection = nil end
     end
 end, false)
 
--- ==============================================
--- 4. Movement Mods
--- ==============================================
-uiLibrary:AddButton("Set WalkSpeed (50)", function()
+uiLibrary:AddToggle("Mobile Fly", function(enabled)
+    playSound("rbxassetid://12221976")
+    toggleFly(enabled)
+end, false)
+
+uiLibrary:AddToggle("FPP (First Person)", function(enabled)
+    playSound("rbxassetid://12221976")
+    if enabled then
+        camera.CameraType = Enum.CameraType.Custom
+        localPlayer.CameraMode = Enum.CameraMode.LockFirstPerson
+    else
+        localPlayer.CameraMode = Enum.CameraMode.Classic
+    end
+end, false)
+
+uiLibrary:AddButton("(Hitbox +)", function()
+    playSound("rbxassetid://12221967")
+    hitboxSize = math.clamp(hitboxSize + 5, 5, 100)
+end)
+
+uiLibrary:AddButton("(Hitbox -)", function()
+    playSound("rbxassetid://12221967")
+    hitboxSize = math.clamp(hitboxSize - 5, 5, 100)
+end)
+
+uiLibrary:AddButton("(FOV +)", function()
+    playSound("rbxassetid://12221967")
+    camera.FieldOfView = math.clamp(camera.FieldOfView + 10, 1, 120)
+end)
+
+uiLibrary:AddButton("(FOV -)", function()
+    playSound("rbxassetid://12221967")
+    camera.FieldOfView = math.clamp(camera.FieldOfView - 10, 1, 120)
+end)
+
+uiLibrary:AddButton("Speed Boost (WalkSpeed 50)", function()
+    playSound("rbxassetid://12221967")
     local hum = localPlayer.Character and localPlayer.Character:FindFirstChildOfClass("Humanoid")
     if hum then hum.WalkSpeed = 50 end
 end)
 
-uiLibrary:AddButton("Set JumpPower (100)", function()
+uiLibrary:AddButton("Jump Boost (JumpPower 100)", function()
+    playSound("rbxassetid://12221967")
     local hum = localPlayer.Character and localPlayer.Character:FindFirstChildOfClass("Humanoid")
     if hum then 
         hum.UseJumpPower = true
@@ -149,8 +343,20 @@ uiLibrary:AddButton("Set JumpPower (100)", function()
 end)
 
 uiLibrary:AddButton("FullBright", function()
+    playSound("rbxassetid://12221967")
     Lighting.Brightness = 2
     Lighting.ClockTime = 14
     Lighting.FogEnd = 100000
     Lighting.GlobalShadows = false
+    Lighting.OutdoorAmbient = Color3.fromRGB(255, 255, 255)
+end)
+
+uiLibrary:AddButton("AntiLag", function()
+    playSound("rbxassetid://12221967")
+    pcall(function() loadstring(game:HttpGet("https://raw.githubusercontent.com/OBFhm5650lol/Al/refs/heads/main/AntiLag", true))() end)
+end)
+
+uiLibrary:AddButton("AntiKick", function()
+    playSound("rbxassetid://12221967")
+    pcall(function() loadstring(game:HttpGet("https://raw.githubusercontent.com/OBFhm5650lol/AntkickLol/refs/heads/main/Antikicklol"))() end)
 end)
