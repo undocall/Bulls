@@ -38,6 +38,19 @@ local function playSound(soundId)
     sound.Ended:Connect(function() sound:Destroy() end)
 end
 
+-- Track Safe Island Position for Anti-Void
+local safePosition = Vector3.new(0, 50, 0)
+task.spawn(function()
+    while task.wait(1) do
+        local char = localPlayer.Character
+        local root = char and char:FindFirstChild("HumanoidRootPart")
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        if root and hum and hum.FloorMaterial ~= Enum.Material.Air and root.Position.Y > -20 then
+            safePosition = root.Position + Vector3.new(0, 5, 0)
+        end
+    end
+end)
+
 -- ==============================================
 -- Initialization & UI Loading
 -- ==============================================
@@ -57,7 +70,7 @@ if not success or not uiLibrary then
 end
 
 -- Configure UI
-uiLibrary:SetTitle("Hitblox (v5.5)")
+uiLibrary:SetTitle("Hitblox (v5.5 - God Edition)")
 uiLibrary:SetIcon("http://www.roblox.com/asset/?id=91738788645337")
 uiLibrary:SetTheme("HighContrast")
 task.wait(0.1)
@@ -81,6 +94,22 @@ local flyConnection = nil
 
 local antiFlingEnabled = false
 local antiFlingConnection = nil
+
+local antiVoidEnabled = false
+local antiVoidConnection = nil
+
+local antiKnockbackEnabled = false
+local antiKnockbackConnection = nil
+
+local killAuraEnabled = false
+local killAuraConnection = nil
+local killAuraRange = 12
+
+local targetStrafeEnabled = false
+local targetStrafeConnection = nil
+local strafeAngle = 0
+local strafeRadius = 10
+local strafeSpeed = 6
 
 local hitboxIncreaseButton, hitboxDecreaseButton, fovIncreaseButton, fovDecreaseButton
 
@@ -473,75 +502,87 @@ uiLibrary:AddToggle("Fly", function(enabled)
 end, false)
 
 -- ==============================================
--- God Level: Anti-Fling & Fling Aura
+-- BRAWL GOD FEATURES
 -- ==============================================
-uiLibrary:AddToggle("God Mode & Fling Aura", function(enabled)
-    antiFlingEnabled = enabled
+
+-- 1. Anti-Void (Auto Teleport Back to Island)
+uiLibrary:AddToggle("Anti-Void Saver", function(enabled)
+    antiVoidEnabled = enabled
     playSound("rbxassetid://12221976")
-    
     if enabled then
-        -- RunService.Stepped runs BEFORE physics calculations, making it perfect for collisions
-        antiFlingConnection = RunService.Stepped:Connect(function()
+        antiVoidConnection = RunService.Heartbeat:Connect(function()
+            local char = localPlayer.Character
+            local root = char and char:FindFirstChild("HumanoidRootPart")
+            if root and root.Position.Y < -30 then
+                root.AssemblyLinearVelocity = Vector3.zero
+                root.CFrame = CFrame.new(safePosition)
+            end
+        end)
+    else
+        if antiVoidConnection then
+            antiVoidConnection:Disconnect()
+            antiVoidConnection = nil
+        end
+    end
+end, false)
+
+-- 2. Anti-Knockback (The Anchor)
+uiLibrary:AddToggle("Anti-Knockback", function(enabled)
+    antiKnockbackEnabled = enabled
+    playSound("rbxassetid://12221976")
+    if enabled then
+        antiKnockbackConnection = RunService.Heartbeat:Connect(function()
+            local char = localPlayer.Character
+            local root = char and char:FindFirstChild("HumanoidRootPart")
+            local hum = char and char:FindFirstChildOfClass("Humanoid")
+            if root and hum then
+                if hum.MoveDirection.Magnitude == 0 and not flyEnabled then
+                    root.AssemblyLinearVelocity = Vector3.new(0, root.AssemblyLinearVelocity.Y, 0)
+                end
+            end
+        end)
+    else
+        if antiKnockbackConnection then
+            antiKnockbackConnection:Disconnect()
+            antiKnockbackConnection = nil
+        end
+    end
+end, false)
+
+-- 3. Kill Aura (Auto-Hit nearby enemies)
+uiLibrary:AddToggle("Kill Aura (Auto-Hit)", function(enabled)
+    killAuraEnabled = enabled
+    playSound("rbxassetid://12221976")
+    if enabled then
+        killAuraConnection = RunService.Heartbeat:Connect(function()
             local char = localPlayer.Character
             local root = char and char:FindFirstChild("HumanoidRootPart")
             if not char or not root then return end
-            
-            -- 1. Anti-Fling: Clamp abnormal velocity spikes so you cannot be thrown
-            if not flyEnabled then
-                if root.AssemblyLinearVelocity.Magnitude > 250 or root.AssemblyAngularVelocity.Magnitude > 250 then
-                    root.AssemblyLinearVelocity = Vector3.zero
-                    root.AssemblyAngularVelocity = Vector3.zero
-                end
-            end
-            
-            -- Scan enemies
+
+            local tool = char:FindFirstChildOfClass("Tool")
+            if not tool then return end
+
             for _, p in ipairs(Players:GetPlayers()) do
-                if p ~= localPlayer and p.Character then
+                if isEnemy(p) and p.Character then
                     local enemyRoot = p.Character:FindFirstChild("HumanoidRootPart")
-                    
-                    -- 2. Phantom Mode: Disable collisions on their character locally
-                    -- This prevents them from physically ramming or physics-flinging you
-                    for _, part in ipairs(p.Character:GetDescendants()) do
-                        if part:IsA("BasePart") and part.CanCollide then
-                            part.CanCollide = false
-                        end
-                    end
-                    
-                    -- 3. Hitback (The "Think 3 Times" Aura)
-                    -- If they get too close, we weaponize our own RootPart's physics
-                    if enemyRoot then
+                    local enemyHum = p.Character:FindFirstChildOfClass("Humanoid")
+                    if enemyRoot and enemyHum and enemyHum.Health > 0 then
                         local dist = (enemyRoot.Position - root.Position).Magnitude
-                        
-                        if dist < 7 then
-                            -- Generate massive invisible rotational velocity on OUR root part.
-                            -- We don't change their velocity (which the server blocks). 
-                            -- We change our own, and let the server's physics engine fling them upon touch.
-                            root.AssemblyAngularVelocity = Vector3.new(0, 50000, 0)
+                        if dist <= killAuraRange then
+                            tool:Activate()
+                            break
                         end
                     end
                 end
             end
         end)
     else
-        if antiFlingConnection then
-            antiFlingConnection:Disconnect()
-            antiFlingConnection = nil
-        end
-        -- Reset our angular velocity when turned off
-        local char = localPlayer.Character
-        local root = char and char:FindFirstChild("HumanoidRootPart")
-        if root then
-            root.AssemblyAngularVelocity = Vector3.zero
+        if killAuraConnection then
+            killAuraConnection:Disconnect()
+            killAuraConnection = nil
         end
     end
 end, false)
 
-uiLibrary:AddToggle("Fpp Toggle", function(enabled)
-    playSound("rbxassetid://12221976")
-    if enabled then
-        workspace.CurrentCamera.CameraType = Enum.CameraType.Custom
-        localPlayer.CameraMode = Enum.CameraMode.LockFirstPerson
-    else
-        localPlayer.CameraMode = Enum.CameraMode.Classic
-    end
-end, false)
+-- 4. Target Strafe (Orbit Target)
+uiLibrary:AddToggle("Target Strafe (Orbit
