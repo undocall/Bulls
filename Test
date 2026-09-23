@@ -1,18 +1,55 @@
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local VirtualUser = game:GetService("VirtualUser")
+local CoreGui = game:GetService("CoreGui")
 
 local localPlayer = Players.LocalPlayer
 
 -- ==========================================
--- TEST SETTINGS
+-- UI TOGGLE SETUP
 -- ==========================================
-local AuraRange = 15       -- Distance before they get hit and flung
-local FlingPower = 50000   -- Insane rotational force to launch them to the edge
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "FlingAuraUI"
+screenGui.ResetOnSpawn = false
+-- Try to put in CoreGui to hide from game, fallback to PlayerGui
+local success = pcall(function() screenGui.Parent = CoreGui end)
+if not success then screenGui.Parent = localPlayer:WaitForChild("PlayerGui") end
 
-print("Raw Auto-Hit & Fling Aura Loaded!")
+local toggleButton = Instance.new("TextButton")
+toggleButton.Size = UDim2.new(0, 200, 0, 50)
+toggleButton.Position = UDim2.new(0.5, -100, 0, 20)
+toggleButton.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+toggleButton.TextColor3 = Color3.fromRGB(255, 50, 50)
+toggleButton.Font = Enum.Font.SourceSansBold
+toggleButton.TextSize = 24
+toggleButton.Text = "Aura: OFF"
+toggleButton.BorderSizePixel = 2
+toggleButton.BorderColor3 = Color3.fromRGB(255, 0, 0)
+toggleButton.Active = true
+toggleButton.Draggable = true -- You can drag the button around the screen
+toggleButton.Parent = screenGui
 
--- Helper to find enemies
+local isAuraEnabled = false
+
+toggleButton.MouseButton1Click:Connect(function()
+    isAuraEnabled = not isAuraEnabled
+    if isAuraEnabled then
+        toggleButton.Text = "Aura: ON"
+        toggleButton.TextColor3 = Color3.fromRGB(50, 255, 50)
+        toggleButton.BorderColor3 = Color3.fromRGB(0, 255, 0)
+    else
+        toggleButton.Text = "Aura: OFF"
+        toggleButton.TextColor3 = Color3.fromRGB(255, 50, 50)
+        toggleButton.BorderColor3 = Color3.fromRGB(255, 0, 0)
+    end
+end)
+
+-- ==========================================
+-- MAIN LOGIC
+-- ==========================================
+local AuraRange = 15
+local FlingRotationalForce = 99999 -- Maximum spin to launch them to the edge
+
 local function isEnemy(player)
     if player == localPlayer then return false end
     if localPlayer.Team and player.Team then
@@ -21,18 +58,26 @@ local function isEnemy(player)
     return true
 end
 
--- The main loop
-RunService.Heartbeat:Connect(function()
+-- We use 'Stepped' because it runs right BEFORE the physics engine calculates bounces
+RunService.Stepped:Connect(function()
     local char = localPlayer.Character
     local root = char and char:FindFirstChild("HumanoidRootPart")
     local hum = char and char:FindFirstChildOfClass("Humanoid")
     
     if not char or not root or not hum or hum.Health <= 0 then return end
 
+    if not isAuraEnabled then 
+        -- If off, make sure we aren't spinning
+        if root.AssemblyAngularVelocity.Magnitude > 1000 then
+            root.AssemblyAngularVelocity = Vector3.zero
+        end
+        return 
+    end
+
     local target = nil
     local closestDist = AuraRange
 
-    -- Find the closest enemy within range
+    -- Find closest enemy
     for _, p in ipairs(Players:GetPlayers()) do
         if isEnemy(p) and p.Character then
             local eRoot = p.Character:FindFirstChild("HumanoidRootPart")
@@ -49,45 +94,29 @@ RunService.Heartbeat:Connect(function()
     end
 
     if target then
-        local eRoot = target:FindFirstChild("HumanoidRootPart")
-        
-        -- ==========================================
-        -- 1. CONSTANT AUTO-HIT
-        -- ==========================================
+        -- 1. AUTO-HIT LOGIC
         local tool = char:FindFirstChildOfClass("Tool")
         if not tool then
-            -- Force equip if hands are empty
             local backpackTool = localPlayer.Backpack:FindFirstChildOfClass("Tool")
             if backpackTool then hum:EquipTool(backpackTool) end
         else
-            -- Spam tool activation
             pcall(function() tool:Activate() end)
         end
-        -- Spam hardware click as backup
         VirtualUser:ClickButton1(Vector2.new(0,0)) 
         
-        -- ==========================================
-        -- 2. FAR EDGE FLING
-        -- ==========================================
-        -- Force collisions ON so physics momentum transfers correctly
-        root.CanCollide = true
-        eRoot.CanCollide = true
+        -- 2. FLING LOGIC (The Fix)
+        -- Spin violently to create the fling impact
+        root.AssemblyAngularVelocity = Vector3.new(FlingRotationalForce, FlingRotationalForce, FlingRotationalForce)
         
-        -- Make your character incredibly heavy so YOU don't bounce back
-        root.CustomPhysicalProperties = PhysicalProperties.new(100, 0.3, 0.5)
-
-        -- Spin your physics at max speed (this is what launches them away)
-        root.AssemblyAngularVelocity = Vector3.new(FlingPower, FlingPower, FlingPower)
-        
-        -- Dash your character slightly into them to force the physical collision
-        local dashDirection = (eRoot.Position - root.Position).Unit
-        root.AssemblyLinearVelocity = dashDirection * 50
+        -- MAGIC FIX: We set your LinearVelocity strictly to your walk direction.
+        -- This deletes the "bounce back" from the physics engine entirely.
+        -- You will walk normally, but if an enemy touches you, THEY take all the force and you don't flinch.
+        local moveDir = hum.MoveDirection
+        root.AssemblyLinearVelocity = Vector3.new(moveDir.X * hum.WalkSpeed, 0, moveDir.Z * hum.WalkSpeed)
     else
-        -- ==========================================
-        -- RESET (When nobody is near)
-        -- ==========================================
-        -- Stop spinning and reset weight so you can walk normally
-        root.AssemblyAngularVelocity = Vector3.zero
-        root.CustomPhysicalProperties = PhysicalProperties.new(0.7, 0.3, 0.5) 
+        -- Stop spinning when no one is near so you don't look crazy
+        if root.AssemblyAngularVelocity.Magnitude > 1000 then
+            root.AssemblyAngularVelocity = Vector3.zero
+        end
     end
 end)
