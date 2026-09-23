@@ -1,355 +1,194 @@
 -- ==============================================
--- ⚡ HITBLOX V3: FLAWLESS MASTER BUILD
+-- ⚡ HITBLOX V4: PHANTOM MATADOR (MOBILE OPTIMIZED)
 -- ==============================================
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local Lighting = game:GetService("Lighting")
 local CoreGui = game:GetService("CoreGui")
-local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
 
 local localPlayer = Players.LocalPlayer
 while not localPlayer do task.wait() localPlayer = Players.LocalPlayer end
-local camera = workspace.CurrentCamera
+
+-- State
+local phantomDodgeEnabled = false
+local autoAuraEnabled = false
+local isDodging = false
 
 -- ==============================================
--- Variables & State
+-- 1. BADASS FEATURE: AFTERIMAGE DECOY DODGE
 -- ==============================================
-local hitboxSize = 15
-local hitboxTransparency = 0.8
-local hitboxEnabled = false
-local espEnabled = false
-local aimLockEnabled = false
-local noclipEnabled = false
-local flyEnabled = false
-local flySpeed = 50
-local domainEnabled = false
-local preCogEnabled = false
-local autoRetaliateEnabled = false
-
--- Storage & Cleanup
-local espGuis = {} 
-local trajectoryBeams = {}
-local connections = {}
-local positionHistory = {} -- For Phantom Rewind
-local blinkButtonUI = nil
-local rewindButtonUI = nil
-
-local originalLighting = {
-    Ambient = Lighting.Ambient,
-    OutdoorAmbient = Lighting.OutdoorAmbient,
-    Brightness = Lighting.Brightness,
-    ClockTime = Lighting.ClockTime,
-    FogEnd = Lighting.FogEnd,
-    FogColor = Lighting.FogColor
-}
-
--- ==============================================
--- Helper Functions
--- ==============================================
-local function isEnemy(player)
-    if player == localPlayer then return false end
-    if localPlayer.Team and player.Team and localPlayer.Team == player.Team then return false end
-    return true
-end
-
-local function playSound(soundId)
-    local sound = Instance.new("Sound")
-    sound.SoundId = soundId
-    sound.Parent = workspace
-    pcall(function() sound:Play() end)
-    Debris:AddItem(sound, 2)
-end
-
-local function cleanupPlayer(player)
-    if espGuis[player] then espGuis[player]:Destroy(); espGuis[player] = nil end
-    if trajectoryBeams[player] then
-        trajectoryBeams[player].att0:Destroy()
-        trajectoryBeams[player].att1:Destroy()
-        trajectoryBeams[player].beam:Destroy()
-        trajectoryBeams[player] = nil
-    end
-end
-
-Players.PlayerRemoving:Connect(cleanupPlayer)
-
--- ==============================================
--- 1. Core Systems (Fixed Hitbox, Smooth AimLock)
--- ==============================================
--- FIXED: Only scales HumanoidRootPart to prevent R15 death glitches
-local function updateHitboxes()
-    for _, player in ipairs(Players:GetPlayers()) do
-        if isEnemy(player) and player.Character then
-            local hrp = player.Character:FindFirstChild("HumanoidRootPart")
-            if hrp then
-                if not hrp:FindFirstChild("OriginalSize") then
-                    local og = Instance.new("Vector3Value", hrp)
-                    og.Name = "OriginalSize"
-                    og.Value = hrp.Size
-                end
+local function createAfterimage(char)
+    pcall(function()
+        char.Archivable = true
+        local clone = char:Clone()
+        
+        -- Strip scripts and logic from clone to prevent lag
+        for _, v in ipairs(clone:GetDescendants()) do
+            if v:IsA("Script") or v:IsA("LocalScript") or v:IsA("Sound") then
+                v:Destroy()
+            elseif v:IsA("BasePart") then
+                v.Anchored = true
+                v.CanCollide = false
+                v.Material = Enum.Material.Neon
+                v.Color = Color3.fromRGB(0, 255, 255) -- Glowing Cyan Decoy
                 
-                if hitboxEnabled then
-                    hrp.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
-                    hrp.Transparency = hitboxTransparency
-                    hrp.BrickColor = BrickColor.new("Dark red")
-                    hrp.Material = Enum.Material.ForceField
-                    hrp.CanCollide = false
-                else
-                    if hrp:FindFirstChild("OriginalSize") then
-                        hrp.Size = hrp.OriginalSize.Value
-                        hrp.Transparency = 1
-                        hrp.CanCollide = true
-                    end
-                end
+                -- Add particle shatter effect
+                local particle = Instance.new("ParticleEmitter")
+                particle.Texture = "rbxassetid://243098098"
+                particle.Color = ColorSequence.new(Color3.fromRGB(0, 255, 255))
+                particle.Size = NumberSequence.new({NumberSequenceKeypoint.new(0, 0.5), NumberSequenceKeypoint.new(1, 0)})
+                particle.Lifetime = NumberRange.new(0.5, 1)
+                particle.Rate = 0
+                particle.Parent = v
+                
+                task.delay(0.5, function()
+                    particle:Emit(20)
+                    v.Transparency = 1
+                end)
             end
         end
-    end
+        
+        clone.Parent = workspace
+        task.delay(1.5, function() clone:Destroy() end)
+    end)
 end
 
-local function updateESP()
-    for _, player in ipairs(Players:GetPlayers()) do
-        if isEnemy(player) and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-            local hrp = player.Character.HumanoidRootPart
-            if not espGuis[player] then
-                local hl = Instance.new("Highlight")
-                hl.Name = "ESP_Highlight"
-                hl.FillColor = Color3.new(1, 0, 0)
-                hl.OutlineColor = Color3.new(1, 1, 1)
-                hl.FillTransparency = 0.5
-                hl.OutlineTransparency = 0
-                hl.Parent = player.Character
-                espGuis[player] = hl
-            else
-                espGuis[player].Parent = player.Character
-            end
-        else
-            cleanupPlayer(player)
-        end
-    end
-end
-
-local function getClosestEnemyToCenter()
-    local closestPlayer, shortestDistance = nil, math.huge
-    local screenCenter = Vector2.new(camera.ViewportSize.X / 2, camera.ViewportSize.Y / 2)
-    
-    for _, player in ipairs(Players:GetPlayers()) do
-        if isEnemy(player) and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-            local hum = player.Character:FindFirstChildOfClass("Humanoid")
-            if hum and hum.Health > 0 then
-                local pos, onScreen = camera:WorldToViewportPoint(player.Character.HumanoidRootPart.Position)
-                if onScreen then
-                    local distance = (screenCenter - Vector2.new(pos.X, pos.Y)).Magnitude
-                    if distance < shortestDistance then
-                        closestPlayer = player
-                        shortestDistance = distance
-                    end
-                end
-            end
-        end
-    end
-    return closestPlayer
-end
-
--- ==============================================
--- 2. God-Tier & Unique Rare Features
--- ==============================================
-
--- ⚡ RARE FEATURE 1: PHANTOM REWIND (Time Travel)
--- Records position continuously. When triggered, rewinds you 4 seconds to escape death.
 RunService.Heartbeat:Connect(function()
-    local char = localPlayer.Character
-    if char and char:FindFirstChild("HumanoidRootPart") then
-        table.insert(positionHistory, char.HumanoidRootPart.CFrame)
-        if #positionHistory > 40 then -- Keeps roughly 4 seconds of history
-            table.remove(positionHistory, 1)
-        end
-    end
-end)
-
-local function triggerPhantomRewind()
-    local char = localPlayer.Character
-    if char and char:FindFirstChild("HumanoidRootPart") and #positionHistory > 0 then
-        -- Apply a glitch effect
-        local hl = Instance.new("Highlight", char)
-        hl.FillColor = Color3.new(0, 1, 1)
-        
-        -- Teleport to oldest recorded position
-        char.HumanoidRootPart.CFrame = positionHistory[1]
-        positionHistory = {} -- Reset history after jump
-        
-        task.delay(0.5, function() hl:Destroy() end)
-    end
-end
-
--- ⚡ RARE FEATURE 2: AUTO-RETALIATE SPHERE
--- Instantly teleports you behind any enemy that enters your 20-stud radius, attacks, and returns you.
-RunService.Stepped:Connect(function()
-    if not autoRetaliateEnabled then return end
+    if not phantomDodgeEnabled or isDodging then return end
+    
     local char = localPlayer.Character
     if not char or not char:FindFirstChild("HumanoidRootPart") then return end
     local myRoot = char.HumanoidRootPart
 
-    for _, player in ipairs(Players:GetPlayers()) do
-        if isEnemy(player) and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-            local enemyRoot = player.Character.HumanoidRootPart
+    for _, enemy in ipairs(Players:GetPlayers()) do
+        if enemy ~= localPlayer and enemy.Character and enemy.Character:FindFirstChild("HumanoidRootPart") then
+            local enemyRoot = enemy.Character.HumanoidRootPart
             local dist = (myRoot.Position - enemyRoot.Position).Magnitude
             
-            if dist < 20 and dist > 5 then
+            -- If enemy is close AND moving fast towards you (Charging)
+            if dist < 18 and enemyRoot.AssemblyLinearVelocity.Magnitude > 15 then
+                isDodging = true
+                
+                -- 1. Create the glowing clone decoy
+                createAfterimage(char)
+                
+                -- 2. Snap behind the charging enemy
+                local backstabPosition = enemyRoot.CFrame * CFrame.new(0, 0, 5)
+                myRoot.CFrame = backstabPosition
+                
+                -- 3. Auto swing weapon
                 local tool = char:FindFirstChildOfClass("Tool")
-                if tool then
-                    local originalCFrame = myRoot.CFrame
-                    -- Teleport behind enemy
-                    myRoot.CFrame = enemyRoot.CFrame * CFrame.new(0, 0, 4)
-                    tool:Activate()
-                    task.wait(0.1)
-                    -- Teleport back seamlessly
-                    myRoot.CFrame = originalCFrame
-                end
+                if tool then tool:Activate() end
+                
+                -- Cooldown to prevent spam
+                task.wait(1.5)
+                isDodging = false
+                break
             end
         end
     end
 end)
 
--- SHADOW STRIKE BLINK
-local function executeShadowStrike()
+-- ==============================================
+-- 2. FIXED FEATURE: MAGNET AURA (SAFE HITBOX)
+-- ==============================================
+-- Standard hitboxes break your game. This magnetically pulls enemies to your attacks locally.
+RunService.Stepped:Connect(function()
+    if not autoAuraEnabled then return end
     local char = localPlayer.Character
-    local root = char and char:FindFirstChild("HumanoidRootPart")
-    if not root then return end
-    
-    local targetRoot = getClosestEnemyToCenter()
-    if not targetRoot or not targetRoot.Character then return end
-    
-    local safePosition = root.CFrame
-    root.CFrame = targetRoot.Character.HumanoidRootPart.CFrame * CFrame.new(0, 0, 3)
+    if not char or not char:FindFirstChild("HumanoidRootPart") then return end
     
     local tool = char:FindFirstChildOfClass("Tool")
-    if tool then tool:Activate() end
-    
-    task.wait(0.2)
-    root.CFrame = safePosition
-end
+    if not tool then return end -- Only works when holding a weapon
 
-local function createActionButtons()
-    if blinkButtonUI then blinkButtonUI:Destroy() end
-    
-    blinkButtonUI = Instance.new("ScreenGui")
-    blinkButtonUI.Name = "MasterActionUI"
-    blinkButtonUI.ResetOnSpawn = false
-    pcall(function() blinkButtonUI.Parent = CoreGui end)
-    if blinkButtonUI.Parent == nil then blinkButtonUI.Parent = localPlayer:WaitForChild("PlayerGui") end
-    
-    -- Blink Button
-    local btn1 = Instance.new("TextButton", blinkButtonUI)
-    btn1.Size = UDim2.new(0, 100, 0, 100)
-    btn1.Position = UDim2.new(0.85, -110, 0.45, 0)
-    btn1.BackgroundColor3 = Color3.new(0, 0, 0)
-    btn1.BackgroundTransparency = 0.3
-    btn1.Text = "⚡\nBLINK"
-    btn1.TextColor3 = Color3.new(1, 0, 0)
-    btn1.TextScaled = true
-    btn1.Font = Enum.Font.GothamBold
-    local c1 = Instance.new("UICorner", btn1) c1.CornerRadius = UDim.new(1, 0)
-    local s1 = Instance.new("UIStroke", btn1) s1.Color = Color3.new(1, 0, 0) s1.Thickness = 3
-    btn1.MouseButton1Click:Connect(executeShadowStrike)
-
-    -- Rewind Button
-    local btn2 = Instance.new("TextButton", blinkButtonUI)
-    btn2.Size = UDim2.new(0, 100, 0, 100)
-    btn2.Position = UDim2.new(0.85, 0, 0.45, 0)
-    btn2.BackgroundColor3 = Color3.new(0, 0, 0)
-    btn2.BackgroundTransparency = 0.3
-    btn2.Text = "⏳\nREWIND"
-    btn2.TextColor3 = Color3.new(0, 1, 1)
-    btn2.TextScaled = true
-    btn2.Font = Enum.Font.GothamBold
-    local c2 = Instance.new("UICorner", btn2) c2.CornerRadius = UDim.new(1, 0)
-    local s2 = Instance.new("UIStroke", btn2) s2.Color = Color3.new(0, 1, 1) s2.Thickness = 3
-    btn2.MouseButton1Click:Connect(triggerPhantomRewind)
-end
-
--- ==============================================
--- 3. UI Menu Initialization
--- ==============================================
-task.wait()
-local uiLibrary = loadstring(game:HttpGet("https://raw.githubusercontent.com/AZYsGithub/Arceus-X-UI-Library/main/source.lua"))()
-if not uiLibrary then return end
-
-uiLibrary:SetTitle("Hitblox ⚡ (V3 Flawless)")
-uiLibrary:SetTheme("HighContrast")
-
--- God-Tier Toggles
-uiLibrary:AddToggle("⏳ Show Action Buttons (Blink/Rewind)", function(state)
-    if state then createActionButtons() else if blinkButtonUI then blinkButtonUI:Destroy() blinkButtonUI = nil end end
-end, false)
-
-uiLibrary:AddToggle("🌀 Auto-Retaliate Sphere (Bull Counter)", function(state)
-    autoRetaliateEnabled = state
-end, false)
-
-uiLibrary:AddToggle("Domain Expansion: The Void", function(state)
-    domainEnabled = state
-    if state then
-        Lighting.Ambient, Lighting.OutdoorAmbient, Lighting.Brightness, Lighting.ClockTime = Color3.new(0,0,0), Color3.new(0,0,0), 0, 0
-    else
-        Lighting.Ambient, Lighting.OutdoorAmbient, Lighting.Brightness, Lighting.ClockTime = originalLighting.Ambient, originalLighting.OutdoorAmbient, originalLighting.Brightness, originalLighting.ClockTime
-    end
-end, false)
-
--- Standard Combat Toggles
-uiLibrary:AddToggle("AimLock (Smooth Camera)", function(enabled)
-    aimLockEnabled = enabled
-    if enabled then
-        connections.Aim = RunService.RenderStepped:Connect(function()
-            local target = getClosestEnemyToCenter()
-            if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
-                -- Lerped camera for smoothness so it doesn't fight Roblox controls
-                camera.CFrame = camera.CFrame:Lerp(CFrame.lookAt(camera.CFrame.Position, target.Character.HumanoidRootPart.Position), 0.5)
+    for _, enemy in ipairs(Players:GetPlayers()) do
+        if enemy ~= localPlayer and enemy.Character and enemy.Character:FindFirstChild("HumanoidRootPart") then
+            local myRoot = char.HumanoidRootPart
+            local enemyRoot = enemy.Character.HumanoidRootPart
+            
+            if (myRoot.Position - enemyRoot.Position).Magnitude < 25 then
+                -- Drags their hitbox to your blade without resizing them and crashing
+                enemyRoot.CFrame = myRoot.CFrame * CFrame.new(0, 0, -3)
+                tool:Activate()
             end
-        end)
-    else
-        if connections.Aim then connections.Aim:Disconnect() end
+        end
     end
-end, false)
-
-uiLibrary:AddToggle("ESP (Highlights)", function(enabled)
-    espEnabled = enabled
-    if enabled then
-        connections.ESP = RunService.RenderStepped:Connect(updateESP)
-    else
-        if connections.ESP then connections.ESP:Disconnect() end
-        for _, gui in pairs(espGuis) do gui:Destroy() end espGuis = {}
-    end
-end, false)
-
-uiLibrary:AddToggle("Expand Hitboxes (Safe HRP Mode)", function(enabled)
-    hitboxEnabled = enabled
-    if enabled then
-        connections.Hitbox = RunService.Heartbeat:Connect(updateHitboxes)
-    else
-        if connections.Hitbox then connections.Hitbox:Disconnect() end
-        updateHitboxes() -- Runs once to reset to false
-    end
-end, false)
-
-uiLibrary:AddToggle("Noclip (Walk through walls)", function(enabled)
-    noclipEnabled = enabled
-    if enabled then
-        connections.Noclip = RunService.Stepped:Connect(function()
-            if localPlayer.Character then
-                for _, part in ipairs(localPlayer.Character:GetDescendants()) do
-                    if part:IsA("BasePart") then part.CanCollide = false end
-                end
-            end
-        end)
-    else
-        if connections.Noclip then connections.Noclip:Disconnect() end
-    end
-end, false)
-
--- Configuration Buttons
-uiLibrary:AddButton("Hitbox Size +", function() hitboxSize = math.clamp(hitboxSize + 5, 5, 100) end)
-uiLibrary:AddButton("Hitbox Size -", function() hitboxSize = math.clamp(hitboxSize - 5, 5, 100) end)
-uiLibrary:AddButton("Speed Boost (WalkSpeed 50)", function()
-    local hum = localPlayer.Character and localPlayer.Character:FindFirstChildOfClass("Humanoid")
-    if hum then hum.WalkSpeed = 50 end
 end)
+
+-- ==============================================
+-- 3. CUSTOM MOBILE UI (BOTTOM LEFT, PAST JOYSTICK)
+-- ==============================================
+local function createUI()
+    if CoreGui:FindFirstChild("PhantomUI") then CoreGui.PhantomUI:Destroy() end
+    
+    local screenGui = Instance.new("ScreenGui")
+    screenGui.Name = "PhantomUI"
+    screenGui.ResetOnSpawn = false
+    -- Try to parent to CoreGui (Exploit), fallback to PlayerGui (Studio)
+    local success = pcall(function() screenGui.Parent = CoreGui end)
+    if not success then screenGui.Parent = localPlayer:WaitForChild("PlayerGui") end
+
+    -- Main Panel Frame
+    local frame = Instance.new("Frame", screenGui)
+    frame.Size = UDim2.new(0, 140, 0, 100)
+    -- X: 0.22 (Avoids left joystick), Y: 0.65 (Bottom left area)
+    frame.Position = UDim2.new(0.22, 0, 0.65, 0)
+    frame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+    frame.BackgroundTransparency = 0.2
+    frame.BorderSizePixel = 0
+    frame.Active = true
+    frame.Draggable = true -- You can still drag it if needed
+
+    local uiCorner = Instance.new("UICorner", frame)
+    uiCorner.CornerRadius = UDim.new(0, 8)
+    
+    local uiStroke = Instance.new("UIStroke", frame)
+    uiStroke.Color = Color3.fromRGB(0, 255, 255)
+    uiStroke.Thickness = 2
+
+    -- Title
+    local title = Instance.new("TextLabel", frame)
+    title.Size = UDim2.new(1, 0, 0, 25)
+    title.BackgroundTransparency = 1
+    title.Text = "⚡ PHANTOM"
+    title.TextColor3 = Color3.fromRGB(0, 255, 255)
+    title.Font = Enum.Font.GothamBold
+    title.TextSize = 14
+
+    -- Helper function to make toggle buttons
+    local function createToggle(name, yPos, callback)
+        local btn = Instance.new("TextButton", frame)
+        btn.Size = UDim2.new(0.9, 0, 0, 30)
+        btn.Position = UDim2.new(0.05, 0, 0, yPos)
+        btn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+        btn.Text = "OFF | " .. name
+        btn.TextColor3 = Color3.fromRGB(200, 200, 200)
+        btn.Font = Enum.Font.GothamSemibold
+        btn.TextSize = 12
+        
+        local corner = Instance.new("UICorner", btn)
+        corner.CornerRadius = UDim.new(0, 4)
+        
+        local toggled = false
+        btn.MouseButton1Click:Connect(function()
+            toggled = not toggled
+            if toggled then
+                btn.BackgroundColor3 = Color3.fromRGB(0, 150, 150)
+                btn.Text = "ON | " .. name
+                btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+            else
+                btn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+                btn.Text = "OFF | " .. name
+                btn.TextColor3 = Color3.fromRGB(200, 200, 200)
+            end
+            callback(toggled)
+        end)
+    end
+
+    -- Create the two small buttons
+    createToggle("Decoy Dodge", 30, function(state) phantomDodgeEnabled = state end)
+    createToggle("Magnet Aura", 65, function(state) autoAuraEnabled = state end)
+end
+
+createUI()
