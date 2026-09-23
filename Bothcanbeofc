@@ -1,18 +1,19 @@
 -- ==============================================
--- ⚡ HITBLOX: THE ULTIMATE MASTER BUILD (ALL FEATURES + GOD MODES)
+-- ⚡ HITBLOX V3: FLAWLESS MASTER BUILD
 -- ==============================================
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local Lighting = game:GetService("Lighting")
 local CoreGui = game:GetService("CoreGui")
+local UserInputService = game:GetService("UserInputService")
 
 local localPlayer = Players.LocalPlayer
 while not localPlayer do task.wait() localPlayer = Players.LocalPlayer end
 local camera = workspace.CurrentCamera
 
 -- ==============================================
--- Variables & Toggles State
+-- Variables & State
 -- ==============================================
 local hitboxSize = 15
 local hitboxTransparency = 0.8
@@ -24,21 +25,15 @@ local flyEnabled = false
 local flySpeed = 50
 local domainEnabled = false
 local preCogEnabled = false
+local autoRetaliateEnabled = false
 
--- God Mode Additions
-local phantomLobbyEnabled = false
-local phantomAttackEnabled = false
-local autoFlingEnabled = false
-local phantomPlatform = nil
-
--- Storage
+-- Storage & Cleanup
 local espGuis = {} 
 local trajectoryBeams = {}
-local flyConnection = nil
-local noclipConnection = nil
-local aimLockConnection = nil
-local hitboxCoroutine = nil
+local connections = {}
+local positionHistory = {} -- For Phantom Rewind
 local blinkButtonUI = nil
+local rewindButtonUI = nil
 
 local originalLighting = {
     Ambient = Lighting.Ambient,
@@ -54,11 +49,7 @@ local originalLighting = {
 -- ==============================================
 local function isEnemy(player)
     if player == localPlayer then return false end
-    local teams = game:GetService("Teams"):GetTeams()
-    if #teams > 1 then
-        if localPlayer.Team == nil or player.Team == nil then return true end
-        return localPlayer.Team ~= player.Team
-    end
+    if localPlayer.Team and player.Team and localPlayer.Team == player.Team then return false end
     return true
 end
 
@@ -67,153 +58,50 @@ local function playSound(soundId)
     sound.SoundId = soundId
     sound.Parent = workspace
     pcall(function() sound:Play() end)
-    sound.Ended:Connect(function() sound:Destroy() end)
+    Debris:AddItem(sound, 2)
 end
 
--- ==============================================
--- NEW: The Phantom Lobby & Auto-Fling Systems
--- ==============================================
-local function togglePhantomLobby(state)
-    phantomLobbyEnabled = state
-    local char = localPlayer.Character
-    if not char or not char:FindFirstChild("HumanoidRootPart") then return end
-
-    if state then
-        -- Create Safe Lobby 90,000 studs in the sky
-        if not phantomPlatform then
-            phantomPlatform = Instance.new("Part")
-            phantomPlatform.Size = Vector3.new(100, 5, 100)
-            phantomPlatform.Position = Vector3.new(0, 90000, 0)
-            phantomPlatform.Anchored = true
-            phantomPlatform.Material = Enum.Material.ForceField
-            phantomPlatform.BrickColor = BrickColor.new("Really black")
-            phantomPlatform.Transparency = 0.5
-            phantomPlatform.Parent = workspace
-        end
-        char.HumanoidRootPart.CFrame = CFrame.new(0, 90005, 0)
-    else
-        -- Destroy Lobby and return to map
-        if phantomPlatform then phantomPlatform:Destroy() phantomPlatform = nil end
-        char.HumanoidRootPart.CFrame = CFrame.new(0, 100, 0)
-        phantomAttackEnabled = false -- auto turn off attack when leaving lobby
+local function cleanupPlayer(player)
+    if espGuis[player] then espGuis[player]:Destroy(); espGuis[player] = nil end
+    if trajectoryBeams[player] then
+        trajectoryBeams[player].att0:Destroy()
+        trajectoryBeams[player].att1:Destroy()
+        trajectoryBeams[player].beam:Destroy()
+        trajectoryBeams[player] = nil
     end
 end
 
--- Master Render Loop for Fling and Phantom Attack
-RunService.Stepped:Connect(function()
-    local char = localPlayer.Character
-    if not char or not char:FindFirstChild("HumanoidRootPart") then return end
-    local hrp = char.HumanoidRootPart
+Players.PlayerRemoving:Connect(cleanupPlayer)
 
-    -- 1. TORNADO AUTO-FLING
-    if autoFlingEnabled then
-        local humanoid = char:FindFirstChildOfClass("Humanoid")
-        if humanoid then humanoid:ChangeState(11) end -- Disables local physics state for fling
-        
-        hrp.Velocity = Vector3.new(0, 0, 0)
-        hrp.RotVelocity = Vector3.new(0, 50000, 0) -- Godspeed Spin
-
-        for _, enemy in ipairs(Players:GetPlayers()) do
-            if isEnemy(enemy) and enemy.Character and enemy.Character:FindFirstChild("HumanoidRootPart") then
-                local enemyHum = enemy.Character:FindFirstChild("Humanoid")
-                if enemyHum and enemyHum.Health > 0 then
-                    -- Rapidly teleport inside enemy to trigger physics fling
-                    hrp.CFrame = enemy.Character.HumanoidRootPart.CFrame * CFrame.new(math.random(-1,1), math.random(-1,1), math.random(-1,1))
-                    break -- Only target one at a time per frame to prevent crashing
+-- ==============================================
+-- 1. Core Systems (Fixed Hitbox, Smooth AimLock)
+-- ==============================================
+-- FIXED: Only scales HumanoidRootPart to prevent R15 death glitches
+local function updateHitboxes()
+    for _, player in ipairs(Players:GetPlayers()) do
+        if isEnemy(player) and player.Character then
+            local hrp = player.Character:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                if not hrp:FindFirstChild("OriginalSize") then
+                    local og = Instance.new("Vector3Value", hrp)
+                    og.Name = "OriginalSize"
+                    og.Value = hrp.Size
                 end
-            end
-        end
-    end
-
-    -- 2. PHANTOM ATTACK (Magnet hitboxes into the lobby)
-    if phantomAttackEnabled and phantomLobbyEnabled and not autoFlingEnabled then
-        -- Auto Equip & Swing
-        local tool = char:FindFirstChildOfClass("Tool")
-        if not tool then
-            local bpTool = localPlayer.Backpack:FindFirstChildOfClass("Tool")
-            if bpTool then char.Humanoid:EquipTool(bpTool) tool = bpTool end
-        end
-        if tool then pcall(function() tool:Activate() end) end
-
-        -- Magnet Hitboxes
-        for _, enemy in ipairs(Players:GetPlayers()) do
-            if isEnemy(enemy) and enemy.Character and enemy.Character:FindFirstChild("HumanoidRootPart") then
-                local root = enemy.Character.HumanoidRootPart
-                root.Size = Vector3.new(20, 20, 20)
-                root.Transparency = 0.8
-                root.BrickColor = BrickColor.new("Really red")
-                root.Material = Enum.Material.Neon
-                root.CanCollide = false
                 
-                -- Teleports enemy hitboxes directly in front of you in the sky lobby
-                root.CFrame = hrp.CFrame * CFrame.new(0, 0, -3.5)
-            end
-        end
-    end
-end)
-
--- ==============================================
--- Legacy Systems (Hitbox, ESP, Aimbot, Fly, Noclip)
--- ==============================================
-local function applyHitbox(character)
-    if not character then return end
-    local humanoid = character:FindFirstChildOfClass("Humanoid")
-    if not humanoid or humanoid.Health <= 0 then return end
-    
-    local partsToAdjust = humanoid.RigType == Enum.HumanoidRigType.R15 
-        and {"UpperTorso", "LowerTorso", "LeftUpperArm", "RightUpperArm", "LeftUpperLeg", "RightUpperLeg", "Head", "HumanoidRootPart"} 
-        or {"HumanoidRootPart", "Head"}
-    
-    for _, partName in ipairs(partsToAdjust) do
-        local part = character:FindFirstChild(partName)
-        if part then
-            if not part:FindFirstChild("OriginalSize") then
-                local originalSize = Instance.new("Vector3Value")
-                originalSize.Name = "OriginalSize"
-                originalSize.Value = part.Size
-                originalSize.Parent = part
-            end
-            part.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
-            part.Transparency = hitboxTransparency
-            part.BrickColor = BrickColor.new("Dark red")
-            part.Material = Enum.Material.ForceField
-            part.CanCollide = false
-            if part.Name == "Head" then part.Massless = true end
-        end
-    end
-end
-
-local function resetHitbox(character)
-    if not character then return end
-    for _, part in ipairs(character:GetChildren()) do
-        if part:IsA("BasePart") and part:FindFirstChild("OriginalSize") then
-            part.Size = part.OriginalSize.Value
-            part.Transparency = 1
-            part.BrickColor = BrickColor.new("Medium stone grey")
-            part.Material = Enum.Material.Plastic
-            part.CanCollide = true
-            if part.Name == "Head" then part.Massless = false end
-        end
-    end
-end
-
-local function toggleHitboxes(enabled)
-    hitboxEnabled = enabled
-    if enabled then
-        if not hitboxCoroutine then
-            hitboxCoroutine = coroutine.create(function()
-                while hitboxEnabled and task.wait(0.5) do
-                    for _, player in ipairs(Players:GetPlayers()) do
-                        if isEnemy(player) and player.Character then applyHitbox(player.Character) end
+                if hitboxEnabled then
+                    hrp.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
+                    hrp.Transparency = hitboxTransparency
+                    hrp.BrickColor = BrickColor.new("Dark red")
+                    hrp.Material = Enum.Material.ForceField
+                    hrp.CanCollide = false
+                else
+                    if hrp:FindFirstChild("OriginalSize") then
+                        hrp.Size = hrp.OriginalSize.Value
+                        hrp.Transparency = 1
+                        hrp.CanCollide = true
                     end
                 end
-            end)
-            coroutine.resume(hitboxCoroutine)
-        end
-    else
-        if hitboxCoroutine then coroutine.close(hitboxCoroutine); hitboxCoroutine = nil end
-        for _, player in ipairs(Players:GetPlayers()) do
-            if player.Character then resetHitbox(player.Character) end
+            end
         end
     end
 end
@@ -221,6 +109,7 @@ end
 local function updateESP()
     for _, player in ipairs(Players:GetPlayers()) do
         if isEnemy(player) and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            local hrp = player.Character.HumanoidRootPart
             if not espGuis[player] then
                 local hl = Instance.new("Highlight")
                 hl.Name = "ESP_Highlight"
@@ -233,26 +122,23 @@ local function updateESP()
             else
                 espGuis[player].Parent = player.Character
             end
-        elseif espGuis[player] then
-            espGuis[player]:Destroy()
-            espGuis[player] = nil
+        else
+            cleanupPlayer(player)
         end
     end
 end
 
 local function getClosestEnemyToCenter()
-    local closestPlayer = nil
-    local shortestDistance = math.huge
+    local closestPlayer, shortestDistance = nil, math.huge
     local screenCenter = Vector2.new(camera.ViewportSize.X / 2, camera.ViewportSize.Y / 2)
     
     for _, player in ipairs(Players:GetPlayers()) do
         if isEnemy(player) and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-            local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
-            if humanoid and humanoid.Health > 0 then
-                local pos = player.Character.HumanoidRootPart.Position
-                local vector, onScreen = camera:WorldToViewportPoint(pos)
+            local hum = player.Character:FindFirstChildOfClass("Humanoid")
+            if hum and hum.Health > 0 then
+                local pos, onScreen = camera:WorldToViewportPoint(player.Character.HumanoidRootPart.Position)
                 if onScreen then
-                    local distance = (screenCenter - Vector2.new(vector.X, vector.Y)).Magnitude
+                    local distance = (screenCenter - Vector2.new(pos.X, pos.Y)).Magnitude
                     if distance < shortestDistance then
                         closestPlayer = player
                         shortestDistance = distance
@@ -264,241 +150,206 @@ local function getClosestEnemyToCenter()
     return closestPlayer
 end
 
-local function toggleFly(enabled)
-    flyEnabled = enabled
-    local character = localPlayer.Character
-    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-    local rootPart = character and character:FindFirstChild("HumanoidRootPart")
-    
-    if flyConnection then flyConnection:Disconnect(); flyConnection = nil end
-    if rootPart then
-        if rootPart:FindFirstChild("FlyGyro") then rootPart.FlyGyro:Destroy() end
-        if rootPart:FindFirstChild("FlyVelocity") then rootPart.FlyVelocity:Destroy() end
+-- ==============================================
+-- 2. God-Tier & Unique Rare Features
+-- ==============================================
+
+-- ⚡ RARE FEATURE 1: PHANTOM REWIND (Time Travel)
+-- Records position continuously. When triggered, rewinds you 4 seconds to escape death.
+RunService.Heartbeat:Connect(function()
+    local char = localPlayer.Character
+    if char and char:FindFirstChild("HumanoidRootPart") then
+        table.insert(positionHistory, char.HumanoidRootPart.CFrame)
+        if #positionHistory > 40 then -- Keeps roughly 4 seconds of history
+            table.remove(positionHistory, 1)
+        end
     end
-    if humanoid then humanoid.PlatformStand = false end
-    
-    if enabled and rootPart and humanoid then
-        local bodyGyro = Instance.new("BodyGyro", rootPart)
-        bodyGyro.Name = "FlyGyro"
-        bodyGyro.P = 9e4
-        bodyGyro.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
-        bodyGyro.CFrame = rootPart.CFrame
+end)
+
+local function triggerPhantomRewind()
+    local char = localPlayer.Character
+    if char and char:FindFirstChild("HumanoidRootPart") and #positionHistory > 0 then
+        -- Apply a glitch effect
+        local hl = Instance.new("Highlight", char)
+        hl.FillColor = Color3.new(0, 1, 1)
         
-        local bodyVelocity = Instance.new("BodyVelocity", rootPart)
-        bodyVelocity.Name = "FlyVelocity"
-        bodyVelocity.MaxForce = Vector3.new(9e9, 9e9, 9e9)
-        bodyVelocity.Velocity = Vector3.zero
+        -- Teleport to oldest recorded position
+        char.HumanoidRootPart.CFrame = positionHistory[1]
+        positionHistory = {} -- Reset history after jump
         
-        humanoid.PlatformStand = true
-        
-        flyConnection = RunService.RenderStepped:Connect(function()
-            if not character.Parent or humanoid.Health <= 0 then toggleFly(false) return end
-            local moveDir = humanoid.MoveDirection
-            bodyGyro.CFrame = camera.CFrame
-            
-            if moveDir.Magnitude > 0 then
-                local flatCam = CFrame.new(Vector3.zero, Vector3.new(camera.CFrame.LookVector.X, 0, camera.CFrame.LookVector.Z))
-                local localMove = flatCam:VectorToObjectSpace(moveDir)
-                bodyVelocity.Velocity = camera.CFrame:VectorToWorldSpace(localMove) * flySpeed
-            else
-                bodyVelocity.Velocity = Vector3.zero
-            end
-        end)
+        task.delay(0.5, function() hl:Destroy() end)
     end
 end
 
-local function updatePreCog()
+-- ⚡ RARE FEATURE 2: AUTO-RETALIATE SPHERE
+-- Instantly teleports you behind any enemy that enters your 20-stud radius, attacks, and returns you.
+RunService.Stepped:Connect(function()
+    if not autoRetaliateEnabled then return end
+    local char = localPlayer.Character
+    if not char or not char:FindFirstChild("HumanoidRootPart") then return end
+    local myRoot = char.HumanoidRootPart
+
     for _, player in ipairs(Players:GetPlayers()) do
         if isEnemy(player) and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-            local root = player.Character.HumanoidRootPart
+            local enemyRoot = player.Character.HumanoidRootPart
+            local dist = (myRoot.Position - enemyRoot.Position).Magnitude
             
-            if not trajectoryBeams[player] then
-                local att0 = Instance.new("Attachment", root)
-                local att1 = Instance.new("Attachment", root)
-                
-                local beam = Instance.new("Beam", root)
-                beam.Attachment0 = att0
-                beam.Attachment1 = att1
-                beam.Color = ColorSequence.new(Color3.new(1, 0, 0), Color3.new(1, 1, 0))
-                beam.FaceCamera = true
-                beam.Width0 = 0.2
-                beam.Width1 = 0.05
-                beam.LightEmission = 1
-                beam.Transparency = NumberSequence.new(0, 1)
-                
-                trajectoryBeams[player] = {att0 = att0, att1 = att1, beam = beam}
-            else
-                local velocity = root.AssemblyLinearVelocity
-                if velocity.Magnitude > 1 then
-                    trajectoryBeams[player].att1.Position = Vector3.new(velocity.X * 0.75, velocity.Y * 0.75, velocity.Z * 0.75)
-                    trajectoryBeams[player].beam.Enabled = true
-                else
-                    trajectoryBeams[player].beam.Enabled = false
+            if dist < 20 and dist > 5 then
+                local tool = char:FindFirstChildOfClass("Tool")
+                if tool then
+                    local originalCFrame = myRoot.CFrame
+                    -- Teleport behind enemy
+                    myRoot.CFrame = enemyRoot.CFrame * CFrame.new(0, 0, 4)
+                    tool:Activate()
+                    task.wait(0.1)
+                    -- Teleport back seamlessly
+                    myRoot.CFrame = originalCFrame
                 end
             end
-        elseif trajectoryBeams[player] then
-            trajectoryBeams[player].att0:Destroy()
-            trajectoryBeams[player].att1:Destroy()
-            trajectoryBeams[player].beam:Destroy()
-            trajectoryBeams[player] = nil
         end
     end
+end)
+
+-- SHADOW STRIKE BLINK
+local function executeShadowStrike()
+    local char = localPlayer.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    if not root then return end
+    
+    local targetRoot = getClosestEnemyToCenter()
+    if not targetRoot or not targetRoot.Character then return end
+    
+    local safePosition = root.CFrame
+    root.CFrame = targetRoot.Character.HumanoidRootPart.CFrame * CFrame.new(0, 0, 3)
+    
+    local tool = char:FindFirstChildOfClass("Tool")
+    if tool then tool:Activate() end
+    
+    task.wait(0.2)
+    root.CFrame = safePosition
 end
 
-local function toggleDomain(state)
-    domainEnabled = state
-    if state then
-        Lighting.Ambient = Color3.new(0, 0, 0)
-        Lighting.OutdoorAmbient = Color3.new(0, 0, 0)
-        Lighting.Brightness = 0
-        Lighting.ClockTime = 0
-        Lighting.FogEnd = 500
-        Lighting.FogColor = Color3.new(0, 0, 0)
-        
-        for _, player in ipairs(Players:GetPlayers()) do
-            if isEnemy(player) and player.Character then
-                local hl = Instance.new("Highlight")
-                hl.Name = "VoidGlow"
-                hl.FillColor = Color3.new(1, 1, 1)
-                hl.OutlineColor = Color3.new(1, 0, 0)
-                hl.FillTransparency = 0.2
-                hl.OutlineTransparency = 0
-                hl.Parent = player.Character
-            end
-        end
-    else
-        Lighting.Ambient = originalLighting.Ambient
-        Lighting.OutdoorAmbient = originalLighting.OutdoorAmbient
-        Lighting.Brightness = originalLighting.Brightness
-        Lighting.ClockTime = originalLighting.ClockTime
-        Lighting.FogEnd = originalLighting.FogEnd
-        Lighting.FogColor = originalLighting.FogColor
-        
-        for _, player in ipairs(Players:GetPlayers()) do
-            if player.Character and player.Character:FindFirstChild("VoidGlow") then
-                player.Character.VoidGlow:Destroy()
-            end
-        end
-    end
+local function createActionButtons()
+    if blinkButtonUI then blinkButtonUI:Destroy() end
+    
+    blinkButtonUI = Instance.new("ScreenGui")
+    blinkButtonUI.Name = "MasterActionUI"
+    blinkButtonUI.ResetOnSpawn = false
+    pcall(function() blinkButtonUI.Parent = CoreGui end)
+    if blinkButtonUI.Parent == nil then blinkButtonUI.Parent = localPlayer:WaitForChild("PlayerGui") end
+    
+    -- Blink Button
+    local btn1 = Instance.new("TextButton", blinkButtonUI)
+    btn1.Size = UDim2.new(0, 100, 0, 100)
+    btn1.Position = UDim2.new(0.85, -110, 0.45, 0)
+    btn1.BackgroundColor3 = Color3.new(0, 0, 0)
+    btn1.BackgroundTransparency = 0.3
+    btn1.Text = "⚡\nBLINK"
+    btn1.TextColor3 = Color3.new(1, 0, 0)
+    btn1.TextScaled = true
+    btn1.Font = Enum.Font.GothamBold
+    local c1 = Instance.new("UICorner", btn1) c1.CornerRadius = UDim.new(1, 0)
+    local s1 = Instance.new("UIStroke", btn1) s1.Color = Color3.new(1, 0, 0) s1.Thickness = 3
+    btn1.MouseButton1Click:Connect(executeShadowStrike)
+
+    -- Rewind Button
+    local btn2 = Instance.new("TextButton", blinkButtonUI)
+    btn2.Size = UDim2.new(0, 100, 0, 100)
+    btn2.Position = UDim2.new(0.85, 0, 0.45, 0)
+    btn2.BackgroundColor3 = Color3.new(0, 0, 0)
+    btn2.BackgroundTransparency = 0.3
+    btn2.Text = "⏳\nREWIND"
+    btn2.TextColor3 = Color3.new(0, 1, 1)
+    btn2.TextScaled = true
+    btn2.Font = Enum.Font.GothamBold
+    local c2 = Instance.new("UICorner", btn2) c2.CornerRadius = UDim.new(1, 0)
+    local s2 = Instance.new("UIStroke", btn2) s2.Color = Color3.new(0, 1, 1) s2.Thickness = 3
+    btn2.MouseButton1Click:Connect(triggerPhantomRewind)
 end
 
 -- ==============================================
 -- 3. UI Menu Initialization
 -- ==============================================
 task.wait()
-playSound("rbxassetid://12221831")
+local uiLibrary = loadstring(game:HttpGet("https://raw.githubusercontent.com/AZYsGithub/Arceus-X-UI-Library/main/source.lua"))()
+if not uiLibrary then return end
 
-local uiLibrary
-local success = pcall(function()
-    uiLibrary = loadstring(game:HttpGet("https://raw.githubusercontent.com/AZYsGithub/Arceus-X-UI-Library/main/source.lua"))()
-end)
-
-if not success or not uiLibrary then return end
-
-uiLibrary:SetTitle("Hitblox ⚡ (Master Build)")
-uiLibrary:SetIcon("http://www.roblox.com/asset/?id=91738788645337")
+uiLibrary:SetTitle("Hitblox ⚡ (V3 Flawless)")
 uiLibrary:SetTheme("HighContrast")
-task.wait(0.1)
-playSound("rbxassetid://195868961")
 
--- 👑 NEW: GOD TIER EXPLOITS
-uiLibrary:AddToggle("🛡️ Enter Phantom Lobby (Safe Zone)", function(state)
-    playSound("rbxassetid://12221976")
-    togglePhantomLobby(state)
+-- God-Tier Toggles
+uiLibrary:AddToggle("⏳ Show Action Buttons (Blink/Rewind)", function(state)
+    if state then createActionButtons() else if blinkButtonUI then blinkButtonUI:Destroy() blinkButtonUI = nil end end
 end, false)
 
-uiLibrary:AddToggle("⚔️ Phantom Auto-Hit (Requires Lobby)", function(state)
-    playSound("rbxassetid://12221976")
-    phantomAttackEnabled = state
+uiLibrary:AddToggle("🌀 Auto-Retaliate Sphere (Bull Counter)", function(state)
+    autoRetaliateEnabled = state
 end, false)
 
-uiLibrary:AddToggle("🌪️ AUTO-FLING TORNADO", function(state)
-    playSound("rbxassetid://12221976")
-    autoFlingEnabled = state
-end, false)
-
--- Legacy God-Tier Toggles
-uiLibrary:AddToggle("Pre-Cog Trajectory ESP ⚡", function(state)
-    playSound("rbxassetid://12221976")
-    preCogEnabled = state
+uiLibrary:AddToggle("Domain Expansion: The Void", function(state)
+    domainEnabled = state
     if state then
-        getgenv().PreCogConnection = RunService.RenderStepped:Connect(updatePreCog)
+        Lighting.Ambient, Lighting.OutdoorAmbient, Lighting.Brightness, Lighting.ClockTime = Color3.new(0,0,0), Color3.new(0,0,0), 0, 0
     else
-        if getgenv().PreCogConnection then getgenv().PreCogConnection:Disconnect() end
-        for _, p in pairs(trajectoryBeams) do p.att0:Destroy() p.att1:Destroy() p.beam:Destroy() end
-        trajectoryBeams = {}
+        Lighting.Ambient, Lighting.OutdoorAmbient, Lighting.Brightness, Lighting.ClockTime = originalLighting.Ambient, originalLighting.OutdoorAmbient, originalLighting.Brightness, originalLighting.ClockTime
     end
 end, false)
 
-uiLibrary:AddToggle("Domain Expansion: The Void ⚡", function(state)
-    playSound("rbxassetid://12221976")
-    toggleDomain(state)
-end, false)
-
--- Standard Toggles
-uiLibrary:AddToggle("AimLock (Nearest to Center)", function(enabled)
-    playSound("rbxassetid://12221976")
+-- Standard Combat Toggles
+uiLibrary:AddToggle("AimLock (Smooth Camera)", function(enabled)
     aimLockEnabled = enabled
     if enabled then
-        aimLockConnection = RunService.RenderStepped:Connect(function()
-            if aimLockEnabled then
-                local target = getClosestEnemyToCenter()
-                if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
-                    camera.CFrame = CFrame.new(camera.CFrame.Position, target.Character.HumanoidRootPart.Position)
-                end
+        connections.Aim = RunService.RenderStepped:Connect(function()
+            local target = getClosestEnemyToCenter()
+            if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
+                -- Lerped camera for smoothness so it doesn't fight Roblox controls
+                camera.CFrame = camera.CFrame:Lerp(CFrame.lookAt(camera.CFrame.Position, target.Character.HumanoidRootPart.Position), 0.5)
             end
         end)
     else
-        if aimLockConnection then aimLockConnection:Disconnect(); aimLockConnection = nil end
+        if connections.Aim then connections.Aim:Disconnect() end
     end
 end, false)
 
 uiLibrary:AddToggle("ESP (Highlights)", function(enabled)
-    playSound("rbxassetid://12221976")
     espEnabled = enabled
     if enabled then
-        getgenv().ESPConnection = RunService.RenderStepped:Connect(updateESP)
+        connections.ESP = RunService.RenderStepped:Connect(updateESP)
     else
-        if getgenv().ESPConnection then getgenv().ESPConnection:Disconnect() end
-        for _, gui in pairs(espGuis) do gui:Destroy() end
-        espGuis = {}
+        if connections.ESP then connections.ESP:Disconnect() end
+        for _, gui in pairs(espGuis) do gui:Destroy() end espGuis = {}
     end
 end, false)
 
-uiLibrary:AddToggle("Expand Hitboxes", function(enabled)
-    playSound("rbxassetid://12221976")
-    toggleHitboxes(enabled)
+uiLibrary:AddToggle("Expand Hitboxes (Safe HRP Mode)", function(enabled)
+    hitboxEnabled = enabled
+    if enabled then
+        connections.Hitbox = RunService.Heartbeat:Connect(updateHitboxes)
+    else
+        if connections.Hitbox then connections.Hitbox:Disconnect() end
+        updateHitboxes() -- Runs once to reset to false
+    end
 end, false)
 
 uiLibrary:AddToggle("Noclip (Walk through walls)", function(enabled)
-    playSound("rbxassetid://12221976")
     noclipEnabled = enabled
     if enabled then
-        noclipConnection = RunService.Stepped:Connect(function()
+        connections.Noclip = RunService.Stepped:Connect(function()
             if localPlayer.Character then
                 for _, part in ipairs(localPlayer.Character:GetDescendants()) do
-                    if part:IsA("BasePart") and part.CanCollide then part.CanCollide = false end
+                    if part:IsA("BasePart") then part.CanCollide = false end
                 end
             end
         end)
     else
-        if noclipConnection then noclipConnection:Disconnect(); noclipConnection = nil end
+        if connections.Noclip then connections.Noclip:Disconnect() end
     end
 end, false)
 
-uiLibrary:AddToggle("Mobile Fly", function(enabled)
-    playSound("rbxassetid://12221976")
-    toggleFly(enabled)
-end, false)
-
--- Buttons & Utilities
+-- Configuration Buttons
 uiLibrary:AddButton("Hitbox Size +", function() hitboxSize = math.clamp(hitboxSize + 5, 5, 100) end)
 uiLibrary:AddButton("Hitbox Size -", function() hitboxSize = math.clamp(hitboxSize - 5, 5, 100) end)
 uiLibrary:AddButton("Speed Boost (WalkSpeed 50)", function()
     local hum = localPlayer.Character and localPlayer.Character:FindFirstChildOfClass("Humanoid")
     if hum then hum.WalkSpeed = 50 end
-end)
-uiLibrary:AddButton("Jump Boost (JumpPower 100)", function()
-    local hum = localPlayer.Character and localPlayer.Character:FindFirstChildOfClass("Humanoid")
-    if hum then hum.UseJumpPower = true hum.JumpPower = 100 end
 end)
