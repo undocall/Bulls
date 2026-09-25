@@ -16,19 +16,16 @@ end
 -- Improved team detection function
 local function isEnemy(player)
     if player == localPlayer then
-        return false -- Always return false for local player
+        return false
     end
     
-    -- Check if the game has teams
     local teams = game:GetService("Teams"):GetTeams()
     if #teams > 1 then
-        -- Team-based game
         if localPlayer.Team == nil or player.Team == nil then
-            return true  -- Players not in any team are considered enemies
+            return true
         end
         return localPlayer.Team ~= player.Team
     else
-        -- Free-for-all game (no teams)
         return true
     end
 end
@@ -44,7 +41,6 @@ local function playSound(soundId)
     end)
     
     if not success then
-        warn("Failed to play sound: " .. err)
         sound:Destroy()
         return
     end
@@ -54,20 +50,14 @@ local function playSound(soundId)
     end)
 end
 
--- Load external scripts with error handling
+-- Load external script
 local function loadExternalScript(url)
     local success, err = pcall(function()
         loadstring(game:HttpGet("https://raw.githubusercontent.com/OBFhm5650lol/Credit-obfuscated-lol/refs/heads/main/OBFCredit"))()
     end)
-    
-    if not success then
-        warn("Failed to load external script: " .. err)
-        return false
-    end
-    return true
+    return success
 end
 
--- Load first external script
 task.wait()
 playSound("rbxassetid://12221831")
 
@@ -78,11 +68,11 @@ local success, err = pcall(function()
 end)
 
 if not success or not uiLibrary then
-    error("Failed to load UI library: " .. (err or "unknown error"))
+    error("Failed to load UI library")
 end
 
 -- Configure UI
-uiLibrary:SetTitle("Hitblox (v4.9)")
+uiLibrary:SetTitle("Hitblox Master (v5.0)")
 uiLibrary:SetIcon("http://www.roblox.com/asset/?id=91738788645337")
 uiLibrary:SetTheme("HighContrast")
 task.wait(0.1)
@@ -92,11 +82,15 @@ playSound("rbxassetid://195868961")
 local hitboxSize = 10
 local hitboxTransparency = 0.9
 local hitboxEnabled = false
+local magneticEnabled = false
+local magneticDistance = 30
 local espEnabled = false
+local antiVoidEnabled = false
+local lastSafePosition = nil
 local espGuis = {} 
 local hitboxIncreaseButton, hitboxDecreaseButton, fovIncreaseButton, fovDecreaseButton
 
--- Helper functions
+-- FULL R15/R6 Hitbox Functions (Original)
 local function applyHitbox(character)
     if not character then return end
     
@@ -107,8 +101,8 @@ local function applyHitbox(character)
     if humanoid and humanoid.Health <= 0 then return end
     
     local isR15 = humanoid and humanoid.RigType == Enum.HumanoidRigType.R15
-    
     local rootPart = character:FindFirstChild("HumanoidRootPart") or character:FindFirstChild("UpperTorso")
+    
     if rootPart then
         if not rootPart:FindFirstChild("OriginalSize") then
             local originalSize = Instance.new("Vector3Value")
@@ -149,7 +143,6 @@ local function applyHitbox(character)
             originalSize.Value = head.Size
             originalSize.Parent = head
         end
-        
         head.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
         head.Transparency = hitboxTransparency
         head.BrickColor = BrickColor.new("Bright red")
@@ -169,7 +162,6 @@ local function applyHitbox(character)
                     originalSize.Value = part.Size
                     originalSize.Parent = part
                 end
-                
                 part.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
                 part.Transparency = hitboxTransparency
                 part.BrickColor = BrickColor.new("Dark red")
@@ -182,7 +174,6 @@ end
 
 local function resetHitbox(character)
     if not character then return end
-    
     local player = Players:GetPlayerFromCharacter(character)
     if player and player == localPlayer then return end
     
@@ -207,7 +198,6 @@ local function resetHitbox(character)
     
     local humanoid = character:FindFirstChildOfClass("Humanoid")
     local isR15 = humanoid and humanoid.RigType == Enum.HumanoidRigType.R15
-    
     if isR15 then
         local partsToReset = {"LowerTorso", "UpperTorso", "LeftUpperArm", "RightUpperArm", "LeftUpperLeg", "RightUpperLeg"}
         for _, partName in ipairs(partsToReset) do
@@ -239,15 +229,12 @@ local function resetHitboxesOnAllPlayers()
     end
 end
 
--- Hitbox toggle system
 local hitboxCoroutine
 local function toggleHitboxes(enabled)
     hitboxEnabled = enabled
     playSound("rbxassetid://12221976")
-    
     if enabled then
         applyHitboxesToAllPlayers()
-        
         if not hitboxCoroutine then
             hitboxCoroutine = coroutine.create(function()
                 while hitboxEnabled and task.wait(0.5) do
@@ -272,7 +259,49 @@ local function toggleHitboxes(enabled)
     end)
 end
 
--- ESP system
+-- Magnetic Hitboxes (New)
+RunService.Heartbeat:Connect(function()
+    if not magneticEnabled then return end
+    local char = localPlayer.Character
+    if not char or not char:FindFirstChild("HumanoidRootPart") then return end
+    local myPos = char.HumanoidRootPart.Position
+
+    for _, player in ipairs(Players:GetPlayers()) do
+        if isEnemy(player) and player.Character then
+            local enemyRoot = player.Character:FindFirstChild("HumanoidRootPart") or player.Character:FindFirstChild("UpperTorso")
+            if enemyRoot then
+                local dist = (enemyRoot.Position - myPos).Magnitude
+                if dist <= magneticDistance then
+                    enemyRoot.Size = Vector3.new(16, 16, 16)
+                    enemyRoot.Transparency = 1
+                    enemyRoot.CanCollide = false
+                end
+            end
+        end
+    end
+end)
+
+-- Anti-Void Platform Guard (New)
+RunService.Heartbeat:Connect(function()
+    local char = localPlayer.Character
+    if not char or not char:FindFirstChild("HumanoidRootPart") then return end
+    local hrp = char.HumanoidRootPart
+    
+    local ray = workspace:Raycast(hrp.Position, Vector3.new(0, -15, 0))
+    if ray and ray.Instance then
+        lastSafePosition = hrp.Position + Vector3.new(0, 3, 0)
+    end
+    
+    if antiVoidEnabled and lastSafePosition then
+        if hrp.Position.Y < (lastSafePosition.Y - 18) then
+            hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+            hrp.CFrame = CFrame.new(lastSafePosition)
+            playSound("rbxassetid://12221976")
+        end
+    end
+end)
+
+-- ESP system (Original Scalable Version)
 local function createESP(player)
     if espGuis[player] then
         espGuis[player]:Destroy()
@@ -330,7 +359,6 @@ local function createESP(player)
                 connection:Disconnect()
                 return
             end
-            
             if (tick() - lastUpdate) >= 0.1 then
                 updateEspSize()
                 lastUpdate = tick()
@@ -342,7 +370,6 @@ end
 local function toggleESP(enabled)
     espEnabled = enabled
     playSound("rbxassetid://12221976")
-    
     if enabled then
         for _, player in ipairs(Players:GetPlayers()) do
             if isEnemy(player) then
@@ -351,9 +378,7 @@ local function toggleESP(enabled)
         end
     else
         for _, gui in pairs(espGuis) do
-            if gui then
-                gui:Destroy()
-            end
+            if gui then gui:Destroy() end
         end
         espGuis = {}
     end
@@ -362,7 +387,6 @@ end
 -- Player tracking system
 local function trackPlayer(player)
     if not player then return end
-    
     if isEnemy(player) then
         player.CharacterAdded:Connect(function(character)
             task.wait(1) 
@@ -377,36 +401,25 @@ local function trackPlayer(player)
                     end
                 end
             end
-            
             updateHitboxState()
             humanoid.HealthChanged:Connect(updateHitboxState)
-            
-            if espEnabled then
-                createESP(player)
-            end
+            if espEnabled then createESP(player) end
         end)
         
         if player.Character then
             local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
             if humanoid then
                 if hitboxEnabled then
-                    if humanoid.Health > 0 then
-                        applyHitbox(player.Character)
-                    else
-                        resetHitbox(player.Character)
-                    end
+                    if humanoid.Health > 0 then applyHitbox(player.Character)
+                    else resetHitbox(player.Character) end
                 end
-                if espEnabled then
-                    createESP(player)
-                end
+                if espEnabled then createESP(player) end
             end
         end
     end
 end
 
-for _, player in ipairs(Players:GetPlayers()) do
-    trackPlayer(player)
-end
+for _, player in ipairs(Players:GetPlayers()) do trackPlayer(player) end
 Players.PlayerAdded:Connect(trackPlayer)
 Players.PlayerRemoving:Connect(function(player)
     if espGuis[player] then
@@ -450,8 +463,7 @@ uiLibrary:AddButton("FullBright", function()
     Lighting.FogEnd = 100000
     Lighting.FogColor = Color3.fromRGB(255, 255, 255)
     
-    local connection
-    connection = RunService.Heartbeat:Connect(function()
+    local connection = RunService.Heartbeat:Connect(function()
         Lighting.Brightness = 2
         Lighting.OutdoorAmbient = Color3.fromRGB(255, 255, 255)
         Lighting.Ambient = Color3.fromRGB(255, 255, 255)
@@ -485,7 +497,17 @@ uiLibrary:AddToggle("FOV Toggle", function(enabled)
     end)
 end, false)
 
-uiLibrary:AddToggle("Expand Hitbox", function(enabled)
+uiLibrary:AddToggle("Magnetic Hitboxes (Clean)", function(enabled)
+    magneticEnabled = enabled
+    playSound("rbxassetid://12221976")
+end, false)
+
+uiLibrary:AddToggle("Anti-Void (Island Saver)", function(enabled)
+    antiVoidEnabled = enabled
+    playSound("rbxassetid://12221976")
+end, false)
+
+uiLibrary:AddToggle("Expand Hitbox (Visible)", function(enabled)
     toggleHitboxes(enabled)
 end, false)
 
@@ -499,10 +521,6 @@ uiLibrary:AddToggle("Fpp Toggle", function(enabled)
         local camera = workspace.CurrentCamera
         camera.CameraType = Enum.CameraType.Custom
         localPlayer.CameraMode = Enum.CameraMode.LockFirstPerson
-        if getgenv().cameraLockConnection then
-            getgenv().cameraLockConnection:Disconnect()
-            getgenv().cameraLockConnection = nil
-        end
     else
         localPlayer.CameraMode = Enum.CameraMode.Classic
     end
@@ -512,7 +530,7 @@ uiLibrary:AddButton("AimLock", function()
     playSound("rbxassetid://12221976")
 end)
 
--- Anti-Fling / No Fall
+-- Anti-Fling / No Fall (Original Robust Version)
 local noFallEnabled = false
 local noFallConnection
 
@@ -560,7 +578,6 @@ uiLibrary:AddToggle("No Fall (Anti-Fling)", function(enabled)
             noFallConnection:Disconnect()
             noFallConnection = nil
         end
-        
         if hum then
             hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, true)
             hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, true)
@@ -568,7 +585,7 @@ uiLibrary:AddToggle("No Fall (Anti-Fling)", function(enabled)
     end
 end, false)
 
--- Humanized TriggerBot (Mobile Optimized)
+-- Humanized TriggerBot (Original 3-Method Version)
 local triggerBotEnabled = false
 local triggerBotConnection
 local isTriggering = false
@@ -577,19 +594,17 @@ local function executeMobileClick()
     if isTriggering then return end
     isTriggering = true
     
-    -- 1. Humanized reaction delay
     task.wait(math.random(20, 50) / 1000) 
     
     local attacked = false
     local playerGui = localPlayer:FindFirstChildOfClass("PlayerGui")
     
-    -- 2. Method A: Search PlayerGui for the Mobile Attack Button and trigger it directly
+    -- Method A: GUI Button Search
     if playerGui then
         for _, gui in ipairs(playerGui:GetDescendants()) do
             if (gui:IsA("ImageButton") or gui:IsA("TextButton")) and gui.Visible then
                 local name = gui.Name:lower()
-                -- Detect common mobile attack button names
-                if name:find("attack") or name:find("shoot") or name:find("fire") or name:find("action") or name:find("use") then
+                if name:find("attack") or name:find("shoot") or name:find("fire") or name:find("action") or name:find("use") or name:find("hit") then
                     pcall(function()
                         if typeof(firesignal) == "function" then
                             firesignal(gui.Activated)
@@ -599,7 +614,6 @@ local function executeMobileClick()
                         end
                     end)
                     
-                    -- Also simulate touch at the button's exact position
                     pcall(function()
                         local pos = gui.AbsolutePosition
                         local size = gui.AbsoluteSize
@@ -617,23 +631,20 @@ local function executeMobileClick()
         end
     end
     
-    -- 3. Method B: Native Tool Activation
+    -- Method B: Tool Activation
     local character = localPlayer.Character
     if character then
         local tool = character:FindFirstChildOfClass("Tool")
         if tool then
-            pcall(function() 
-                tool:Activate() 
-            end)
+            pcall(function() tool:Activate() end)
         end
     end
     
-    -- 4. Method C: Tap Bottom-Right Screen Area (Fallback for mobile action buttons)
+    -- Method C: Screen Tap Fallback
     if not attacked then
         pcall(function()
             local camera = workspace.CurrentCamera
             local viewport = camera.ViewportSize
-            -- Targets ~85% across and ~75% down the screen (bottom-right action zone)
             local tapX = viewport.X * 0.85
             local tapY = viewport.Y * 0.75
             
@@ -643,7 +654,6 @@ local function executeMobileClick()
         end)
     end
     
-    -- Cooldown between clicks
     task.wait(math.random(60, 130) / 1000)
     isTriggering = false
 end
