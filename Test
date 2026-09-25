@@ -573,32 +573,68 @@ local triggerBotEnabled = false
 local triggerBotConnection
 local isTriggering = false
 
-local function executeMobileClick(character)
-    -- 1. Executor native click functions
-    if typeof(mouse1click) == "function" then
-        pcall(mouse1click)
-    elseif typeof(mouse1press) == "function" and typeof(mouse1release) == "function" then
-        pcall(function()
-            mouse1press()
-            task.wait(0.02)
-            mouse1release()
-        end)
-    end
+local function executeMobileClick()
+    if isTriggering then return end
+    isTriggering = true
     
-    -- 2. VirtualInputManager tap simulation (Best compatibility on Mobile Android/iOS)
-    pcall(function()
-        VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 0)
-        task.wait(0.03)
-        VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 0)
-    end)
+    -- 1. Humanized Reaction Delay
+    task.wait(math.random(25, 80) / 1000) 
     
-    -- 3. Tool activation fallback
+    -- 2. Tool Activation (Mobile Native Method)
+    local character = localPlayer.Character
     if character then
         local tool = character:FindFirstChildOfClass("Tool")
         if tool then
-            tool:Activate()
+            pcall(function() 
+                tool:Activate() 
+            end)
         end
     end
+    
+    -- 3. Virtual Input Touch Simulation (Center Screen)
+    pcall(function()
+        local camera = workspace.CurrentCamera
+        local viewportSize = camera.ViewportSize
+        local centerX, centerY = viewportSize.X / 2, viewportSize.Y / 2
+        
+        VirtualInputManager:SendMouseButtonEvent(centerX, centerY, 0, true, game, 1)
+        task.wait(math.random(20, 45) / 1000)
+        VirtualInputManager:SendMouseButtonEvent(centerX, centerY, 0, false, game, 1)
+    end)
+    
+    -- 4. PC Mouse Click Fallback
+    if typeof(mouse1click) == "function" then
+        pcall(mouse1click)
+    end
+    
+    -- Cooldown delay
+    task.wait(math.random(60, 150) / 1000)
+    isTriggering = false
+end
+
+local function checkCrosshairTarget()
+    local camera = workspace.CurrentCamera
+    local viewportSize = camera.ViewportSize
+    local center = Vector2.new(viewportSize.X / 2, viewportSize.Y / 2)
+    
+    local ray = camera:ViewportPointToRay(center.X, center.Y)
+    local raycastParams = RaycastParams.new()
+    raycastParams.FilterDescendantsInstances = {localPlayer.Character, camera}
+    raycastParams.FilterType = Enum.RaycastFilterType.Exclude
+    raycastParams.IgnoreWater = true
+    
+    local result = workspace:Raycast(ray.Origin, ray.Direction * 600, raycastParams)
+    
+    if result and result.Instance then
+        local targetCharacter = result.Instance:FindFirstAncestorOfClass("Model")
+        if targetCharacter and targetCharacter:FindFirstChild("Humanoid") and targetCharacter.Humanoid.Health > 0 then
+            local targetPlayer = Players:GetPlayerFromCharacter(targetCharacter)
+            if targetPlayer and isEnemy(targetPlayer) then
+                return true
+            end
+        end
+    end
+    return false
 end
 
 uiLibrary:AddToggle("TriggerBot (Mobile)", function(enabled)
@@ -608,36 +644,11 @@ uiLibrary:AddToggle("TriggerBot (Mobile)", function(enabled)
     if enabled then
         if not triggerBotConnection then
             triggerBotConnection = RunService.RenderStepped:Connect(function()
-                if not triggerBotEnabled or isTriggering then return end
-                
-                pcall(function()
-                    local char = localPlayer.Character
-                    local mouse = localPlayer:GetMouse()
-                    if not char or not mouse then return end
-                    
-                    local target = mouse.Target
-                    if target then
-                        local hitModel = target:FindFirstAncestorOfClass("Model")
-                        if hitModel and hitModel ~= char then
-                            local targetPlayer = Players:GetPlayerFromCharacter(hitModel)
-                            if targetPlayer and isEnemy(targetPlayer) then
-                                local targetHum = hitModel:FindFirstChildOfClass("Humanoid")
-                                if targetHum and targetHum.Health > 0 then
-                                    isTriggering = true
-                                    
-                                    -- Humanized mobile delay (70ms to 150ms)
-                                    task.delay(math.random(7, 15) / 100, function()
-                                        if triggerBotEnabled then
-                                            executeMobileClick(char)
-                                        end
-                                        task.wait(0.12)
-                                        isTriggering = false
-                                    end)
-                                end
-                            end
-                        end
+                if triggerBotEnabled and not isTriggering then
+                    if checkCrosshairTarget() then
+                        task.spawn(executeMobileClick)
                     end
-                end)
+                end
             end)
         end
     else
