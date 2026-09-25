@@ -577,10 +577,47 @@ local function executeMobileClick()
     if isTriggering then return end
     isTriggering = true
     
-    -- 1. Humanized Reaction Delay
-    task.wait(math.random(25, 80) / 1000) 
+    -- 1. Humanized reaction delay
+    task.wait(math.random(20, 50) / 1000) 
     
-    -- 2. Tool Activation (Mobile Native Method)
+    local attacked = false
+    local playerGui = localPlayer:FindFirstChildOfClass("PlayerGui")
+    
+    -- 2. Method A: Search PlayerGui for the Mobile Attack Button and trigger it directly
+    if playerGui then
+        for _, gui in ipairs(playerGui:GetDescendants()) do
+            if (gui:IsA("ImageButton") or gui:IsA("TextButton")) and gui.Visible then
+                local name = gui.Name:lower()
+                -- Detect common mobile attack button names
+                if name:find("attack") or name:find("shoot") or name:find("fire") or name:find("action") or name:find("use") then
+                    pcall(function()
+                        if typeof(firesignal) == "function" then
+                            firesignal(gui.Activated)
+                            firesignal(gui.MouseButton1Down)
+                            task.wait(0.02)
+                            firesignal(gui.MouseButton1Up)
+                        end
+                    end)
+                    
+                    -- Also simulate touch at the button's exact position
+                    pcall(function()
+                        local pos = gui.AbsolutePosition
+                        local size = gui.AbsoluteSize
+                        local tapX = pos.X + (size.X / 2)
+                        local tapY = pos.Y + (size.Y / 2)
+                        VirtualInputManager:SendTouchEvent(0, Enum.UserInputState.Begin, tapX, tapY, game)
+                        task.wait(0.02)
+                        VirtualInputManager:SendTouchEvent(0, Enum.UserInputState.End, tapX, tapY, game)
+                    end)
+                    
+                    attacked = true
+                    break
+                end
+            end
+        end
+    end
+    
+    -- 3. Method B: Native Tool Activation
     local character = localPlayer.Character
     if character then
         local tool = character:FindFirstChildOfClass("Tool")
@@ -591,24 +628,23 @@ local function executeMobileClick()
         end
     end
     
-    -- 3. Virtual Input Touch Simulation (Center Screen)
-    pcall(function()
-        local camera = workspace.CurrentCamera
-        local viewportSize = camera.ViewportSize
-        local centerX, centerY = viewportSize.X / 2, viewportSize.Y / 2
-        
-        VirtualInputManager:SendMouseButtonEvent(centerX, centerY, 0, true, game, 1)
-        task.wait(math.random(20, 45) / 1000)
-        VirtualInputManager:SendMouseButtonEvent(centerX, centerY, 0, false, game, 1)
-    end)
-    
-    -- 4. PC Mouse Click Fallback
-    if typeof(mouse1click) == "function" then
-        pcall(mouse1click)
+    -- 4. Method C: Tap Bottom-Right Screen Area (Fallback for mobile action buttons)
+    if not attacked then
+        pcall(function()
+            local camera = workspace.CurrentCamera
+            local viewport = camera.ViewportSize
+            -- Targets ~85% across and ~75% down the screen (bottom-right action zone)
+            local tapX = viewport.X * 0.85
+            local tapY = viewport.Y * 0.75
+            
+            VirtualInputManager:SendMouseButtonEvent(tapX, tapY, 0, true, game, 1)
+            task.wait(0.03)
+            VirtualInputManager:SendMouseButtonEvent(tapX, tapY, 0, false, game, 1)
+        end)
     end
     
-    -- Cooldown delay
-    task.wait(math.random(60, 150) / 1000)
+    -- Cooldown between clicks
+    task.wait(math.random(60, 130) / 1000)
     isTriggering = false
 end
 
