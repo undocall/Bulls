@@ -4,7 +4,7 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local Lighting = game:GetService("Lighting")
 local TweenService = game:GetService("TweenService")
-local VirtualUser = game:GetService("VirtualUser")
+local VirtualInputManager = game:GetService("VirtualInputManager")
 
 -- Player variables
 local localPlayer = Players.LocalPlayer
@@ -568,12 +568,40 @@ uiLibrary:AddToggle("No Fall (Anti-Fling)", function(enabled)
     end
 end, false)
 
--- Humanized TriggerBot
+-- Humanized TriggerBot (Mobile Optimized)
 local triggerBotEnabled = false
 local triggerBotConnection
 local isTriggering = false
 
-uiLibrary:AddToggle("TriggerBot (Humanized)", function(enabled)
+local function executeMobileClick(character)
+    -- 1. Executor native click functions
+    if typeof(mouse1click) == "function" then
+        pcall(mouse1click)
+    elseif typeof(mouse1press) == "function" and typeof(mouse1release) == "function" then
+        pcall(function()
+            mouse1press()
+            task.wait(0.02)
+            mouse1release()
+        end)
+    end
+    
+    -- 2. VirtualInputManager tap simulation (Best compatibility on Mobile Android/iOS)
+    pcall(function()
+        VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 0)
+        task.wait(0.03)
+        VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 0)
+    end)
+    
+    -- 3. Tool activation fallback
+    if character then
+        local tool = character:FindFirstChildOfClass("Tool")
+        if tool then
+            tool:Activate()
+        end
+    end
+end
+
+uiLibrary:AddToggle("TriggerBot (Mobile)", function(enabled)
     triggerBotEnabled = enabled
     playSound("rbxassetid://12221976")
     
@@ -583,47 +611,26 @@ uiLibrary:AddToggle("TriggerBot (Humanized)", function(enabled)
                 if not triggerBotEnabled or isTriggering then return end
                 
                 pcall(function()
-                    local camera = workspace.CurrentCamera
                     local char = localPlayer.Character
-                    if not camera or not char then return end
+                    local mouse = localPlayer:GetMouse()
+                    if not char or not mouse then return end
                     
-                    -- Raycast straight through screen center (crosshair)
-                    local viewportCenter = Vector2.new(camera.ViewportSize.X / 2, camera.ViewportSize.Y / 2)
-                    local ray = camera:ViewportPointToRay(viewportCenter.X, viewportCenter.Y)
-                    
-                    local params = RaycastParams.new()
-                    params.FilterType = Enum.RaycastFilterType.Exclude
-                    params.FilterDescendantsInstances = {char}
-                    
-                    local result = workspace:Raycast(ray.Origin, ray.Direction * 1000, params)
-                    if result and result.Instance then
-                        local hitModel = result.Instance:FindFirstAncestorOfClass("Model")
-                        if hitModel then
+                    local target = mouse.Target
+                    if target then
+                        local hitModel = target:FindFirstAncestorOfClass("Model")
+                        if hitModel and hitModel ~= char then
                             local targetPlayer = Players:GetPlayerFromCharacter(hitModel)
                             if targetPlayer and isEnemy(targetPlayer) then
                                 local targetHum = hitModel:FindFirstChildOfClass("Humanoid")
                                 if targetHum and targetHum.Health > 0 then
                                     isTriggering = true
                                     
-                                    -- Humanized delay (80ms to 180ms)
-                                    task.delay(math.random(8, 18) / 100, function()
+                                    -- Humanized mobile delay (70ms to 150ms)
+                                    task.delay(math.random(7, 15) / 100, function()
                                         if triggerBotEnabled then
-                                            -- Execute click trigger
-                                            if typeof(mouse1click) == "function" then
-                                                mouse1click()
-                                            else
-                                                local tool = char:FindFirstChildOfClass("Tool")
-                                                if tool then
-                                                    tool:Activate()
-                                                else
-                                                    VirtualUser:Button1Down(Vector2.zero, camera.CFrame)
-                                                    task.wait(0.02)
-                                                    VirtualUser:Button1Up(Vector2.zero, camera.CFrame)
-                                                end
-                                            end
+                                            executeMobileClick(char)
                                         end
-                                        -- Cool-down before next trigger
-                                        task.wait(0.1)
+                                        task.wait(0.12)
                                         isTriggering = false
                                     end)
                                 end
