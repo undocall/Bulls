@@ -4,6 +4,7 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local Lighting = game:GetService("Lighting")
 local TweenService = game:GetService("TweenService")
+local VirtualUser = game:GetService("VirtualUser")
 
 -- Player variables
 local localPlayer = Players.LocalPlayer
@@ -511,7 +512,7 @@ uiLibrary:AddButton("AimLock", function()
     playSound("rbxassetid://12221976")
 end)
 
--- UPDATED: Anti-Fling / No Fall (Smooth Movement & Zero Jump Lag)
+-- Anti-Fling / No Fall
 local noFallEnabled = false
 local noFallConnection
 
@@ -523,7 +524,6 @@ uiLibrary:AddToggle("No Fall (Anti-Fling)", function(enabled)
     local hum = char and char:FindFirstChildOfClass("Humanoid")
     
     if enabled then
-        -- Set states once on enable to prevent continuous loop overhead
         if hum then
             hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
             hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
@@ -543,9 +543,7 @@ uiLibrary:AddToggle("No Fall (Anti-Fling)", function(enabled)
                         local angVel = hrp.AssemblyAngularVelocity
                         local horizSpeed = Vector3.new(linVel.X, 0, linVel.Z).Magnitude
                         
-                        -- High speed cutoff (120 studs/s) so regular jumps & sprints are untouched
                         if horizSpeed > 120 or angVel.Magnitude > 60 then
-                            -- Soft dampening: resets extreme lateral fling & spin while keeping upward Y jump momentum
                             hrp.AssemblyLinearVelocity = Vector3.new(0, math.clamp(linVel.Y, -50, 80), 0)
                             hrp.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
                         end
@@ -567,5 +565,79 @@ uiLibrary:AddToggle("No Fall (Anti-Fling)", function(enabled)
             hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, true)
             hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, true)
         end
+    end
+end, false)
+
+-- Humanized TriggerBot
+local triggerBotEnabled = false
+local triggerBotConnection
+local isTriggering = false
+
+uiLibrary:AddToggle("TriggerBot (Humanized)", function(enabled)
+    triggerBotEnabled = enabled
+    playSound("rbxassetid://12221976")
+    
+    if enabled then
+        if not triggerBotConnection then
+            triggerBotConnection = RunService.RenderStepped:Connect(function()
+                if not triggerBotEnabled or isTriggering then return end
+                
+                pcall(function()
+                    local camera = workspace.CurrentCamera
+                    local char = localPlayer.Character
+                    if not camera or not char then return end
+                    
+                    -- Raycast straight through screen center (crosshair)
+                    local viewportCenter = Vector2.new(camera.ViewportSize.X / 2, camera.ViewportSize.Y / 2)
+                    local ray = camera:ViewportPointToRay(viewportCenter.X, viewportCenter.Y)
+                    
+                    local params = RaycastParams.new()
+                    params.FilterType = Enum.RaycastFilterType.Exclude
+                    params.FilterDescendantsInstances = {char}
+                    
+                    local result = workspace:Raycast(ray.Origin, ray.Direction * 1000, params)
+                    if result and result.Instance then
+                        local hitModel = result.Instance:FindFirstAncestorOfClass("Model")
+                        if hitModel then
+                            local targetPlayer = Players:GetPlayerFromCharacter(hitModel)
+                            if targetPlayer and isEnemy(targetPlayer) then
+                                local targetHum = hitModel:FindFirstChildOfClass("Humanoid")
+                                if targetHum and targetHum.Health > 0 then
+                                    isTriggering = true
+                                    
+                                    -- Humanized delay (80ms to 180ms)
+                                    task.delay(math.random(8, 18) / 100, function()
+                                        if triggerBotEnabled then
+                                            -- Execute click trigger
+                                            if typeof(mouse1click) == "function" then
+                                                mouse1click()
+                                            else
+                                                local tool = char:FindFirstChildOfClass("Tool")
+                                                if tool then
+                                                    tool:Activate()
+                                                else
+                                                    VirtualUser:Button1Down(Vector2.zero, camera.CFrame)
+                                                    task.wait(0.02)
+                                                    VirtualUser:Button1Up(Vector2.zero, camera.CFrame)
+                                                end
+                                            end
+                                        end
+                                        -- Cool-down before next trigger
+                                        task.wait(0.1)
+                                        isTriggering = false
+                                    end)
+                                end
+                            end
+                        end
+                    end
+                end)
+            end)
+        end
+    else
+        if triggerBotConnection then
+            triggerBotConnection:Disconnect()
+            triggerBotConnection = nil
+        end
+        isTriggering = false
     end
 end, false)
