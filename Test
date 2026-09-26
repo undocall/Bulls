@@ -72,7 +72,7 @@ if not success or not uiLibrary then
 end
 
 -- Configure UI
-uiLibrary:SetTitle("Hitblox Master (v6.0)")
+uiLibrary:SetTitle("Hitblox Master (v7.0)")
 uiLibrary:SetIcon("http://www.roblox.com/asset/?id=91738788645337")
 uiLibrary:SetTheme("HighContrast")
 task.wait(0.1)
@@ -88,12 +88,15 @@ local espEnabled = false
 local antiVoidEnabled = false
 local ultimateHealthEnabled = false
 local fastRecoveryEnabled = false
+local heavyweightEnabled = false
+local maxAllowedHorizontalSpeed = 35
+local dampeningFactor = 0.25 -- Keeps only 25% of excess knockback force
 local lastHealTime = tick()
 local lastSafePosition = nil
 local espGuis = {} 
 local hitboxIncreaseButton, hitboxDecreaseButton, fovIncreaseButton, fovDecreaseButton
 
--- FULL R15/R6 Hitbox Functions (Original)
+-- FULL R15/R6 Hitbox Functions
 local function applyHitbox(character)
     if not character then return end
     
@@ -284,6 +287,26 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
+-- Heavyweight Anti-Knockback (Dampened Velocity)
+RunService.Heartbeat:Connect(function()
+    if not heavyweightEnabled then return end
+    local char = localPlayer.Character
+    if not char then return end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+
+    local vel = hrp.AssemblyLinearVelocity
+    local horizVel = Vector3.new(vel.X, 0, vel.Z)
+    local horizSpeed = horizVel.Magnitude
+
+    if horizSpeed > maxAllowedHorizontalSpeed then
+        local extraSpeed = horizSpeed - maxAllowedHorizontalSpeed
+        local newSpeed = maxAllowedHorizontalSpeed + (extraSpeed * dampeningFactor)
+        local clampedHoriz = horizVel.Unit * newSpeed
+        hrp.AssemblyLinearVelocity = Vector3.new(clampedHoriz.X, vel.Y, clampedHoriz.Z)
+    end
+end)
+
 -- Anti-Void Platform Guard
 RunService.Heartbeat:Connect(function()
     local char = localPlayer.Character
@@ -304,18 +327,16 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
--- Health Management System (NEW)
+-- Health Management System
 RunService.Heartbeat:Connect(function()
     local char = localPlayer.Character
     local hum = char and char:FindFirstChildOfClass("Humanoid")
     
     if hum and hum.Health > 0 then
         if ultimateHealthEnabled then
-            -- God Mode: Lock health at infinity
             hum.MaxHealth = math.huge
             hum.Health = math.huge
         elseif fastRecoveryEnabled and hum.Health < hum.MaxHealth then
-            -- Fast Recovery: Heal smoothly over time
             if tick() - lastHealTime >= 0.2 then
                 hum.Health = math.clamp(hum.Health + 10, 0, hum.MaxHealth)
                 lastHealTime = tick()
@@ -530,6 +551,11 @@ uiLibrary:AddToggle("Anti-Void (Island Saver)", function(enabled)
     playSound("rbxassetid://12221976")
 end, false)
 
+uiLibrary:AddToggle("Heavyweight Anti-KB (Natural)", function(enabled)
+    heavyweightEnabled = enabled
+    playSound("rbxassetid://12221976")
+end, false)
+
 uiLibrary:AddToggle("Expand Hitbox (Visible)", function(enabled)
     toggleHitboxes(enabled)
 end, false)
@@ -549,7 +575,6 @@ uiLibrary:AddToggle("Fpp Toggle", function(enabled)
     end
 end, false)
 
--- HEALTH TOGGLES (NEW)
 uiLibrary:AddToggle("Ultimate Health (God Mode)", function(enabled)
     ultimateHealthEnabled = enabled
     playSound("rbxassetid://12221976")
