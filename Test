@@ -30,7 +30,7 @@ local function isEnemy(player)
     end
 end
 
--- Sound function with better error handling
+-- Sound function
 local function playSound(soundId)
     local sound = Instance.new("Sound")
     sound.SoundId = soundId
@@ -50,14 +50,6 @@ local function playSound(soundId)
     end)
 end
 
--- Load external script
-local function loadExternalScript(url)
-    local success, err = pcall(function()
-        loadstring(game:HttpGet("https://raw.githubusercontent.com/OBFhm5650lol/Credit-obfuscated-lol/refs/heads/main/OBFCredit"))()
-    end)
-    return success
-end
-
 task.wait()
 playSound("rbxassetid://12221831")
 
@@ -72,7 +64,7 @@ if not success or not uiLibrary then
 end
 
 -- Configure UI
-uiLibrary:SetTitle("Hitblox Master (v7.0)")
+uiLibrary:SetTitle("Hitblox Master (v8.0)")
 uiLibrary:SetIcon("http://www.roblox.com/asset/?id=91738788645337")
 uiLibrary:SetTheme("HighContrast")
 task.wait(0.1)
@@ -89,12 +81,38 @@ local antiVoidEnabled = false
 local ultimateHealthEnabled = false
 local fastRecoveryEnabled = false
 local heavyweightEnabled = false
+local hitAndWeaveEnabled = false
+
 local maxAllowedHorizontalSpeed = 35
-local dampeningFactor = 0.25 -- Keeps only 25% of excess knockback force
+local dampeningFactor = 0.25 
+local weaveSpeedBonus = 7
+local weaveDuration = 0.45
+local isWeaving = false
+
 local lastHealTime = tick()
 local lastSafePosition = nil
 local espGuis = {} 
 local hitboxIncreaseButton, hitboxDecreaseButton, fovIncreaseButton, fovDecreaseButton
+
+-- Hit & Weave Trigger Function
+local function triggerHitAndWeave()
+    if not hitAndWeaveEnabled or isWeaving then return end
+    
+    local char = localPlayer.Character
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    if not hum or hum.Health <= 0 then return end
+
+    isWeaving = true
+    local originalSpeed = hum.WalkSpeed
+    hum.WalkSpeed = originalSpeed + weaveSpeedBonus
+
+    task.delay(weaveDuration, function()
+        if hum and hum.Parent then
+            hum.WalkSpeed = math.max(16, hum.WalkSpeed - weaveSpeedBonus)
+        end
+        isWeaving = false
+    end)
+end
 
 -- FULL R15/R6 Hitbox Functions
 local function applyHitbox(character)
@@ -379,35 +397,6 @@ local function createESP(player)
         
         espGuis[player] = espGui
         espGui.Parent = targetPart
-        
-        local function updateEspSize()
-            if player.Character and (player.Character:FindFirstChild("HumanoidRootPart") or player.Character:FindFirstChild("UpperTorso")) and 
-               localPlayer.Character and (localPlayer.Character:FindFirstChild("HumanoidRootPart") or localPlayer.Character:FindFirstChild("UpperTorso")) then
-                local playerRoot = player.Character:FindFirstChild("HumanoidRootPart") or player.Character:FindFirstChild("UpperTorso")
-                local localRoot = localPlayer.Character:FindFirstChild("HumanoidRootPart") or localPlayer.Character:FindFirstChild("UpperTorso")
-                
-                if playerRoot and localRoot then
-                    local distance = (localRoot.Position - playerRoot.Position).Magnitude
-                    local minSize = 10
-                    local maxSize = 100
-                    local calculatedSize = math.clamp(maxSize - (distance * 0.5), minSize, maxSize)
-                    espGui.Size = UDim2.new(0, calculatedSize, 0, calculatedSize * 0.5)
-                end
-            end
-        end
-        
-        local lastUpdate = tick()
-        local connection
-        connection = RunService.RenderStepped:Connect(function()
-            if not espGui or not espGui.Parent then
-                connection:Disconnect()
-                return
-            end
-            if (tick() - lastUpdate) >= 0.1 then
-                updateEspSize()
-                lastUpdate = tick()
-            end
-        end)
     end
 end
 
@@ -428,38 +417,42 @@ local function toggleESP(enabled)
     end
 end
 
--- Player tracking system
+-- Player tracking system + Hit & Weave Monitor
 local function trackPlayer(player)
     if not player then return end
     if isEnemy(player) then
-        player.CharacterAdded:Connect(function(character)
-            task.wait(1) 
-            local humanoid = character:WaitForChild("Humanoid")
-            
-            local function updateHitboxState()
-                if hitboxEnabled then
-                    if humanoid.Health > 0 then
-                        applyHitbox(character)
-                    else
-                        resetHitbox(character)
+        local function bindCharacter(character)
+            local humanoid = character:WaitForChild("Humanoid", 5)
+            if not humanoid then return end
+
+            local lastHealth = humanoid.Health
+            humanoid.HealthChanged:Connect(function(newHealth)
+                if newHealth < lastHealth then
+                    local myChar = localPlayer.Character
+                    local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
+                    local enemyHrp = character:FindFirstChild("HumanoidRootPart") or character:FindFirstChild("UpperTorso")
+                    
+                    if myHrp and enemyHrp then
+                        local dist = (myHrp.Position - enemyHrp.Position).Magnitude
+                        if dist <= 18 then
+                            triggerHitAndWeave()
+                        end
                     end
                 end
-            end
-            updateHitboxState()
-            humanoid.HealthChanged:Connect(updateHitboxState)
-            if espEnabled then createESP(player) end
-        end)
-        
-        if player.Character then
-            local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
-            if humanoid then
+                lastHealth = newHealth
+
                 if hitboxEnabled then
-                    if humanoid.Health > 0 then applyHitbox(player.Character)
-                    else resetHitbox(player.Character) end
+                    if newHealth > 0 then applyHitbox(character)
+                    else resetHitbox(character) end
                 end
-                if espEnabled then createESP(player) end
-            end
+            end)
+
+            if espEnabled then createESP(player) end
+            if hitboxEnabled and humanoid.Health > 0 then applyHitbox(character) end
         end
+
+        player.CharacterAdded:Connect(bindCharacter)
+        if player.Character then bindCharacter(player.Character) end
     end
 end
 
@@ -503,20 +496,6 @@ uiLibrary:AddButton("FullBright", function()
     Lighting.OutdoorAmbient = Color3.fromRGB(255, 255, 255)
     Lighting.Ambient = Color3.fromRGB(255, 255, 255)
     Lighting.TimeOfDay = "14:00:00"
-    Lighting.FogStart = 0
-    Lighting.FogEnd = 100000
-    Lighting.FogColor = Color3.fromRGB(255, 255, 255)
-    
-    local connection = RunService.Heartbeat:Connect(function()
-        Lighting.Brightness = 2
-        Lighting.OutdoorAmbient = Color3.fromRGB(255, 255, 255)
-        Lighting.Ambient = Color3.fromRGB(255, 255, 255)
-        Lighting.TimeOfDay = "14:00:00"
-        Lighting.FogStart = 0
-        Lighting.FogEnd = 100000
-        Lighting.FogColor = Color3.fromRGB(255, 255, 255)
-    end)
-    getgenv().BrightnessConnection = connection
 end)
 
 uiLibrary:AddButton("AntiLag", function()
@@ -529,16 +508,14 @@ uiLibrary:AddButton("AntiKick", function()
     loadstring(game:HttpGet("https://raw.githubusercontent.com/OBFhm5650lol/AntkickLol/refs/heads/main/Antikicklol"))()
 end)
 
-local fovEnabled = false
-uiLibrary:AddToggle("FOV Toggle", function(enabled)
-    fovEnabled = enabled
+uiLibrary:AddToggle("Hit & Weave (Micro-Burst)", function(enabled)
+    hitAndWeaveEnabled = enabled
     playSound("rbxassetid://12221976")
-    pcall(function()
-        if fovIncreaseButton and fovDecreaseButton then
-            fovIncreaseButton.Visible = enabled
-            fovDecreaseButton.Visible = enabled
-        end
-    end)
+end, false)
+
+uiLibrary:AddToggle("Heavyweight Anti-KB (Natural)", function(enabled)
+    heavyweightEnabled = enabled
+    playSound("rbxassetid://12221976")
 end, false)
 
 uiLibrary:AddToggle("Magnetic Hitboxes (Clean)", function(enabled)
@@ -551,28 +528,12 @@ uiLibrary:AddToggle("Anti-Void (Island Saver)", function(enabled)
     playSound("rbxassetid://12221976")
 end, false)
 
-uiLibrary:AddToggle("Heavyweight Anti-KB (Natural)", function(enabled)
-    heavyweightEnabled = enabled
-    playSound("rbxassetid://12221976")
-end, false)
-
 uiLibrary:AddToggle("Expand Hitbox (Visible)", function(enabled)
     toggleHitboxes(enabled)
 end, false)
 
 uiLibrary:AddToggle("ESP", function(enabled)
     toggleESP(enabled)
-end, false)
-
-uiLibrary:AddToggle("Fpp Toggle", function(enabled)
-    playSound("rbxassetid://12221976")
-    if enabled then
-        local camera = workspace.CurrentCamera
-        camera.CameraType = Enum.CameraType.Custom
-        localPlayer.CameraMode = Enum.CameraMode.LockFirstPerson
-    else
-        localPlayer.CameraMode = Enum.CameraMode.Classic
-    end
 end, false)
 
 uiLibrary:AddToggle("Ultimate Health (God Mode)", function(enabled)
@@ -584,10 +545,6 @@ uiLibrary:AddToggle("Fast Recovery (Auto Regen)", function(enabled)
     fastRecoveryEnabled = enabled
     playSound("rbxassetid://12221976")
 end, false)
-
-uiLibrary:AddButton("AimLock", function()
-    playSound("rbxassetid://12221976")
-end)
 
 -- Anti-Fling / No Fall 
 local noFallEnabled = false
@@ -655,62 +612,12 @@ local function executeMobileClick()
     
     task.wait(math.random(20, 50) / 1000) 
     
-    local attacked = false
-    local playerGui = localPlayer:FindFirstChildOfClass("PlayerGui")
-    
-    -- Method A: GUI Button Search
-    if playerGui then
-        for _, gui in ipairs(playerGui:GetDescendants()) do
-            if (gui:IsA("ImageButton") or gui:IsA("TextButton")) and gui.Visible then
-                local name = gui.Name:lower()
-                if name:find("attack") or name:find("shoot") or name:find("fire") or name:find("action") or name:find("use") or name:find("hit") then
-                    pcall(function()
-                        if typeof(firesignal) == "function" then
-                            firesignal(gui.Activated)
-                            firesignal(gui.MouseButton1Down)
-                            task.wait(0.02)
-                            firesignal(gui.MouseButton1Up)
-                        end
-                    end)
-                    
-                    pcall(function()
-                        local pos = gui.AbsolutePosition
-                        local size = gui.AbsoluteSize
-                        local tapX = pos.X + (size.X / 2)
-                        local tapY = pos.Y + (size.Y / 2)
-                        VirtualInputManager:SendTouchEvent(0, Enum.UserInputState.Begin, tapX, tapY, game)
-                        task.wait(0.02)
-                        VirtualInputManager:SendTouchEvent(0, Enum.UserInputState.End, tapX, tapY, game)
-                    end)
-                    
-                    attacked = true
-                    break
-                end
-            end
-        end
-    end
-    
-    -- Method B: Tool Activation
     local character = localPlayer.Character
     if character then
         local tool = character:FindFirstChildOfClass("Tool")
         if tool then
             pcall(function() tool:Activate() end)
         end
-    end
-    
-    -- Method C: Screen Tap Fallback
-    if not attacked then
-        pcall(function()
-            local camera = workspace.CurrentCamera
-            local viewport = camera.ViewportSize
-            local tapX = viewport.X * 0.85
-            local tapY = viewport.Y * 0.75
-            
-            VirtualInputManager:SendMouseButtonEvent(tapX, tapY, 0, true, game, 1)
-            task.wait(0.03)
-            VirtualInputManager:SendMouseButtonEvent(tapX, tapY, 0, false, game, 1)
-        end)
     end
     
     task.wait(math.random(60, 130) / 1000)
