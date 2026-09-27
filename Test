@@ -421,7 +421,7 @@ getgenv().superPowerEnabled = false
 getgenv().noclipEnabled = false
 getgenv().instantRecoveryEnabled = false
 getgenv().isRecovering = false
-getgenv().recoveryDelay = 0.6 -- Set custom delay here (default: 0.6 seconds)
+getgenv().recoveryDelay = 0.6 -- Default setting
 
 uiLibrary:AddToggle("Super Power (Speed/InfJump)", function(enabled)
     getgenv().superPowerEnabled = enabled
@@ -446,15 +446,26 @@ uiLibrary:AddToggle("Instant Recovery (Fast Stand)", function(enabled)
     playSound("rbxassetid://12221976")
 end, false)
 
--- Recovery delay adjustments in UI
+-- Notification Helper for Delay
+local function notifyUser(delayTime)
+    pcall(function()
+        StarterGui:SetCore("SendNotification", {
+            Title = "Hitblox Settings",
+            Text = "Recovery Delay is now: " .. tostring(delayTime) .. "s",
+            Duration = 2,
+        })
+    end)
+end
+
+-- UI Controls that give visual feedback!
 uiLibrary:AddButton("(Recovery Delay +0.1s)", function()
-    getgenv().recoveryDelay = math.round(((getgenv().recoveryDelay or 0.6) + 0.1) * 10) / 10
-    print("Recovery Delay set to: " .. tostring(getgenv().recoveryDelay) .. "s")
+    getgenv().recoveryDelay = math.clamp(math.round(((getgenv().recoveryDelay or 0.6) + 0.1) * 10) / 10, 0, 10)
+    notifyUser(getgenv().recoveryDelay)
 end)
 
 uiLibrary:AddButton("(Recovery Delay -0.1s)", function()
     getgenv().recoveryDelay = math.clamp(math.round(((getgenv().recoveryDelay or 0.6) - 0.1) * 10) / 10, 0, 10)
-    print("Recovery Delay set to: " .. tostring(getgenv().recoveryDelay) .. "s")
+    notifyUser(getgenv().recoveryDelay)
 end)
 
 RunService.Stepped:Connect(function()
@@ -480,7 +491,7 @@ RunService.Stepped:Connect(function()
         end
     end
 
-    -- SMART DELAYED RECOVERY LOGIC (Anti-juggle, customizable delay)
+    -- SMART DELAYED RECOVERY LOGIC
     if hum and hrp and getgenv().instantRecoveryEnabled then
         local state = hum:GetState()
         
@@ -499,14 +510,12 @@ RunService.Stepped:Connect(function()
             local floorHit = workspace:Raycast(rayOrigin, rayDirection, raycastParams)
             
             if floorHit or hum.FloorMaterial ~= Enum.Material.Air then
-                -- Kill spinning instantly so you don't roll like a ball
                 hrp.AssemblyAngularVelocity = Vector3.zero 
                 
                 if not getgenv().isRecovering then
                     getgenv().isRecovering = true
                     
                     task.spawn(function()
-                        -- Uses the custom delay (0.0 to any number)
                         local delayTime = getgenv().recoveryDelay or 0.6
                         if delayTime > 0 then
                             task.wait(delayTime)
