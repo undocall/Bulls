@@ -514,8 +514,9 @@ end)
 
 
 ------------------------------------------------------------------
--- EXTERNAL FLOATING ANTI-FLING BUTTON SYSTEM (FIXED STAND-UP BUG)
+-- EXTERNAL FLOATING ANTI-FLING BUTTON SYSTEM (WITH ACR TECH)
 ------------------------------------------------------------------
+local CoreGui = game:GetService("CoreGui")
 if CoreGui:FindFirstChild("AntiFlingStandaloneGui") then
     CoreGui.AntiFlingStandaloneGui:Destroy()
 end
@@ -524,12 +525,8 @@ local flingGui = Instance.new("ScreenGui")
 flingGui.Name = "AntiFlingStandaloneGui"
 flingGui.ResetOnSpawn = false
 
-pcall(function()
-    flingGui.Parent = CoreGui
-end)
-if not flingGui.Parent then
-    flingGui.Parent = localPlayer:WaitForChild("PlayerGui")
-end
+pcall(function() flingGui.Parent = CoreGui end)
+if not flingGui.Parent then flingGui.Parent = localPlayer:WaitForChild("PlayerGui") end
 
 local flingBtn = Instance.new("TextButton")
 flingBtn.Name = "AntiFlingButton"
@@ -558,12 +555,121 @@ uiStroke.Parent = flingBtn
 local noFallEnabled = false
 local noFallConnection
 
+-- NEW FEATURE: Absolute CFrame Resuscitation (ACR)
+local function executeACR(char, hum, hrp)
+    if not (char and hum and hrp) then return end
+    
+    pcall(function()
+        -- 1. Micro-Anchor to kill all glitched physics and momentum
+        hrp.Anchored = true
+        hrp.AssemblyLinearVelocity = Vector3.zero
+        hrp.AssemblyAngularVelocity = Vector3.zero
+        
+        -- 2. Strip glitched states
+        hum.PlatformStand = false
+        hum.Sit = false
+        
+        -- 3. The CFrame Snap: Lift 2.5 studs up and force perfectly vertical rotation
+        local currentPos = hrp.Position
+        local lookVector = hrp.CFrame.LookVector
+        local flatLook = Vector3.new(lookVector.X, 0, lookVector.Z).Unit
+        
+        -- Fallback if looking straight up/down
+        if flatLook.Magnitude < 0.1 then flatLook = Vector3.new(0, 0, -1) end 
+        
+        local newPos = currentPos + Vector3.new(0, 2.5, 0)
+        hrp.CFrame = CFrame.new(newPos, newPos + flatLook)
+        
+        -- 4. Force freefall to reset animation rig
+        hum:ChangeState(Enum.HumanoidStateType.Freefall)
+        
+        -- 5. Release back to the game engine
+        task.wait(0.05)
+        hrp.Anchored = false
+        hum.Jump = true
+    end)
+end
+
 local function applyHumanoidStates(hum, enabled)
     if hum then
         hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, not enabled)
         hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, not enabled)
     end
 end
+
+local function toggleAntiFling(enabled)
+    noFallEnabled = enabled
+    pcall(function() playSound("rbxassetid://12221976") end)
+    
+    local char = localPlayer.Character
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    
+    if enabled then
+        flingBtn.Text = "Anti-Fling: ON"
+        flingBtn.TextColor3 = Color3.fromRGB(75, 255, 75)
+        uiStroke.Color = Color3.fromRGB(75, 255, 75)
+        
+        -- Execute the ACR tech the moment you turn it ON
+        executeACR(char, hum, hrp)
+        applyHumanoidStates(hum, true)
+        
+        if not noFallConnection then
+            noFallConnection = RunService.Heartbeat:Connect(function()
+                pcall(function()
+                    local character = localPlayer.Character
+                    if not character then return end
+                    
+                    local root = character:FindFirstChild("HumanoidRootPart")
+                    local humanoid = character:FindFirstChildOfClass("Humanoid")
+                    
+                    if root and humanoid then
+                        local linVel = root.AssemblyLinearVelocity
+                        local angVel = root.AssemblyAngularVelocity
+                        local horizSpeed = Vector3.new(linVel.X, 0, linVel.Z).Magnitude
+                        
+                        -- Extreme Fling Detection
+                        if horizSpeed > 150 or angVel.Magnitude > 75 then
+                            -- If someone flings you while it's ON, completely rebuild your stance
+                            executeACR(character, humanoid, root)
+                        end
+                        
+                        -- Failsafe for normal glitches
+                        if humanoid.PlatformStand then
+                            humanoid.PlatformStand = false
+                            humanoid.Jump = true
+                        end
+                    end
+                end)
+            end)
+        end
+    else
+        flingBtn.Text = "Anti-Fling: OFF"
+        flingBtn.TextColor3 = Color3.fromRGB(255, 75, 75)
+        uiStroke.Color = Color3.fromRGB(255, 75, 75)
+        
+        if noFallConnection then
+            noFallConnection:Disconnect()
+            noFallConnection = nil
+        end
+        
+        applyHumanoidStates(hum, false)
+        -- One last snap just in case you turn it off while falling
+        executeACR(char, hum, hrp) 
+    end
+end
+
+flingBtn.MouseButton1Click:Connect(function()
+    toggleAntiFling(not noFallEnabled)
+end)
+
+localPlayer.CharacterAdded:Connect(function(char)
+    if noFallEnabled then
+        task.wait(0.5)
+        local hum = char:WaitForChild("Humanoid")
+        applyHumanoidStates(hum, true)
+    end
+end)
 
 -- Force standing rescue
 local function forceStandUp(hum)
