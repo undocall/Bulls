@@ -421,6 +421,7 @@ getgenv().superPowerEnabled = false
 getgenv().noclipEnabled = false
 getgenv().instantRecoveryEnabled = false
 getgenv().isRecovering = false
+getgenv().recoveryDelay = 0.6 -- Set custom delay here (default: 0.6 seconds)
 
 uiLibrary:AddToggle("Super Power (Speed/InfJump)", function(enabled)
     getgenv().superPowerEnabled = enabled
@@ -445,6 +446,17 @@ uiLibrary:AddToggle("Instant Recovery (Fast Stand)", function(enabled)
     playSound("rbxassetid://12221976")
 end, false)
 
+-- Recovery delay adjustments in UI
+uiLibrary:AddButton("(Recovery Delay +0.1s)", function()
+    getgenv().recoveryDelay = math.round(((getgenv().recoveryDelay or 0.6) + 0.1) * 10) / 10
+    print("Recovery Delay set to: " .. tostring(getgenv().recoveryDelay) .. "s")
+end)
+
+uiLibrary:AddButton("(Recovery Delay -0.1s)", function()
+    getgenv().recoveryDelay = math.clamp(math.round(((getgenv().recoveryDelay or 0.6) - 0.1) * 10) / 10, 0, 10)
+    print("Recovery Delay set to: " .. tostring(getgenv().recoveryDelay) .. "s")
+end)
+
 RunService.Stepped:Connect(function()
     local char = localPlayer.Character
     if not char then return end
@@ -468,7 +480,7 @@ RunService.Stepped:Connect(function()
         end
     end
 
-    -- SMART DELAYED RECOVERY LOGIC (Anti-juggle, looks legit)
+    -- SMART DELAYED RECOVERY LOGIC (Anti-juggle, customizable delay)
     if hum and hrp and getgenv().instantRecoveryEnabled then
         local state = hum:GetState()
         
@@ -494,8 +506,11 @@ RunService.Stepped:Connect(function()
                     getgenv().isRecovering = true
                     
                     task.spawn(function()
-                        -- 0.9 second delay looks like a natural, fast reaction
-                        task.wait(0.9)
+                        -- Uses the custom delay (0.0 to any number)
+                        local delayTime = getgenv().recoveryDelay or 0.6
+                        if delayTime > 0 then
+                            task.wait(delayTime)
+                        end
                         
                         if char and hum and hrp and hum.Health > 0 then
                             hum.PlatformStand = false
