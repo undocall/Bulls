@@ -415,11 +415,12 @@ end, false)
 
 
 ------------------------------------------------------------------
--- SUPER POWER ENGINE & GHOST MODE
+-- SUPER POWER ENGINE, GHOST MODE & SMART RECOVERY
 ------------------------------------------------------------------
 getgenv().superPowerEnabled = false
 getgenv().noclipEnabled = false
 getgenv().instantRecoveryEnabled = false
+getgenv().isRecovering = false
 
 uiLibrary:AddToggle("Super Power (Speed/InfJump)", function(enabled)
     getgenv().superPowerEnabled = enabled
@@ -439,16 +440,9 @@ uiLibrary:AddToggle("Ghost Mode (Noclip)", function(enabled)
     playSound("rbxassetid://12221976")
 end, false)
 
--- NEW: AGGRESSIVE INSTA-STAND RECOVERY
 uiLibrary:AddToggle("Instant Recovery (Fast Stand)", function(enabled)
     getgenv().instantRecoveryEnabled = enabled
     playSound("rbxassetid://12221976")
-    local char = localPlayer.Character
-    local hum = char and char:FindFirstChildOfClass("Humanoid")
-    if hum then
-        hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, not enabled)
-        hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, not enabled)
-    end
 end, false)
 
 RunService.Stepped:Connect(function()
@@ -474,40 +468,52 @@ RunService.Stepped:Connect(function()
         end
     end
 
-    -- AGGRESSIVE FAST RECOVERY LOGIC (Fixes the "ball" effect)
+    -- SMART DELAYED RECOVERY LOGIC (Anti-juggle, looks legit)
     if hum and hrp and getgenv().instantRecoveryEnabled then
         local state = hum:GetState()
         
-        -- Check if you are currently knocked out or ragdolled
         local isKnocked = (hum.PlatformStand or hum.Sit or 
             state == Enum.HumanoidStateType.FallingDown or 
             state == Enum.HumanoidStateType.Ragdoll or 
             state == Enum.HumanoidStateType.GettingUp)
             
         if isKnocked then
-            -- Raycast down to see if you have hit the ground
             local rayOrigin = hrp.Position
-            local rayDirection = Vector3.new(0, -4.5, 0) -- Check roughly leg distance
+            local rayDirection = Vector3.new(0, -4.5, 0)
             local raycastParams = RaycastParams.new()
             raycastParams.FilterDescendantsInstances = {char}
             raycastParams.FilterType = Enum.RaycastFilterType.Exclude
             
             local floorHit = workspace:Raycast(rayOrigin, rayDirection, raycastParams)
             
-            -- If you touch the ground or aren't in the air, instantly snap upright
             if floorHit or hum.FloorMaterial ~= Enum.Material.Air then
-                -- 1. Strip the knockout state
-                hum.PlatformStand = false
-                hum.Sit = false
-                hum:ChangeState(Enum.HumanoidStateType.Running)
+                -- Kill spinning instantly so you don't roll like a ball
+                hrp.AssemblyAngularVelocity = Vector3.zero 
                 
-                -- 2. Kill the angular velocity (Stops you from rolling like a ball)
-                hrp.AssemblyAngularVelocity = Vector3.zero
-                
-                -- 3. Snap your CFrame rotation straight up
-                local rx, ry, rz = hrp.CFrame:ToOrientation()
-                hrp.CFrame = CFrame.new(hrp.Position) * CFrame.Angles(0, ry, 0)
+                if not getgenv().isRecovering then
+                    getgenv().isRecovering = true
+                    
+                    task.spawn(function()
+                        -- 0.6 second delay looks like a natural, fast reaction
+                        task.wait(0.6)
+                        
+                        if char and hum and hrp and hum.Health > 0 then
+                            hum.PlatformStand = false
+                            hum.Sit = false
+                            hum:ChangeState(Enum.HumanoidStateType.Running)
+                            
+                            hrp.AssemblyAngularVelocity = Vector3.zero
+                            local rx, ry, rz = hrp.CFrame:ToOrientation()
+                            hrp.CFrame = CFrame.new(hrp.Position + Vector3.new(0, 1.5, 0)) * CFrame.Angles(0, ry, 0)
+                        end
+                        
+                        task.wait(0.2)
+                        getgenv().isRecovering = false
+                    end)
+                end
             end
+        else
+            getgenv().isRecovering = false 
         end
     end
 end)
@@ -522,7 +528,7 @@ end)
 
 
 ------------------------------------------------------------------
--- GOD-SPEED KILL AURA (Replaced Auto-Hit)
+-- GOD-SPEED KILL AURA
 ------------------------------------------------------------------
 local reachRange = 50
 local rangeSquared = reachRange * reachRange
@@ -730,11 +736,5 @@ localPlayer.CharacterAdded:Connect(function(char)
         task.wait(0.5)
         local hum = char:WaitForChild("Humanoid")
         applyHumanoidStates(hum, true)
-    end
-    if getgenv().instantRecoveryEnabled then
-        task.wait(0.5)
-        local hum = char:WaitForChild("Humanoid")
-        hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
-        hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
     end
 end)
