@@ -508,15 +508,68 @@ uiLibrary:AddToggle("Fpp Toggle", function(enabled)
     end
 end, false)
 
+-- NEW FEATURE: ULTIMATE FULL SPEED AUTO-HIT
+uiLibrary:AddToggle("Auto-Hit (Max Speed)", function(enabled)
+    getgenv().autoHitEnabled = enabled
+    playSound("rbxassetid://12221976")
+    
+    if enabled then
+        if not getgenv().autoHitConnection then
+            getgenv().autoHitConnection = RunService.Heartbeat:Connect(function()
+                if not getgenv().autoHitEnabled then return end
+                
+                local char = localPlayer.Character
+                if not char then return end
+                
+                -- Detect currently equipped tool
+                local tool = char:FindFirstChildOfClass("Tool")
+                if not tool then return end
+                
+                local handle = tool:FindFirstChild("Handle") or tool:FindFirstChildWhichIsA("BasePart")
+                if not handle then return end
+                
+                -- Visually spam the weapon attack
+                tool:Activate()
+                
+                local myRoot = char:FindFirstChild("HumanoidRootPart")
+                if not myRoot then return end
+                
+                -- Scan for nearby enemies
+                for _, player in ipairs(Players:GetPlayers()) do
+                    if isEnemy(player) and player.Character then
+                        local enemyRoot = player.Character:FindFirstChild("HumanoidRootPart") or player.Character:FindFirstChild("UpperTorso")
+                        local enemyHum = player.Character:FindFirstChildOfClass("Humanoid")
+                        
+                        -- Check if they are alive and within the ultimate reach (30 studs)
+                        if enemyRoot and enemyHum and enemyHum.Health > 0 then
+                            local distance = (myRoot.Position - enemyRoot.Position).Magnitude
+                            if distance <= 30 then
+                                -- Exploit function to force a hit on the server instantly
+                                if firetouchinterest then
+                                    firetouchinterest(handle, enemyRoot, 0) -- Fire touch
+                                    firetouchinterest(handle, enemyRoot, 1) -- Fire untouch to reset
+                                end
+                            end
+                        end
+                    end
+                end
+            end)
+        end
+    else
+        if getgenv().autoHitConnection then
+            getgenv().autoHitConnection:Disconnect()
+            getgenv().autoHitConnection = nil
+        end
+    end
+end, false)
+
 uiLibrary:AddButton("AimLock", function()
     playSound("rbxassetid://12221976")
 end)
 
-
 ------------------------------------------------------------------
 -- EXTERNAL FLOATING ANTI-FLING BUTTON SYSTEM (WITH ACR TECH)
 ------------------------------------------------------------------
-local CoreGui = game:GetService("CoreGui")
 if CoreGui:FindFirstChild("AntiFlingStandaloneGui") then
     CoreGui.AntiFlingStandaloneGui:Destroy()
 end
@@ -555,7 +608,7 @@ uiStroke.Parent = flingBtn
 local noFallEnabled = false
 local noFallConnection
 
--- NEW FEATURE: Absolute CFrame Resuscitation (ACR)
+-- FEATURE: Absolute CFrame Resuscitation (ACR)
 local function executeACR(char, hum, hrp)
     if not (char and hum and hrp) then return end
     
@@ -574,7 +627,6 @@ local function executeACR(char, hum, hrp)
         local lookVector = hrp.CFrame.LookVector
         local flatLook = Vector3.new(lookVector.X, 0, lookVector.Z).Unit
         
-        -- Fallback if looking straight up/down
         if flatLook.Magnitude < 0.1 then flatLook = Vector3.new(0, 0, -1) end 
         
         local newPos = currentPos + Vector3.new(0, 2.5, 0)
@@ -610,7 +662,6 @@ local function toggleAntiFling(enabled)
         flingBtn.TextColor3 = Color3.fromRGB(75, 255, 75)
         uiStroke.Color = Color3.fromRGB(75, 255, 75)
         
-        -- Execute the ACR tech the moment you turn it ON
         executeACR(char, hum, hrp)
         applyHumanoidStates(hum, true)
         
@@ -628,13 +679,10 @@ local function toggleAntiFling(enabled)
                         local angVel = root.AssemblyAngularVelocity
                         local horizSpeed = Vector3.new(linVel.X, 0, linVel.Z).Magnitude
                         
-                        -- Extreme Fling Detection
                         if horizSpeed > 150 or angVel.Magnitude > 75 then
-                            -- If someone flings you while it's ON, completely rebuild your stance
                             executeACR(character, humanoid, root)
                         end
                         
-                        -- Failsafe for normal glitches
                         if humanoid.PlatformStand then
                             humanoid.PlatformStand = false
                             humanoid.Jump = true
@@ -654,96 +702,7 @@ local function toggleAntiFling(enabled)
         end
         
         applyHumanoidStates(hum, false)
-        -- One last snap just in case you turn it off while falling
         executeACR(char, hum, hrp) 
-    end
-end
-
-flingBtn.MouseButton1Click:Connect(function()
-    toggleAntiFling(not noFallEnabled)
-end)
-
-localPlayer.CharacterAdded:Connect(function(char)
-    if noFallEnabled then
-        task.wait(0.5)
-        local hum = char:WaitForChild("Humanoid")
-        applyHumanoidStates(hum, true)
-    end
-end)
-
--- Force standing rescue
-local function forceStandUp(hum)
-    if hum then
-        hum.PlatformStand = false
-        hum.Sit = false
-        hum:ChangeState(Enum.HumanoidStateType.GettingUp)
-    end
-end
-
-local function toggleAntiFling(enabled)
-    noFallEnabled = enabled
-    pcall(function() playSound("rbxassetid://12221976") end)
-    
-    local char = localPlayer.Character
-    local hum = char and char:FindFirstChildOfClass("Humanoid")
-    
-    if enabled then
-        flingBtn.Text = "Anti-Fling: ON"
-        flingBtn.TextColor3 = Color3.fromRGB(75, 255, 75)
-        uiStroke.Color = Color3.fromRGB(75, 255, 75)
-        
-        -- Force the character to stand up BEFORE disabling states
-        forceStandUp(hum)
-        applyHumanoidStates(hum, true)
-        
-        if not noFallConnection then
-            noFallConnection = RunService.Heartbeat:Connect(function()
-                pcall(function()
-                    local character = localPlayer.Character
-                    if not character then return end
-                    
-                    local hrp = character:FindFirstChild("HumanoidRootPart")
-                    local humanoid = character:FindFirstChildOfClass("Humanoid")
-                    
-                    if hrp and humanoid then
-                        -- Check if Roblox somehow glitched them onto the floor
-                        local state = humanoid:GetState()
-                        if state == Enum.HumanoidStateType.FallingDown or state == Enum.HumanoidStateType.Ragdoll or state == Enum.HumanoidStateType.Physics then
-                            forceStandUp(humanoid)
-                        end
-
-                        local linVel = hrp.AssemblyLinearVelocity
-                        local angVel = hrp.AssemblyAngularVelocity
-                        local horizSpeed = Vector3.new(linVel.X, 0, linVel.Z).Magnitude
-                        
-                        -- Fling detection
-                        if horizSpeed > 120 or angVel.Magnitude > 60 then
-                            hrp.AssemblyLinearVelocity = Vector3.new(0, math.clamp(linVel.Y, -50, 80), 0)
-                            hrp.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
-                            
-                            -- Trigger a stand-up recovery right after nullifying fling
-                            forceStandUp(humanoid)
-                        end
-                        
-                        if humanoid.PlatformStand then
-                            humanoid.PlatformStand = false
-                        end
-                    end
-                end)
-            end)
-        end
-    else
-        flingBtn.Text = "Anti-Fling: OFF"
-        flingBtn.TextColor3 = Color3.fromRGB(255, 75, 75)
-        uiStroke.Color = Color3.fromRGB(255, 75, 75)
-        
-        if noFallConnection then
-            noFallConnection:Disconnect()
-            noFallConnection = nil
-        end
-        
-        applyHumanoidStates(hum, false)
-        forceStandUp(hum) -- Final rescue push on toggle off
     end
 end
 
