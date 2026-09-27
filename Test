@@ -546,7 +546,7 @@ uiLibrary:AddToggle("Fast Recovery (Auto Regen)", function(enabled)
     playSound("rbxassetid://12221976")
 end, false)
 
--- Anti-Fling / No Fall 
+-- Anti-Fling / No Fall
 local noFallEnabled = false
 local noFallConnection
 
@@ -577,130 +577,68 @@ uiLibrary:AddToggle("No Fall (Anti-Fling)", function(enabled)
                         local angVel = hrp.AssemblyAngularVelocity
                         local horizSpeed = Vector3.new(linVel.X, 0, linVel.Z).Magnitude
                         
-                        if horizSpeed > 120 or angVel.Magnitude > 60 then
-                            hrp.AssemblyLinearVelocity = Vector3.new(0, math.clamp(linVel.Y, -50, 80), 0)
+                        if horizSpeed > 150 or math.abs(linVel.Y) > 150 or angVel.Magnitude > 50 then
+                            hrp.AssemblyLinearVelocity = Vector3.new(0, -5, 0)
                             hrp.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
-                        end
-                        
-                        if humanoid.PlatformStand then
-                            humanoid.PlatformStand = false
                         end
                     end
                 end)
             end)
         end
     else
-        if noFallConnection then
-            noFallConnection:Disconnect()
-            noFallConnection = nil
-        end
         if hum then
             hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, true)
             hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, true)
         end
+        if noFallConnection then
+            noFallConnection:Disconnect()
+            noFallConnection = nil
+        end
     end
 end, false)
 
--- Humanized TriggerBot
-local triggerBotEnabled = false
-local triggerBotConnection
-local isTriggering = false
+-- Realistic Anti-Fling (Glitch/Lag Simulation)
+local realisticAntiFlingEnabled = false
+local realisticAntiFlingConnection
+local lastGlitchTime = tick()
 
--- Smart Air Control (Jump-Brake)
-RunService.Heartbeat:Connect(function()
-    if not smartAirControlEnabled then return end
-    local char = localPlayer.Character
-    local hum = char and char:FindFirstChildOfClass("Humanoid")
-    local hrp = char and char:FindFirstChild("HumanoidRootPart")
-    
-    if hum and hrp and hum:GetState() == Enum.HumanoidStateType.Freefall then
-        local vel = hrp.AssemblyLinearVelocity
-        local horizVel = Vector3.new(vel.X, 0, vel.Z)
-        
-        -- If moving fast enough horizontally
-        if horizVel.Magnitude > 10 then
-            -- Predict where player will be in 0.6 seconds
-            local predictionTime = 0.6 
-            local predictedPos = hrp.Position + (horizVel * predictionTime)
-            
-            -- Raycast down to check if there is land
-            local raycastParams = RaycastParams.new()
-            raycastParams.FilterDescendantsInstances = {char}
-            raycastParams.FilterType = Enum.RaycastFilterType.Exclude
-            raycastParams.IgnoreWater = true
-            
-            local result = workspace:Raycast(predictedPos, Vector3.new(0, -60, 0), raycastParams)
-            
-            -- If predicting a fall into the void, kill horizontal momentum
-            if not result then
-                hrp.AssemblyLinearVelocity = Vector3.new(vel.X * 0.1, vel.Y, vel.Z * 0.1)
-            end
-        end
-    end
-end)
-
-local function executeMobileClick()
-    if isTriggering then return end
-    isTriggering = true
-    
-    task.wait(math.random(20, 50) / 1000) 
-    
-    local character = localPlayer.Character
-    if character then
-        local tool = character:FindFirstChildOfClass("Tool")
-        if tool then
-            pcall(function() tool:Activate() end)
-        end
-    end
-    
-    task.wait(math.random(60, 130) / 1000)
-    isTriggering = false
-end
-
-local function checkCrosshairTarget()
-    local camera = workspace.CurrentCamera
-    local viewportSize = camera.ViewportSize
-    local center = Vector2.new(viewportSize.X / 2, viewportSize.Y / 2)
-    
-    local ray = camera:ViewportPointToRay(center.X, center.Y)
-    local raycastParams = RaycastParams.new()
-    raycastParams.FilterDescendantsInstances = {localPlayer.Character, camera}
-    raycastParams.FilterType = Enum.RaycastFilterType.Exclude
-    raycastParams.IgnoreWater = true
-    
-    local result = workspace:Raycast(ray.Origin, ray.Direction * 600, raycastParams)
-    
-    if result and result.Instance then
-        local targetCharacter = result.Instance:FindFirstAncestorOfClass("Model")
-        if targetCharacter and targetCharacter:FindFirstChild("Humanoid") and targetCharacter.Humanoid.Health > 0 then
-            local targetPlayer = Players:GetPlayerFromCharacter(targetCharacter)
-            if targetPlayer and isEnemy(targetPlayer) then
-                return true
-            end
-        end
-    end
-    return false
-end
-
-uiLibrary:AddToggle("TriggerBot (Mobile)", function(enabled)
-    triggerBotEnabled = enabled
+uiLibrary:AddToggle("Realistic Anti-Fling (Glitchy)", function(enabled)
+    realisticAntiFlingEnabled = enabled
     playSound("rbxassetid://12221976")
     
     if enabled then
-        if not triggerBotConnection then
-            triggerBotConnection = RunService.RenderStepped:Connect(function()
-                if triggerBotEnabled and not isTriggering then
-                    if checkCrosshairTarget() then
-                        task.spawn(executeMobileClick)
+        realisticAntiFlingConnection = RunService.Heartbeat:Connect(function()
+            if not realisticAntiFlingEnabled then return end
+            
+            pcall(function()
+                local character = localPlayer.Character
+                if not character then return end
+                
+                local hrp = character:FindFirstChild("HumanoidRootPart")
+                if not hrp then return end
+                
+                local linVel = hrp.AssemblyLinearVelocity
+                local angVel = hrp.AssemblyAngularVelocity
+                
+                -- Detect if a fling is happening (high speed or high spin)
+                if linVel.Magnitude > 120 or angVel.Magnitude > 35 then
+                    -- Implement a cooldown so it doesn't trigger perfectly every frame
+                    if tick() - lastGlitchTime > 0.25 then
+                        -- 75% chance to save you (makes it look like natural game lag)
+                        if math.random(1, 100) <= 75 then
+                            -- Reduce momentum drastically to simulate rubber-banding
+                            hrp.AssemblyLinearVelocity = linVel * 0.1 
+                            hrp.AssemblyAngularVelocity = angVel * 0.05
+                            lastGlitchTime = tick()
+                        end
                     end
                 end
             end)
-        end
+        end)
     else
-        if triggerBotConnection then
-            triggerBotConnection:Disconnect()
-            triggerBotConnection = nil
+        if realisticAntiFlingConnection then
+            realisticAntiFlingConnection:Disconnect()
+            realisticAntiFlingConnection = nil
         end
-        isTriggering = false
     end
 end, false)
