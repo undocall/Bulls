@@ -4,7 +4,8 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local Lighting = game:GetService("Lighting")
 local TweenService = game:GetService("TweenService")
-local VirtualInputManager = game:GetService("VirtualInputManager")
+local UserInputService = game:GetService("UserInputService")
+local CoreGui = game:GetService("CoreGui")
 
 -- Player variables
 local localPlayer = Players.LocalPlayer
@@ -334,14 +335,11 @@ RunService.Heartbeat:Connect(function()
     local hum = char:FindFirstChildOfClass("Humanoid")
     if not hrp or not hum then return end
     
-    -- Flawless safe position tracking (Only saves position when standing on solid ground)
     if hum.FloorMaterial ~= Enum.Material.Air and hum.Health > 0 then
         lastSafePosition = hrp.Position
     end
     
-    -- Void Catching Logic
     if antiVoidEnabled and lastSafePosition then
-        -- Catch if falling below the map's death barrier, OR falling more than 300 studs from safe point
         local destroyHeight = workspace.FallenPartsDestroyHeight + 25
         if hrp.Position.Y < destroyHeight or hrp.Position.Y < (lastSafePosition.Y - 350) then
             hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
@@ -424,7 +422,7 @@ local function toggleESP(enabled)
     end
 end
 
--- Player tracking system + Hit & Weave Monitor
+-- Player tracking system
 local function trackPlayer(player)
     if not player then return end
     if isEnemy(player) then
@@ -472,7 +470,7 @@ Players.PlayerRemoving:Connect(function(player)
     end
 end)
 
--- UI Elements
+-- Main UI Elements
 fovIncreaseButton = uiLibrary:AddButton("(Fov +)", function()
     playSound("rbxassetid://12221967")
     local camera = workspace.CurrentCamera
@@ -553,59 +551,7 @@ uiLibrary:AddToggle("Fast Recovery (Auto Regen)", function(enabled)
     playSound("rbxassetid://12221976")
 end, false)
 
--- FIXED Anti-Fling / No Fall (Stops instant teleports from high jumps)
-local noFallEnabled = false
-local noFallConnection
-
-uiLibrary:AddToggle("No Fall (Anti-Fling)", function(enabled)
-    noFallEnabled = enabled
-    playSound("rbxassetid://12221976")
-    
-    local char = localPlayer.Character
-    local hum = char and char:FindFirstChildOfClass("Humanoid")
-    
-    if enabled then
-        if hum then
-            hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
-            hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
-        end
-        
-        if not noFallConnection then
-            noFallConnection = RunService.Heartbeat:Connect(function()
-                pcall(function()
-                    local character = localPlayer.Character
-                    if not character then return end
-                    
-                    local hrp = character:FindFirstChild("HumanoidRootPart")
-                    local humanoid = character:FindFirstChildOfClass("Humanoid")
-                    
-                    if hrp and humanoid then
-                        local linVel = hrp.AssemblyLinearVelocity
-                        local angVel = hrp.AssemblyAngularVelocity
-                        local horizSpeed = Vector3.new(linVel.X, 0, linVel.Z).Magnitude
-                        
-                        -- Higher limits so normal jumping/falling isn't interrupted
-                        if horizSpeed > 200 or math.abs(linVel.Y) > 300 or angVel.Magnitude > 60 then
-                            hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
-                            hrp.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
-                        end
-                    end
-                end)
-            end)
-        end
-    else
-        if hum then
-            hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, true)
-            hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, true)
-        end
-        if noFallConnection then
-            noFallConnection:Disconnect()
-            noFallConnection = nil
-        end
-    end
-end, false)
-
--- FIXED Realistic Anti-Fling (Glitch/Lag Simulation)
+-- Realistic Anti-Fling (Still in UI as requested previously)
 local realisticAntiFlingEnabled = false
 local realisticAntiFlingConnection
 local lastGlitchTime = tick()
@@ -617,29 +563,20 @@ uiLibrary:AddToggle("Realistic Anti-Fling (Glitchy)", function(enabled)
     if enabled then
         realisticAntiFlingConnection = RunService.Heartbeat:Connect(function()
             if not realisticAntiFlingEnabled then return end
-            
             pcall(function()
                 local character = localPlayer.Character
                 if not character then return end
-                
                 local hrp = character:FindFirstChild("HumanoidRootPart")
                 if not hrp then return end
                 
                 local linVel = hrp.AssemblyLinearVelocity
                 local angVel = hrp.AssemblyAngularVelocity
                 
-                -- Detect true flings (Not standard falling)
                 if linVel.Magnitude > 200 or angVel.Magnitude > 60 then
-                    
                     if tick() - lastGlitchTime > 0.20 then
                         if math.random(1, 100) <= 75 then
-                            
-                            -- Fix: Cap the maximum output velocity so extreme flings don't still push you too fast
                             local newLinVel = linVel * 0.05
-                            if newLinVel.Magnitude > 30 then
-                                newLinVel = newLinVel.Unit * 30
-                            end
-                            
+                            if newLinVel.Magnitude > 30 then newLinVel = newLinVel.Unit * 30 end
                             hrp.AssemblyLinearVelocity = newLinVel 
                             hrp.AssemblyAngularVelocity = angVel * 0.05
                             lastGlitchTime = tick()
@@ -655,3 +592,131 @@ uiLibrary:AddToggle("Realistic Anti-Fling (Glitchy)", function(enabled)
         end
     end
 end, false)
+
+-- =========================================================================
+-- CUSTOM DRAGGABLE MINI-BUTTON FOR QUICK ANTI-FLING (OUTSIDE OF MAIN UI)
+-- =========================================================================
+
+-- Create the ScreenGui securely
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "QuickAntiFlingUI"
+ScreenGui.ResetOnSpawn = false
+local successGui, _ = pcall(function() ScreenGui.Parent = CoreGui end)
+if not successGui then ScreenGui.Parent = localPlayer:WaitForChild("PlayerGui") end
+
+-- Create the Button
+local QuickButton = Instance.new("TextButton")
+QuickButton.Name = "AntiFlingToggle"
+QuickButton.Parent = ScreenGui
+QuickButton.BackgroundColor3 = Color3.fromRGB(170, 0, 0) -- Red initially (OFF)
+QuickButton.Position = UDim2.new(0.5, -60, 0, 10) -- Top center of screen
+QuickButton.Size = UDim2.new(0, 120, 0, 35)
+QuickButton.Font = Enum.Font.SourceSansBold
+QuickButton.Text = "Anti-Fling: OFF"
+QuickButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+QuickButton.TextSize = 16
+QuickButton.BorderSizePixel = 0
+
+-- Add rounded corners to make it look clean
+local UICorner = Instance.new("UICorner")
+UICorner.CornerRadius = UDim.new(0, 8)
+UICorner.Parent = QuickButton
+
+-- Add a small shadow/outline
+local UIStroke = Instance.new("UIStroke")
+UIStroke.Parent = QuickButton
+UIStroke.Thickness = 2
+UIStroke.Color = Color3.fromRGB(30, 30, 30)
+
+-- Draggable Logic for the Quick Button
+local dragging, dragInput, dragStart, startPos
+QuickButton.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        dragStart = input.Position
+        startPos = QuickButton.Position
+        
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then dragging = false end
+        end)
+    end
+end)
+
+QuickButton.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+        dragInput = input
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if input == dragInput and dragging then
+        local delta = input.Position - dragStart
+        QuickButton.Position = UDim2.new(
+            startPos.X.Scale, startPos.X.Offset + delta.X, 
+            startPos.Y.Scale, startPos.Y.Offset + delta.Y
+        )
+    end
+end)
+
+-- Main Toggle Logic for the Button
+local quickAntiFlingEnabled = false
+local quickAntiFlingConnection
+
+QuickButton.MouseButton1Click:Connect(function()
+    quickAntiFlingEnabled = not quickAntiFlingEnabled
+    
+    if quickAntiFlingEnabled then
+        -- TURN ON
+        QuickButton.Text = "Anti-Fling: ON"
+        QuickButton.BackgroundColor3 = Color3.fromRGB(0, 170, 0) -- Green
+        playSound("rbxassetid://12221976")
+        
+        local char = localPlayer.Character
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        if hum then
+            hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
+            hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
+        end
+        
+        if not quickAntiFlingConnection then
+            quickAntiFlingConnection = RunService.Heartbeat:Connect(function()
+                pcall(function()
+                    local character = localPlayer.Character
+                    if not character then return end
+                    
+                    local hrp = character:FindFirstChild("HumanoidRootPart")
+                    local humanoid = character:FindFirstChildOfClass("Humanoid")
+                    
+                    if hrp and humanoid then
+                        local linVel = hrp.AssemblyLinearVelocity
+                        local angVel = hrp.AssemblyAngularVelocity
+                        local horizSpeed = Vector3.new(linVel.X, 0, linVel.Z).Magnitude
+                        
+                        -- High limits so normal jumps/falls work, but flings are stopped cold
+                        if horizSpeed > 200 or math.abs(linVel.Y) > 300 or angVel.Magnitude > 60 then
+                            hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+                            hrp.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+                        end
+                    end
+                end)
+            end)
+        end
+    else
+        -- TURN OFF
+        QuickButton.Text = "Anti-Fling: OFF"
+        QuickButton.BackgroundColor3 = Color3.fromRGB(170, 0, 0) -- Red
+        playSound("rbxassetid://12221976")
+        
+        local char = localPlayer.Character
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        if hum then
+            hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, true)
+            hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, true)
+        end
+        
+        if quickAntiFlingConnection then
+            quickAntiFlingConnection:Disconnect()
+            quickAntiFlingConnection = nil
+        end
+    end
+end)
