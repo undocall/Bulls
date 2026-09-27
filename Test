@@ -325,21 +325,28 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
--- Anti-Void Platform Guard
+-- FIXED Anti-Void Platform Guard
 RunService.Heartbeat:Connect(function()
     local char = localPlayer.Character
-    if not char or not char:FindFirstChild("HumanoidRootPart") then return end
-    local hrp = char.HumanoidRootPart
+    if not char then return end
     
-    local ray = workspace:Raycast(hrp.Position, Vector3.new(0, -15, 0))
-    if ray and ray.Instance then
-        lastSafePosition = hrp.Position + Vector3.new(0, 3, 0)
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not hrp or not hum then return end
+    
+    -- Flawless safe position tracking (Only saves position when standing on solid ground)
+    if hum.FloorMaterial ~= Enum.Material.Air and hum.Health > 0 then
+        lastSafePosition = hrp.Position
     end
     
+    -- Void Catching Logic
     if antiVoidEnabled and lastSafePosition then
-        if hrp.Position.Y < (lastSafePosition.Y - 18) then
+        -- Catch if falling below the map's death barrier, OR falling more than 300 studs from safe point
+        local destroyHeight = workspace.FallenPartsDestroyHeight + 25
+        if hrp.Position.Y < destroyHeight or hrp.Position.Y < (lastSafePosition.Y - 350) then
             hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
-            hrp.CFrame = CFrame.new(lastSafePosition)
+            hrp.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+            hrp.CFrame = CFrame.new(lastSafePosition + Vector3.new(0, 5, 0))
             playSound("rbxassetid://12221976")
         end
     end
@@ -546,7 +553,7 @@ uiLibrary:AddToggle("Fast Recovery (Auto Regen)", function(enabled)
     playSound("rbxassetid://12221976")
 end, false)
 
--- Anti-Fling / No Fall
+-- FIXED Anti-Fling / No Fall (Stops instant teleports from high jumps)
 local noFallEnabled = false
 local noFallConnection
 
@@ -577,8 +584,9 @@ uiLibrary:AddToggle("No Fall (Anti-Fling)", function(enabled)
                         local angVel = hrp.AssemblyAngularVelocity
                         local horizSpeed = Vector3.new(linVel.X, 0, linVel.Z).Magnitude
                         
-                        if horizSpeed > 150 or math.abs(linVel.Y) > 150 or angVel.Magnitude > 50 then
-                            hrp.AssemblyLinearVelocity = Vector3.new(0, -5, 0)
+                        -- Higher limits so normal jumping/falling isn't interrupted
+                        if horizSpeed > 200 or math.abs(linVel.Y) > 300 or angVel.Magnitude > 60 then
+                            hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
                             hrp.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
                         end
                     end
@@ -597,7 +605,7 @@ uiLibrary:AddToggle("No Fall (Anti-Fling)", function(enabled)
     end
 end, false)
 
--- Realistic Anti-Fling (Glitch/Lag Simulation)
+-- FIXED Realistic Anti-Fling (Glitch/Lag Simulation)
 local realisticAntiFlingEnabled = false
 local realisticAntiFlingConnection
 local lastGlitchTime = tick()
@@ -620,14 +628,19 @@ uiLibrary:AddToggle("Realistic Anti-Fling (Glitchy)", function(enabled)
                 local linVel = hrp.AssemblyLinearVelocity
                 local angVel = hrp.AssemblyAngularVelocity
                 
-                -- Detect if a fling is happening (high speed or high spin)
-                if linVel.Magnitude > 120 or angVel.Magnitude > 35 then
-                    -- Implement a cooldown so it doesn't trigger perfectly every frame
-                    if tick() - lastGlitchTime > 0.25 then
-                        -- 75% chance to save you (makes it look like natural game lag)
+                -- Detect true flings (Not standard falling)
+                if linVel.Magnitude > 200 or angVel.Magnitude > 60 then
+                    
+                    if tick() - lastGlitchTime > 0.20 then
                         if math.random(1, 100) <= 75 then
-                            -- Reduce momentum drastically to simulate rubber-banding
-                            hrp.AssemblyLinearVelocity = linVel * 0.1 
+                            
+                            -- Fix: Cap the maximum output velocity so extreme flings don't still push you too fast
+                            local newLinVel = linVel * 0.05
+                            if newLinVel.Magnitude > 30 then
+                                newLinVel = newLinVel.Unit * 30
+                            end
+                            
+                            hrp.AssemblyLinearVelocity = newLinVel 
                             hrp.AssemblyAngularVelocity = angVel * 0.05
                             lastGlitchTime = tick()
                         end
