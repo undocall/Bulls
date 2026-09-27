@@ -40,18 +40,6 @@ local function playSound(soundId)
     sound.Ended:Connect(function() sound:Destroy() end)
 end
 
--- Load external scripts with error handling
-local function loadExternalScript(url)
-    local success, err = pcall(function()
-        loadstring(game:HttpGet("https://raw.githubusercontent.com/OBFhm5650lol/Credit-obfuscated-lol/refs/heads/main/OBFCredit"))()
-    end)
-    if not success then
-        warn("Failed to load external script: " .. err)
-        return false
-    end
-    return true
-end
-
 -- Load first external script
 task.wait()
 playSound("rbxassetid://12221831")
@@ -63,7 +51,7 @@ local success, err = pcall(function()
 end)
 
 if not success or not uiLibrary then
-    error("Failed to load UI library: " .. (err or "unknown error"))
+    error("Failed to load UI library")
 end
 
 -- Configure UI
@@ -352,31 +340,26 @@ end)
 
 -- UI Elements
 fovIncreaseButton = uiLibrary:AddButton("(Fov +)", function()
-    playSound("rbxassetid://12221967")
     local camera = workspace.CurrentCamera
     camera.FieldOfView = math.clamp(camera.FieldOfView + 5, 1, 120)
 end)
 
 fovDecreaseButton = uiLibrary:AddButton("(Fov -)", function()
-    playSound("rbxassetid://12221967")
     local camera = workspace.CurrentCamera
     camera.FieldOfView = math.clamp(camera.FieldOfView - 5, 1, 120)
 end)
 
 hitboxIncreaseButton = uiLibrary:AddButton("(Hitbox +)", function()
-    playSound("rbxassetid://12221967")
     hitboxSize = math.clamp(hitboxSize + 5, 1, 50)
     if hitboxEnabled then applyHitboxesToAllPlayers() end
 end)
 
 hitboxDecreaseButton = uiLibrary:AddButton("(Hitbox -)", function()
-    playSound("rbxassetid://12221967")
     hitboxSize = math.clamp(hitboxSize - 5, 1, 50)
     if hitboxEnabled then applyHitboxesToAllPlayers() end
 end)
 
 uiLibrary:AddButton("FullBright", function()
-    playSound("rbxassetid://12221967")
     Lighting.Brightness = 2
     Lighting.OutdoorAmbient = Color3.fromRGB(255, 255, 255)
     Lighting.Ambient = Color3.fromRGB(255, 255, 255)
@@ -399,19 +382,16 @@ uiLibrary:AddButton("FullBright", function()
 end)
 
 uiLibrary:AddButton("AntiLag", function()
-    playSound("rbxassetid://12221967")
     loadstring(game:HttpGet("https://raw.githubusercontent.com/OBFhm5650lol/Al/refs/heads/main/AntiLag", true))()
 end)
 
 uiLibrary:AddButton("AntiKick", function()
-    playSound("rbxassetid://12221967")
     loadstring(game:HttpGet("https://raw.githubusercontent.com/OBFhm5650lol/AntkickLol/refs/heads/main/Antikicklol"))()
 end)
 
 local fovEnabled = false
 uiLibrary:AddToggle("FOV Toggle", function(enabled)
     fovEnabled = enabled
-    playSound("rbxassetid://12221976")
     pcall(function()
         if fovIncreaseButton and fovDecreaseButton then
             fovIncreaseButton.Visible = enabled
@@ -424,26 +404,18 @@ uiLibrary:AddToggle("Expand Hitbox", function(enabled) toggleHitboxes(enabled) e
 uiLibrary:AddToggle("ESP", function(enabled) toggleESP(enabled) end, false)
 
 uiLibrary:AddToggle("Fpp Toggle", function(enabled)
-    playSound("rbxassetid://12221976")
     if enabled then
         local camera = workspace.CurrentCamera
         camera.CameraType = Enum.CameraType.Custom
         localPlayer.CameraMode = Enum.CameraMode.LockFirstPerson
-        if getgenv().cameraLockConnection then
-            getgenv().cameraLockConnection:Disconnect()
-            getgenv().cameraLockConnection = nil
-        end
     else
         localPlayer.CameraMode = Enum.CameraMode.Classic
     end
 end, false)
 
-uiLibrary:AddButton("AimLock", function()
-    playSound("rbxassetid://12221976")
-end)
 
 ------------------------------------------------------------------
--- SUPER POWER ENGINE, GHOST MODE & INSTANT RECOVERY
+-- SUPER POWER ENGINE & GHOST MODE
 ------------------------------------------------------------------
 getgenv().superPowerEnabled = false
 getgenv().noclipEnabled = false
@@ -467,7 +439,7 @@ uiLibrary:AddToggle("Ghost Mode (Noclip)", function(enabled)
     playSound("rbxassetid://12221976")
 end, false)
 
--- NEW TOGGLE: INSTANT STAND-UP RECOVERY
+-- NEW: AGGRESSIVE INSTA-STAND RECOVERY
 uiLibrary:AddToggle("Instant Recovery (Fast Stand)", function(enabled)
     getgenv().instantRecoveryEnabled = enabled
     playSound("rbxassetid://12221976")
@@ -502,20 +474,39 @@ RunService.Stepped:Connect(function()
         end
     end
 
-    -- Fast Stand-Up Recovery logic
-    if hum and getgenv().instantRecoveryEnabled then
-        local currentState = hum:GetState()
-        if currentState == Enum.HumanoidStateType.FallingDown 
-            or currentState == Enum.HumanoidStateType.Ragdoll 
-            or currentState == Enum.HumanoidStateType.GettingUp 
-            or currentState == Enum.HumanoidStateType.Physics then
+    -- AGGRESSIVE FAST RECOVERY LOGIC (Fixes the "ball" effect)
+    if hum and hrp and getgenv().instantRecoveryEnabled then
+        local state = hum:GetState()
+        
+        -- Check if you are currently knocked out or ragdolled
+        local isKnocked = (hum.PlatformStand or hum.Sit or 
+            state == Enum.HumanoidStateType.FallingDown or 
+            state == Enum.HumanoidStateType.Ragdoll or 
+            state == Enum.HumanoidStateType.GettingUp)
             
-            hum.PlatformStand = false
-            hum.Sit = false
-            hum:ChangeState(Enum.HumanoidStateType.Running)
+        if isKnocked then
+            -- Raycast down to see if you have hit the ground
+            local rayOrigin = hrp.Position
+            local rayDirection = Vector3.new(0, -4.5, 0) -- Check roughly leg distance
+            local raycastParams = RaycastParams.new()
+            raycastParams.FilterDescendantsInstances = {char}
+            raycastParams.FilterType = Enum.RaycastFilterType.Exclude
             
-            if hrp then
+            local floorHit = workspace:Raycast(rayOrigin, rayDirection, raycastParams)
+            
+            -- If you touch the ground or aren't in the air, instantly snap upright
+            if floorHit or hum.FloorMaterial ~= Enum.Material.Air then
+                -- 1. Strip the knockout state
+                hum.PlatformStand = false
+                hum.Sit = false
+                hum:ChangeState(Enum.HumanoidStateType.Running)
+                
+                -- 2. Kill the angular velocity (Stops you from rolling like a ball)
                 hrp.AssemblyAngularVelocity = Vector3.zero
+                
+                -- 3. Snap your CFrame rotation straight up
+                local rx, ry, rz = hrp.CFrame:ToOrientation()
+                hrp.CFrame = CFrame.new(hrp.Position) * CFrame.Angles(0, ry, 0)
             end
         end
     end
@@ -528,6 +519,7 @@ UserInputService.JumpRequest:Connect(function()
         if hum then hum:ChangeState(Enum.HumanoidStateType.Jumping) end
     end
 end)
+
 
 ------------------------------------------------------------------
 -- GOD-SPEED KILL AURA (Replaced Auto-Hit)
