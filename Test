@@ -4,7 +4,6 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local Lighting = game:GetService("Lighting")
 local TweenService = game:GetService("TweenService")
-local UserInputService = game:GetService("UserInputService")
 local CoreGui = game:GetService("CoreGui")
 
 -- Player variables
@@ -17,21 +16,24 @@ end
 -- Improved team detection function
 local function isEnemy(player)
     if player == localPlayer then
-        return false
+        return false -- Always return false for local player
     end
     
+    -- Check if the game has teams
     local teams = game:GetService("Teams"):GetTeams()
     if #teams > 1 then
+        -- Team-based game
         if localPlayer.Team == nil or player.Team == nil then
-            return true
+            return true  -- Players not in any team are considered enemies
         end
         return localPlayer.Team ~= player.Team
     else
+        -- Free-for-all game (no teams)
         return true
     end
 end
 
--- Sound function
+-- Sound function with better error handling
 local function playSound(soundId)
     local sound = Instance.new("Sound")
     sound.SoundId = soundId
@@ -42,6 +44,7 @@ local function playSound(soundId)
     end)
     
     if not success then
+        warn("Failed to play sound: " .. err)
         sound:Destroy()
         return
     end
@@ -51,6 +54,20 @@ local function playSound(soundId)
     end)
 end
 
+-- Load external scripts with error handling
+local function loadExternalScript(url)
+    local success, err = pcall(function()
+        loadstring(game:HttpGet("https://raw.githubusercontent.com/OBFhm5650lol/Credit-obfuscated-lol/refs/heads/main/OBFCredit"))()
+    end)
+    
+    if not success then
+        warn("Failed to load external script: " .. err)
+        return false
+    end
+    return true
+end
+
+-- Load first external script
 task.wait()
 playSound("rbxassetid://12221831")
 
@@ -61,11 +78,11 @@ local success, err = pcall(function()
 end)
 
 if not success or not uiLibrary then
-    error("Failed to load UI library")
+    error("Failed to load UI library: " .. (err or "unknown error"))
 end
 
 -- Configure UI
-uiLibrary:SetTitle("Hitblox Master (v8.0)")
+uiLibrary:SetTitle("Hitblox (v4.9)")
 uiLibrary:SetIcon("http://www.roblox.com/asset/?id=91738788645337")
 uiLibrary:SetTheme("HighContrast")
 task.wait(0.1)
@@ -75,47 +92,11 @@ playSound("rbxassetid://195868961")
 local hitboxSize = 10
 local hitboxTransparency = 0.9
 local hitboxEnabled = false
-local magneticEnabled = false
-local magneticDistance = 30
 local espEnabled = false
-local antiVoidEnabled = false
-local ultimateHealthEnabled = false
-local fastRecoveryEnabled = false
-local heavyweightEnabled = false
-local hitAndWeaveEnabled = false
-
-local maxAllowedHorizontalSpeed = 35
-local dampeningFactor = 0.25 
-local weaveSpeedBonus = 7
-local weaveDuration = 0.45
-local isWeaving = false
-
-local lastHealTime = tick()
-local lastSafePosition = nil
 local espGuis = {} 
 local hitboxIncreaseButton, hitboxDecreaseButton, fovIncreaseButton, fovDecreaseButton
 
--- Hit & Weave Trigger Function
-local function triggerHitAndWeave()
-    if not hitAndWeaveEnabled or isWeaving then return end
-    
-    local char = localPlayer.Character
-    local hum = char and char:FindFirstChildOfClass("Humanoid")
-    if not hum or hum.Health <= 0 then return end
-
-    isWeaving = true
-    local originalSpeed = hum.WalkSpeed
-    hum.WalkSpeed = originalSpeed + weaveSpeedBonus
-
-    task.delay(weaveDuration, function()
-        if hum and hum.Parent then
-            hum.WalkSpeed = math.max(16, hum.WalkSpeed - weaveSpeedBonus)
-        end
-        isWeaving = false
-    end)
-end
-
--- FULL R15/R6 Hitbox Functions
+-- Helper functions
 local function applyHitbox(character)
     if not character then return end
     
@@ -126,8 +107,8 @@ local function applyHitbox(character)
     if humanoid and humanoid.Health <= 0 then return end
     
     local isR15 = humanoid and humanoid.RigType == Enum.HumanoidRigType.R15
-    local rootPart = character:FindFirstChild("HumanoidRootPart") or character:FindFirstChild("UpperTorso")
     
+    local rootPart = character:FindFirstChild("HumanoidRootPart") or character:FindFirstChild("UpperTorso")
     if rootPart then
         if not rootPart:FindFirstChild("OriginalSize") then
             local originalSize = Instance.new("Vector3Value")
@@ -168,6 +149,7 @@ local function applyHitbox(character)
             originalSize.Value = head.Size
             originalSize.Parent = head
         end
+        
         head.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
         head.Transparency = hitboxTransparency
         head.BrickColor = BrickColor.new("Bright red")
@@ -187,6 +169,7 @@ local function applyHitbox(character)
                     originalSize.Value = part.Size
                     originalSize.Parent = part
                 end
+                
                 part.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
                 part.Transparency = hitboxTransparency
                 part.BrickColor = BrickColor.new("Dark red")
@@ -199,6 +182,7 @@ end
 
 local function resetHitbox(character)
     if not character then return end
+    
     local player = Players:GetPlayerFromCharacter(character)
     if player and player == localPlayer then return end
     
@@ -223,6 +207,7 @@ local function resetHitbox(character)
     
     local humanoid = character:FindFirstChildOfClass("Humanoid")
     local isR15 = humanoid and humanoid.RigType == Enum.HumanoidRigType.R15
+    
     if isR15 then
         local partsToReset = {"LowerTorso", "UpperTorso", "LeftUpperArm", "RightUpperArm", "LeftUpperLeg", "RightUpperLeg"}
         for _, partName in ipairs(partsToReset) do
@@ -254,12 +239,15 @@ local function resetHitboxesOnAllPlayers()
     end
 end
 
+-- Hitbox toggle system
 local hitboxCoroutine
 local function toggleHitboxes(enabled)
     hitboxEnabled = enabled
     playSound("rbxassetid://12221976")
+    
     if enabled then
         applyHitboxesToAllPlayers()
+        
         if not hitboxCoroutine then
             hitboxCoroutine = coroutine.create(function()
                 while hitboxEnabled and task.wait(0.5) do
@@ -283,90 +271,6 @@ local function toggleHitboxes(enabled)
         end
     end)
 end
-
--- Magnetic Hitboxes 
-RunService.Heartbeat:Connect(function()
-    if not magneticEnabled then return end
-    local char = localPlayer.Character
-    if not char or not char:FindFirstChild("HumanoidRootPart") then return end
-    local myPos = char.HumanoidRootPart.Position
-
-    for _, player in ipairs(Players:GetPlayers()) do
-        if isEnemy(player) and player.Character then
-            local enemyRoot = player.Character:FindFirstChild("HumanoidRootPart") or player.Character:FindFirstChild("UpperTorso")
-            if enemyRoot then
-                local dist = (enemyRoot.Position - myPos).Magnitude
-                if dist <= magneticDistance then
-                    enemyRoot.Size = Vector3.new(16, 16, 16)
-                    enemyRoot.Transparency = 1
-                    enemyRoot.CanCollide = false
-                end
-            end
-        end
-    end
-end)
-
--- Heavyweight Anti-Knockback (Dampened Velocity)
-RunService.Heartbeat:Connect(function()
-    if not heavyweightEnabled then return end
-    local char = localPlayer.Character
-    if not char then return end
-    local hrp = char:FindFirstChild("HumanoidRootPart")
-    if not hrp then return end
-
-    local vel = hrp.AssemblyLinearVelocity
-    local horizVel = Vector3.new(vel.X, 0, vel.Z)
-    local horizSpeed = horizVel.Magnitude
-
-    if horizSpeed > maxAllowedHorizontalSpeed then
-        local extraSpeed = horizSpeed - maxAllowedHorizontalSpeed
-        local newSpeed = maxAllowedHorizontalSpeed + (extraSpeed * dampeningFactor)
-        local clampedHoriz = horizVel.Unit * newSpeed
-        hrp.AssemblyLinearVelocity = Vector3.new(clampedHoriz.X, vel.Y, clampedHoriz.Z)
-    end
-end)
-
--- FIXED Anti-Void Platform Guard
-RunService.Heartbeat:Connect(function()
-    local char = localPlayer.Character
-    if not char then return end
-    
-    local hrp = char:FindFirstChild("HumanoidRootPart")
-    local hum = char:FindFirstChildOfClass("Humanoid")
-    if not hrp or not hum then return end
-    
-    if hum.FloorMaterial ~= Enum.Material.Air and hum.Health > 0 then
-        lastSafePosition = hrp.Position
-    end
-    
-    if antiVoidEnabled and lastSafePosition then
-        local destroyHeight = workspace.FallenPartsDestroyHeight + 25
-        if hrp.Position.Y < destroyHeight or hrp.Position.Y < (lastSafePosition.Y - 350) then
-            hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
-            hrp.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
-            hrp.CFrame = CFrame.new(lastSafePosition + Vector3.new(0, 5, 0))
-            playSound("rbxassetid://12221976")
-        end
-    end
-end)
-
--- Health Management System
-RunService.Heartbeat:Connect(function()
-    local char = localPlayer.Character
-    local hum = char and char:FindFirstChildOfClass("Humanoid")
-    
-    if hum and hum.Health > 0 then
-        if ultimateHealthEnabled then
-            hum.MaxHealth = math.huge
-            hum.Health = math.huge
-        elseif fastRecoveryEnabled and hum.Health < hum.MaxHealth then
-            if tick() - lastHealTime >= 0.2 then
-                hum.Health = math.clamp(hum.Health + 10, 0, hum.MaxHealth)
-                lastHealTime = tick()
-            end
-        end
-    end
-end)
 
 -- ESP system
 local function createESP(player)
@@ -402,12 +306,43 @@ local function createESP(player)
         
         espGuis[player] = espGui
         espGui.Parent = targetPart
+        
+        local function updateEspSize()
+            if player.Character and (player.Character:FindFirstChild("HumanoidRootPart") or player.Character:FindFirstChild("UpperTorso")) and 
+               localPlayer.Character and (localPlayer.Character:FindFirstChild("HumanoidRootPart") or localPlayer.Character:FindFirstChild("UpperTorso")) then
+                local playerRoot = player.Character:FindFirstChild("HumanoidRootPart") or player.Character:FindFirstChild("UpperTorso")
+                local localRoot = localPlayer.Character:FindFirstChild("HumanoidRootPart") or localPlayer.Character:FindFirstChild("UpperTorso")
+                
+                if playerRoot and localRoot then
+                    local distance = (localRoot.Position - playerRoot.Position).Magnitude
+                    local minSize = 10
+                    local maxSize = 100
+                    local calculatedSize = math.clamp(maxSize - (distance * 0.5), minSize, maxSize)
+                    espGui.Size = UDim2.new(0, calculatedSize, 0, calculatedSize * 0.5)
+                end
+            end
+        end
+        
+        local lastUpdate = tick()
+        local connection
+        connection = RunService.RenderStepped:Connect(function()
+            if not espGui or not espGui.Parent then
+                connection:Disconnect()
+                return
+            end
+            
+            if (tick() - lastUpdate) >= 0.1 then
+                updateEspSize()
+                lastUpdate = tick()
+            end
+        end)
     end
 end
 
 local function toggleESP(enabled)
     espEnabled = enabled
     playSound("rbxassetid://12221976")
+    
     if enabled then
         for _, player in ipairs(Players:GetPlayers()) do
             if isEnemy(player) then
@@ -416,7 +351,9 @@ local function toggleESP(enabled)
         end
     else
         for _, gui in pairs(espGuis) do
-            if gui then gui:Destroy() end
+            if gui then
+                gui:Destroy()
+            end
         end
         espGuis = {}
     end
@@ -425,43 +362,51 @@ end
 -- Player tracking system
 local function trackPlayer(player)
     if not player then return end
+    
     if isEnemy(player) then
-        local function bindCharacter(character)
-            local humanoid = character:WaitForChild("Humanoid", 5)
-            if not humanoid then return end
-
-            local lastHealth = humanoid.Health
-            humanoid.HealthChanged:Connect(function(newHealth)
-                if newHealth < lastHealth then
-                    local myChar = localPlayer.Character
-                    local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
-                    local enemyHrp = character:FindFirstChild("HumanoidRootPart") or character:FindFirstChild("UpperTorso")
-                    
-                    if myHrp and enemyHrp then
-                        local dist = (myHrp.Position - enemyHrp.Position).Magnitude
-                        if dist <= 18 then
-                            triggerHitAndWeave()
-                        end
+        player.CharacterAdded:Connect(function(character)
+            task.wait(1) 
+            local humanoid = character:WaitForChild("Humanoid")
+            
+            local function updateHitboxState()
+                if hitboxEnabled then
+                    if humanoid.Health > 0 then
+                        applyHitbox(character)
+                    else
+                        resetHitbox(character)
                     end
                 end
-                lastHealth = newHealth
-
+            end
+            
+            updateHitboxState()
+            humanoid.HealthChanged:Connect(updateHitboxState)
+            
+            if espEnabled then
+                createESP(player)
+            end
+        end)
+        
+        if player.Character then
+            local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
+            if humanoid then
                 if hitboxEnabled then
-                    if newHealth > 0 then applyHitbox(character)
-                    else resetHitbox(character) end
+                    if humanoid.Health > 0 then
+                        applyHitbox(player.Character)
+                    else
+                        resetHitbox(player.Character)
+                    end
                 end
-            end)
-
-            if espEnabled then createESP(player) end
-            if hitboxEnabled and humanoid.Health > 0 then applyHitbox(character) end
+                if espEnabled then
+                    createESP(player)
+                end
+            end
         end
-
-        player.CharacterAdded:Connect(bindCharacter)
-        if player.Character then bindCharacter(player.Character) end
     end
 end
 
-for _, player in ipairs(Players:GetPlayers()) do trackPlayer(player) end
+for _, player in ipairs(Players:GetPlayers()) do
+    trackPlayer(player)
+end
 Players.PlayerAdded:Connect(trackPlayer)
 Players.PlayerRemoving:Connect(function(player)
     if espGuis[player] then
@@ -470,7 +415,7 @@ Players.PlayerRemoving:Connect(function(player)
     end
 end)
 
--- Main UI Elements
+-- UI Elements
 fovIncreaseButton = uiLibrary:AddButton("(Fov +)", function()
     playSound("rbxassetid://12221967")
     local camera = workspace.CurrentCamera
@@ -501,6 +446,21 @@ uiLibrary:AddButton("FullBright", function()
     Lighting.OutdoorAmbient = Color3.fromRGB(255, 255, 255)
     Lighting.Ambient = Color3.fromRGB(255, 255, 255)
     Lighting.TimeOfDay = "14:00:00"
+    Lighting.FogStart = 0
+    Lighting.FogEnd = 100000
+    Lighting.FogColor = Color3.fromRGB(255, 255, 255)
+    
+    local connection
+    connection = RunService.Heartbeat:Connect(function()
+        Lighting.Brightness = 2
+        Lighting.OutdoorAmbient = Color3.fromRGB(255, 255, 255)
+        Lighting.Ambient = Color3.fromRGB(255, 255, 255)
+        Lighting.TimeOfDay = "14:00:00"
+        Lighting.FogStart = 0
+        Lighting.FogEnd = 100000
+        Lighting.FogColor = Color3.fromRGB(255, 255, 255)
+    end)
+    getgenv().BrightnessConnection = connection
 end)
 
 uiLibrary:AddButton("AntiLag", function()
@@ -513,27 +473,19 @@ uiLibrary:AddButton("AntiKick", function()
     loadstring(game:HttpGet("https://raw.githubusercontent.com/OBFhm5650lol/AntkickLol/refs/heads/main/Antikicklol"))()
 end)
 
-uiLibrary:AddToggle("Hit & Weave (Micro-Burst)", function(enabled)
-    hitAndWeaveEnabled = enabled
+local fovEnabled = false
+uiLibrary:AddToggle("FOV Toggle", function(enabled)
+    fovEnabled = enabled
     playSound("rbxassetid://12221976")
+    pcall(function()
+        if fovIncreaseButton and fovDecreaseButton then
+            fovIncreaseButton.Visible = enabled
+            fovDecreaseButton.Visible = enabled
+        end
+    end)
 end, false)
 
-uiLibrary:AddToggle("Heavyweight Anti-KB (Natural)", function(enabled)
-    heavyweightEnabled = enabled
-    playSound("rbxassetid://12221976")
-end, false)
-
-uiLibrary:AddToggle("Magnetic Hitboxes (Clean)", function(enabled)
-    magneticEnabled = enabled
-    playSound("rbxassetid://12221976")
-end, false)
-
-uiLibrary:AddToggle("Anti-Void (Island Saver)", function(enabled)
-    antiVoidEnabled = enabled
-    playSound("rbxassetid://12221976")
-end, false)
-
-uiLibrary:AddToggle("Expand Hitbox (Visible)", function(enabled)
+uiLibrary:AddToggle("Expand Hitbox", function(enabled)
     toggleHitboxes(enabled)
 end, false)
 
@@ -541,145 +493,93 @@ uiLibrary:AddToggle("ESP", function(enabled)
     toggleESP(enabled)
 end, false)
 
-uiLibrary:AddToggle("Ultimate Health (God Mode)", function(enabled)
-    ultimateHealthEnabled = enabled
+uiLibrary:AddToggle("Fpp Toggle", function(enabled)
     playSound("rbxassetid://12221976")
+    if enabled then
+        local camera = workspace.CurrentCamera
+        camera.CameraType = Enum.CameraType.Custom
+        localPlayer.CameraMode = Enum.CameraMode.LockFirstPerson
+        if getgenv().cameraLockConnection then
+            getgenv().cameraLockConnection:Disconnect()
+            getgenv().cameraLockConnection = nil
+        end
+    else
+        localPlayer.CameraMode = Enum.CameraMode.Classic
+    end
 end, false)
 
-uiLibrary:AddToggle("Fast Recovery (Auto Regen)", function(enabled)
-    fastRecoveryEnabled = enabled
+uiLibrary:AddButton("AimLock", function()
     playSound("rbxassetid://12221976")
-end, false)
+end)
 
--- Realistic Anti-Fling (Still in UI as requested previously)
-local realisticAntiFlingEnabled = false
-local realisticAntiFlingConnection
-local lastGlitchTime = tick()
+------------------------------------------------------------------
+-- EXTERNAL FLOATING ANTI-FLING BUTTON SYSTEM
+------------------------------------------------------------------
+if CoreGui:FindFirstChild("AntiFlingStandaloneGui") then
+    CoreGui.AntiFlingStandaloneGui:Destroy()
+end
 
-uiLibrary:AddToggle("Realistic Anti-Fling (Glitchy)", function(enabled)
-    realisticAntiFlingEnabled = enabled
+local flingGui = Instance.new("ScreenGui")
+flingGui.Name = "AntiFlingStandaloneGui"
+flingGui.ResetOnSpawn = false
+
+pcall(function()
+    flingGui.Parent = CoreGui
+end)
+if not flingGui.Parent then
+    flingGui.Parent = localPlayer:WaitForChild("PlayerGui")
+end
+
+local flingBtn = Instance.new("TextButton")
+flingBtn.Name = "AntiFlingButton"
+flingBtn.Size = UDim2.new(0, 130, 0, 45)
+flingBtn.Position = UDim2.new(0.85, -10, 0.45, 0)
+flingBtn.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+flingBtn.BorderSizePixel = 0
+flingBtn.Text = "Anti-Fling: OFF"
+flingBtn.TextColor3 = Color3.fromRGB(255, 75, 75)
+flingBtn.TextSize = 14
+flingBtn.Font = Enum.Font.SourceSansBold
+flingBtn.Active = true
+flingBtn.Draggable = true
+flingBtn.Parent = flingGui
+
+local uiCorner = Instance.new("UICorner")
+uiCorner.CornerRadius = UDim.new(0, 8)
+uiCorner.Parent = flingBtn
+
+local uiStroke = Instance.new("UIStroke")
+uiStroke.Color = Color3.fromRGB(255, 75, 75)
+uiStroke.Thickness = 2
+uiStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+uiStroke.Parent = flingBtn
+
+local noFallEnabled = false
+local noFallConnection
+
+local function applyHumanoidStates(hum, enabled)
+    if hum then
+        hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, not enabled)
+        hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, not enabled)
+    end
+end
+
+local function toggleAntiFling(enabled)
+    noFallEnabled = enabled
     playSound("rbxassetid://12221976")
+    
+    local char = localPlayer.Character
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
     
     if enabled then
-        realisticAntiFlingConnection = RunService.Heartbeat:Connect(function()
-            if not realisticAntiFlingEnabled then return end
-            pcall(function()
-                local character = localPlayer.Character
-                if not character then return end
-                local hrp = character:FindFirstChild("HumanoidRootPart")
-                if not hrp then return end
-                
-                local linVel = hrp.AssemblyLinearVelocity
-                local angVel = hrp.AssemblyAngularVelocity
-                
-                if linVel.Magnitude > 200 or angVel.Magnitude > 60 then
-                    if tick() - lastGlitchTime > 0.20 then
-                        if math.random(1, 100) <= 75 then
-                            local newLinVel = linVel * 0.05
-                            if newLinVel.Magnitude > 30 then newLinVel = newLinVel.Unit * 30 end
-                            hrp.AssemblyLinearVelocity = newLinVel 
-                            hrp.AssemblyAngularVelocity = angVel * 0.05
-                            lastGlitchTime = tick()
-                        end
-                    end
-                end
-            end)
-        end)
-    else
-        if realisticAntiFlingConnection then
-            realisticAntiFlingConnection:Disconnect()
-            realisticAntiFlingConnection = nil
-        end
-    end
-end, false)
-
--- =========================================================================
--- CUSTOM DRAGGABLE MINI-BUTTON FOR QUICK ANTI-FLING (OUTSIDE OF MAIN UI)
--- =========================================================================
-
--- Create the ScreenGui securely
-local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "QuickAntiFlingUI"
-ScreenGui.ResetOnSpawn = false
-local successGui, _ = pcall(function() ScreenGui.Parent = CoreGui end)
-if not successGui then ScreenGui.Parent = localPlayer:WaitForChild("PlayerGui") end
-
--- Create the Button
-local QuickButton = Instance.new("TextButton")
-QuickButton.Name = "AntiFlingToggle"
-QuickButton.Parent = ScreenGui
-QuickButton.BackgroundColor3 = Color3.fromRGB(170, 0, 0) -- Red initially (OFF)
-QuickButton.Position = UDim2.new(0.5, -60, 0, 10) -- Top center of screen
-QuickButton.Size = UDim2.new(0, 120, 0, 35)
-QuickButton.Font = Enum.Font.SourceSansBold
-QuickButton.Text = "Anti-Fling: OFF"
-QuickButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-QuickButton.TextSize = 16
-QuickButton.BorderSizePixel = 0
-
--- Add rounded corners to make it look clean
-local UICorner = Instance.new("UICorner")
-UICorner.CornerRadius = UDim.new(0, 8)
-UICorner.Parent = QuickButton
-
--- Add a small shadow/outline
-local UIStroke = Instance.new("UIStroke")
-UIStroke.Parent = QuickButton
-UIStroke.Thickness = 2
-UIStroke.Color = Color3.fromRGB(30, 30, 30)
-
--- Draggable Logic for the Quick Button
-local dragging, dragInput, dragStart, startPos
-QuickButton.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        dragging = true
-        dragStart = input.Position
-        startPos = QuickButton.Position
+        flingBtn.Text = "Anti-Fling: ON"
+        flingBtn.TextColor3 = Color3.fromRGB(75, 255, 75)
+        uiStroke.Color = Color3.fromRGB(75, 255, 75)
         
-        input.Changed:Connect(function()
-            if input.UserInputState == Enum.UserInputState.End then dragging = false end
-        end)
-    end
-end)
-
-QuickButton.InputChanged:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-        dragInput = input
-    end
-end)
-
-UserInputService.InputChanged:Connect(function(input)
-    if input == dragInput and dragging then
-        local delta = input.Position - dragStart
-        QuickButton.Position = UDim2.new(
-            startPos.X.Scale, startPos.X.Offset + delta.X, 
-            startPos.Y.Scale, startPos.Y.Offset + delta.Y
-        )
-    end
-end)
-
--- Main Toggle Logic for the Button
-local quickAntiFlingEnabled = false
-local quickAntiFlingConnection
-
-QuickButton.MouseButton1Click:Connect(function()
-    quickAntiFlingEnabled = not quickAntiFlingEnabled
-    
-    if quickAntiFlingEnabled then
-        -- TURN ON
-        QuickButton.Text = "Anti-Fling: ON"
-        QuickButton.BackgroundColor3 = Color3.fromRGB(0, 170, 0) -- Green
-        playSound("rbxassetid://12221976")
+        applyHumanoidStates(hum, true)
         
-        local char = localPlayer.Character
-        local hum = char and char:FindFirstChildOfClass("Humanoid")
-        if hum then
-            hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
-            hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
-        end
-        
-        if not quickAntiFlingConnection then
-            quickAntiFlingConnection = RunService.Heartbeat:Connect(function()
+        if not noFallConnection then
+            noFallConnection = RunService.Heartbeat:Connect(function()
                 pcall(function()
                     local character = localPlayer.Character
                     if not character then return end
@@ -692,31 +592,40 @@ QuickButton.MouseButton1Click:Connect(function()
                         local angVel = hrp.AssemblyAngularVelocity
                         local horizSpeed = Vector3.new(linVel.X, 0, linVel.Z).Magnitude
                         
-                        -- High limits so normal jumps/falls work, but flings are stopped cold
-                        if horizSpeed > 200 or math.abs(linVel.Y) > 300 or angVel.Magnitude > 60 then
-                            hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+                        if horizSpeed > 120 or angVel.Magnitude > 60 then
+                            hrp.AssemblyLinearVelocity = Vector3.new(0, math.clamp(linVel.Y, -50, 80), 0)
                             hrp.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+                        end
+                        
+                        if humanoid.PlatformStand then
+                            humanoid.PlatformStand = false
                         end
                     end
                 end)
             end)
         end
     else
-        -- TURN OFF
-        QuickButton.Text = "Anti-Fling: OFF"
-        QuickButton.BackgroundColor3 = Color3.fromRGB(170, 0, 0) -- Red
-        playSound("rbxassetid://12221976")
+        flingBtn.Text = "Anti-Fling: OFF"
+        flingBtn.TextColor3 = Color3.fromRGB(255, 75, 75)
+        uiStroke.Color = Color3.fromRGB(255, 75, 75)
         
-        local char = localPlayer.Character
-        local hum = char and char:FindFirstChildOfClass("Humanoid")
-        if hum then
-            hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, true)
-            hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, true)
+        if noFallConnection then
+            noFallConnection:Disconnect()
+            noFallConnection = nil
         end
         
-        if quickAntiFlingConnection then
-            quickAntiFlingConnection:Disconnect()
-            quickAntiFlingConnection = nil
-        end
+        applyHumanoidStates(hum, false)
+    end
+end
+
+flingBtn.MouseButton1Click:Connect(function()
+    toggleAntiFling(not noFallEnabled)
+end)
+
+localPlayer.CharacterAdded:Connect(function(char)
+    if noFallEnabled then
+        task.wait(0.5)
+        local hum = char:WaitForChild("Humanoid")
+        applyHumanoidStates(hum, true)
     end
 end)
