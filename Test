@@ -512,8 +512,9 @@ uiLibrary:AddButton("AimLock", function()
     playSound("rbxassetid://12221976")
 end)
 
+
 ------------------------------------------------------------------
--- EXTERNAL FLOATING ANTI-FLING BUTTON SYSTEM
+-- EXTERNAL FLOATING ANTI-FLING BUTTON SYSTEM (FIXED STAND-UP BUG)
 ------------------------------------------------------------------
 if CoreGui:FindFirstChild("AntiFlingStandaloneGui") then
     CoreGui.AntiFlingStandaloneGui:Destroy()
@@ -564,9 +565,18 @@ local function applyHumanoidStates(hum, enabled)
     end
 end
 
+-- Force standing rescue
+local function forceStandUp(hum)
+    if hum then
+        hum.PlatformStand = false
+        hum.Sit = false
+        hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+    end
+end
+
 local function toggleAntiFling(enabled)
     noFallEnabled = enabled
-    playSound("rbxassetid://12221976")
+    pcall(function() playSound("rbxassetid://12221976") end)
     
     local char = localPlayer.Character
     local hum = char and char:FindFirstChildOfClass("Humanoid")
@@ -576,6 +586,8 @@ local function toggleAntiFling(enabled)
         flingBtn.TextColor3 = Color3.fromRGB(75, 255, 75)
         uiStroke.Color = Color3.fromRGB(75, 255, 75)
         
+        -- Force the character to stand up BEFORE disabling states
+        forceStandUp(hum)
         applyHumanoidStates(hum, true)
         
         if not noFallConnection then
@@ -588,13 +600,23 @@ local function toggleAntiFling(enabled)
                     local humanoid = character:FindFirstChildOfClass("Humanoid")
                     
                     if hrp and humanoid then
+                        -- Check if Roblox somehow glitched them onto the floor
+                        local state = humanoid:GetState()
+                        if state == Enum.HumanoidStateType.FallingDown or state == Enum.HumanoidStateType.Ragdoll or state == Enum.HumanoidStateType.Physics then
+                            forceStandUp(humanoid)
+                        end
+
                         local linVel = hrp.AssemblyLinearVelocity
                         local angVel = hrp.AssemblyAngularVelocity
                         local horizSpeed = Vector3.new(linVel.X, 0, linVel.Z).Magnitude
                         
+                        -- Fling detection
                         if horizSpeed > 120 or angVel.Magnitude > 60 then
                             hrp.AssemblyLinearVelocity = Vector3.new(0, math.clamp(linVel.Y, -50, 80), 0)
                             hrp.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+                            
+                            -- Trigger a stand-up recovery right after nullifying fling
+                            forceStandUp(humanoid)
                         end
                         
                         if humanoid.PlatformStand then
@@ -615,6 +637,7 @@ local function toggleAntiFling(enabled)
         end
         
         applyHumanoidStates(hum, false)
+        forceStandUp(hum) -- Final rescue push on toggle off
     end
 end
 
