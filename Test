@@ -5,7 +5,7 @@ local RunService = game:GetService("RunService")
 local Lighting = game:GetService("Lighting")
 local TweenService = game:GetService("TweenService")
 local CoreGui = game:GetService("CoreGui")
-local UserInputService = game:GetService("UserInputService") -- Added for Inf Jump
+local UserInputService = game:GetService("UserInputService")
 
 -- Player variables
 local localPlayer = Players.LocalPlayer
@@ -443,10 +443,11 @@ uiLibrary:AddButton("AimLock", function()
 end)
 
 ------------------------------------------------------------------
--- NEW FEATURE: SUPER POWER ENGINE & GHOST MODE (NOCLIP)
+-- SUPER POWER ENGINE, GHOST MODE & INSTANT RECOVERY
 ------------------------------------------------------------------
 getgenv().superPowerEnabled = false
 getgenv().noclipEnabled = false
+getgenv().instantRecoveryEnabled = false
 
 uiLibrary:AddToggle("Super Power (Speed/InfJump)", function(enabled)
     getgenv().superPowerEnabled = enabled
@@ -466,21 +467,55 @@ uiLibrary:AddToggle("Ghost Mode (Noclip)", function(enabled)
     playSound("rbxassetid://12221976")
 end, false)
 
+-- NEW TOGGLE: INSTANT STAND-UP RECOVERY
+uiLibrary:AddToggle("Instant Recovery (Fast Stand)", function(enabled)
+    getgenv().instantRecoveryEnabled = enabled
+    playSound("rbxassetid://12221976")
+    local char = localPlayer.Character
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    if hum then
+        hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, not enabled)
+        hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, not enabled)
+    end
+end, false)
+
 RunService.Stepped:Connect(function()
     local char = localPlayer.Character
     if not char then return end
     
     local hum = char:FindFirstChildOfClass("Humanoid")
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+
+    -- Super power speed/jump
     if hum and getgenv().superPowerEnabled then
         hum.WalkSpeed = 120
         hum.JumpPower = 150
         hum.UseJumpPower = true
     end
 
+    -- Ghost mode noclip
     if getgenv().noclipEnabled then
         for _, part in ipairs(char:GetDescendants()) do
             if part:IsA("BasePart") and part.CanCollide then
                 part.CanCollide = false
+            end
+        end
+    end
+
+    -- Fast Stand-Up Recovery logic
+    if hum and getgenv().instantRecoveryEnabled then
+        local currentState = hum:GetState()
+        if currentState == Enum.HumanoidStateType.FallingDown 
+            or currentState == Enum.HumanoidStateType.Ragdoll 
+            or currentState == Enum.HumanoidStateType.GettingUp 
+            or currentState == Enum.HumanoidStateType.Physics then
+            
+            hum.PlatformStand = false
+            hum.Sit = false
+            hum:ChangeState(Enum.HumanoidStateType.Running)
+            
+            if hrp then
+                hrp.AssemblyAngularVelocity = Vector3.zero
             end
         end
     end
@@ -495,9 +530,9 @@ UserInputService.JumpRequest:Connect(function()
 end)
 
 ------------------------------------------------------------------
--- UPGRADED FEATURE: GOD-SPEED KILL AURA (Replaced Auto-Hit)
+-- GOD-SPEED KILL AURA (Replaced Auto-Hit)
 ------------------------------------------------------------------
-local reachRange = 50 -- Absolute maximum hit distance
+local reachRange = 50
 local rangeSquared = reachRange * reachRange
 
 uiLibrary:AddToggle("GOD Kill-Aura (No-Lag)", function(enabled)
@@ -516,7 +551,6 @@ uiLibrary:AddToggle("GOD Kill-Aura (No-Lag)", function(enabled)
                 local humanoid = char:FindFirstChildOfClass("Humanoid")
                 if not (myRoot and humanoid and humanoid.Health > 0) then return end
                 
-                -- Auto equip tool
                 local tool = char:FindFirstChildOfClass("Tool")
                 if not tool then
                     local backpack = localPlayer:FindFirstChild("Backpack")
@@ -544,7 +578,6 @@ uiLibrary:AddToggle("GOD Kill-Aura (No-Lag)", function(enabled)
                             local distSq = offset.X*offset.X + offset.Y*offset.Y + offset.Z*offset.Z
                             
                             if distSq <= rangeSquared then
-                                -- Target Multiple Limbs Instantly
                                 local partsToTouch = {
                                     eRoot,
                                     eChar:FindFirstChild("Head"),
@@ -575,7 +608,7 @@ end, false)
 
 
 ------------------------------------------------------------------
--- EXTERNAL FLOATING ANTI-FLING BUTTON SYSTEM (WITH ACR TECH)
+-- EXTERNAL FLOATING ANTI-FLING BUTTON SYSTEM
 ------------------------------------------------------------------
 if CoreGui:FindFirstChild("AntiFlingStandaloneGui") then
     CoreGui.AntiFlingStandaloneGui:Destroy()
@@ -705,5 +738,11 @@ localPlayer.CharacterAdded:Connect(function(char)
         task.wait(0.5)
         local hum = char:WaitForChild("Humanoid")
         applyHumanoidStates(hum, true)
+    end
+    if getgenv().instantRecoveryEnabled then
+        task.wait(0.5)
+        local hum = char:WaitForChild("Humanoid")
+        hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
+        hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
     end
 end)
