@@ -494,8 +494,8 @@ RunService.Stepped:Connect(function()
                     getgenv().isRecovering = true
                     
                     task.spawn(function()
-                        -- 0.6 second delay looks like a natural, fast reaction
-                        task.wait(0.6)
+                        -- 0.9 second delay looks like a natural, fast reaction
+                        task.wait(0.9)
                         
                         if char and hum and hrp and hum.Health > 0 then
                             hum.PlatformStand = false
