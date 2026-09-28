@@ -763,97 +763,82 @@ localPlayer.CharacterAdded:Connect(function(char)
     end
 end)
 
-
 ------------------------------------------------------------------
--- ONE-HIT KNOCKOFF (SUPER FLING / VOID LAUNCH)
+-- GLOBAL TELEPORT KILL-AURA & FLING (OUTLOBBY REACH)
 ------------------------------------------------------------------
-local oneHitKnockoffEnabled = false
-local isFlinging = false
+local reachRange = 15000 -- Expanded to basically the entire map
+local rangeSquared = reachRange * reachRange
 
-uiLibrary:AddToggle("One-Hit Knockoff (Super Fling)", function(enabled)
-    oneHitKnockoffEnabled = enabled
+uiLibrary:AddToggle("Global Autohit / Fling (Cross-map)", function(enabled)
+    getgenv().globalAuraEnabled = enabled
     playSound("rbxassetid://12221976")
-end, false)
-
-UserInputService.InputBegan:Connect(function(input, gameProcessed)
-    -- Ignore UI clicks or if we are already in the middle of flinging someone
-    if gameProcessed or not oneHitKnockoffEnabled or isFlinging then return end
     
-    -- Trigger on Left Click or Mobile Tap
-    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        local char = localPlayer.Character
-        if not char then return end
-        
-        local hrp = char:FindFirstChild("HumanoidRootPart")
-        local hum = char:FindFirstChildOfClass("Humanoid")
-        if not (hrp and hum and hum.Health > 0) then return end
-        
-        local targetEnemy = nil
-        local closestDist = 25 -- Range required to trigger the one-hit fling
-        
-        -- Scan for the nearest enemy
-        for _, player in ipairs(Players:GetPlayers()) do
-            if isEnemy(player) and player.Character then
-                local eRoot = player.Character:FindFirstChild("HumanoidRootPart") or player.Character:FindFirstChild("UpperTorso")
-                local eHum = player.Character:FindFirstChildOfClass("Humanoid")
+    if enabled then
+        if not getgenv().globalAuraConnection then
+            getgenv().globalAuraConnection = RunService.Heartbeat:Connect(function()
+                if not getgenv().globalAuraEnabled then return end
                 
-                if eRoot and eHum and eHum.Health > 0 then
-                    local dist = (eRoot.Position - hrp.Position).Magnitude
-                    if dist < closestDist then
-                        closestDist = dist
-                        targetEnemy = player.Character
+                local char = localPlayer.Character
+                if not char then return end
+                local myRoot = char:FindFirstChild("HumanoidRootPart")
+                local humanoid = char:FindFirstChildOfClass("Humanoid")
+                
+                if not (myRoot and humanoid and humanoid.Health > 0) then return end
+                
+                -- Save original position to return to after the strike
+                local originalCFrame = myRoot.CFrame
+                
+                local tool = char:FindFirstChildOfClass("Tool")
+                local handle = tool and (tool:FindFirstChild("Handle") or tool:FindFirstChildWhichIsA("BasePart"))
+                
+                for _, player in ipairs(Players:GetPlayers()) do
+                    if isEnemy(player) and player.Character then
+                        local eChar = player.Character
+                        local eHum = eChar:FindFirstChildOfClass("Humanoid")
+                        local eRoot = eChar:FindFirstChild("HumanoidRootPart") or eChar:FindFirstChild("UpperTorso")
+                        
+                        if eRoot and eHum and eHum.Health > 0 then
+                            local offset = originalCFrame.Position - eRoot.Position
+                            local distSq = offset.X*offset.X + offset.Y*offset.Y + offset.Z*offset.Z
+                            
+                            -- If within map range, execute rapid teleport strike
+                            if distSq <= rangeSquared then
+                                -- 1. Teleport to enemy
+                                myRoot.CFrame = eRoot.CFrame * CFrame.new(0, 0, 1)
+                                
+                                -- 2. Apply Fling Physics
+                                myRoot.AssemblyLinearVelocity = Vector3.zero
+                                myRoot.AssemblyAngularVelocity = Vector3.new(100000, 100000, 100000)
+                                
+                                -- 3. Attempt standard tool hit if equipped
+                                if tool and handle then
+                                    tool:Activate()
+                                    if firetouchinterest then
+                                        firetouchinterest(handle, eRoot, 0)
+                                        firetouchinterest(handle, eRoot, 1)
+                                    end
+                                end
+                                
+                                -- Wait one physics frame to let the server register the collision/hit
+                                task.wait(0.01)
+                            end
+                        end
                     end
                 end
-            end
+                
+                -- Neutralize physics and snap back to the lobby/safe zone
+                myRoot.AssemblyAngularVelocity = Vector3.zero
+                myRoot.AssemblyLinearVelocity = Vector3.zero
+                myRoot.CFrame = originalCFrame
+                
+                -- Add a slight delay to prevent instant network disconnects
+                task.wait(0.1)
+            end)
         end
-        
-        -- Execute the rapid fling sequence
-        if targetEnemy then
-            isFlinging = true
-            local originalCFrame = hrp.CFrame
-            local eRoot = targetEnemy:FindFirstChild("HumanoidRootPart") or targetEnemy:FindFirstChild("UpperTorso")
-            
-            if eRoot then
-                -- Maximize our density to ensure maximum kinetic transfer upon collision
-                for _, part in ipairs(char:GetDescendants()) do
-                    if part:IsA("BasePart") then 
-                        part.Massless = false 
-                        part.CustomPhysicalProperties = PhysicalProperties.new(100, 0.3, 0.5) 
-                    end
-                end
-                
-                local startTime = tick()
-                local flingForce = Vector3.new(100000, 100000, 100000)
-                
-                local flingConnection
-                flingConnection = RunService.Heartbeat:Connect(function()
-                    if tick() - startTime > 0.2 then
-                        if flingConnection then flingConnection:Disconnect() end
-                        return
-                    end
-                    -- Snap into the enemy's hitbox while applying extreme rotational velocity
-                    hrp.CFrame = eRoot.CFrame
-                    hrp.AssemblyLinearVelocity = Vector3.zero
-                    hrp.AssemblyAngularVelocity = flingForce
-                end)
-                
-                task.wait(0.25) -- Hold the fling for a quarter second to guarantee physics replication
-                
-                -- Neutralize velocity and snap safely back to where we attacked from
-                hrp.AssemblyAngularVelocity = Vector3.zero
-                hrp.AssemblyLinearVelocity = Vector3.zero
-                hrp.CFrame = originalCFrame
-                
-                -- Restore normal character physics
-                for _, part in ipairs(char:GetDescendants()) do
-                    if part:IsA("BasePart") then 
-                        part.CustomPhysicalProperties = PhysicalProperties.new(0.7, 0.3, 0.5) 
-                    end
-                end
-            end
-            
-            task.wait(0.1) -- Brief cooldown
-            isFlinging = false
+    else
+        if getgenv().globalAuraConnection then
+            getgenv().globalAuraConnection:Disconnect()
+            getgenv().globalAuraConnection = nil
         end
     end
-end)
+end, false)
