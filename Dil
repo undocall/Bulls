@@ -1,0 +1,942 @@
+-- // Hitblox v6.0 — Kovak Edition
+-- // Full rewrite: bug-fixed + 6 new unique features
+
+local StarterGui         = game:GetService("StarterGui")
+local Players            = game:GetService("Players")
+local RunService         = game:GetService("RunService")
+local Lighting           = game:GetService("Lighting")
+local CoreGui            = game:GetService("CoreGui")
+local UserInputService   = game:GetService("UserInputService")
+local TweenService       = game:GetService("TweenService")
+
+local LP = Players.LocalPlayer
+while not LP do task.wait() LP = Players.LocalPlayer end
+
+-- ── UTILS ─────────────────────────────────────────────────────────────────────
+local function isEnemy(player)
+    if player == LP then return false end
+    local teams = game:GetService("Teams"):GetTeams()
+    if #teams > 1 then
+        if not LP.Team or not player.Team then return true end
+        return LP.Team ~= player.Team
+    end
+    return true
+end
+
+local function getHRP(p)
+    local c = p == LP and LP.Character or p.Character
+    return c and c:FindFirstChild("HumanoidRootPart")
+end
+
+local function getHum(p)
+    local c = p == LP and LP.Character or p.Character
+    return c and c:FindFirstChildOfClass("Humanoid")
+end
+
+local function notify(title, text, dur)
+    pcall(function()
+        StarterGui:SetCore("SendNotification", {
+            Title    = title,
+            Text     = text,
+            Duration = dur or 2,
+        })
+    end)
+end
+
+local function playSound(id)
+    local s = Instance.new("Sound")
+    s.SoundId = id
+    s.Parent  = workspace
+    pcall(function() s:Play() end)
+    s.Ended:Connect(function() s:Destroy() end)
+end
+
+-- ── LOAD UI ───────────────────────────────────────────────────────────────────
+task.wait()
+playSound("rbxassetid://12221831")
+
+local uiLibrary
+local ok, err = pcall(function()
+    uiLibrary = loadstring(game:HttpGet(
+        "https://raw.githubusercontent.com/AZYsGithub/Arceus-X-UI-Library/main/source.lua"
+    ))()
+end)
+if not ok or not uiLibrary then error("UI load failed: " .. tostring(err)) end
+
+uiLibrary:SetTitle("Hitblox v6.0 — Kovak")
+uiLibrary:SetIcon("http://www.roblox.com/asset/?id=91738788645337")
+uiLibrary:SetTheme("HighContrast")
+task.wait(0.1)
+playSound("rbxassetid://195868961")
+
+-- ── STATE ─────────────────────────────────────────────────────────────────────
+local hitboxSize         = 10
+local hitboxTransp       = 0.85
+local hitboxEnabled      = false
+local hitboxConn         = nil      -- FIX: RunService connection, not coroutine
+
+local espEnabled         = false
+local espGuis            = {}
+local espConns           = {}       -- FIX: per-player render connections
+
+local GOD_RANGE_SQ       = 50 * 50          -- GOD aura (close)
+local GLOBAL_RANGE_SQ    = 15000 * 15000    -- FIX: separate variable, no shadowing
+
+-- new feature state
+local killStreak         = 0
+local lastKillTime       = 0
+local groundLockEnabled  = false
+local groundLockConn     = nil
+local flingurfEnabled    = false
+local flingurfConn       = nil
+local crowdMagnetEnabled = false
+local crowdMagnetConn   = nil
+local autoRespawnConn    = nil
+local specAlertConn      = nil
+
+-- saved part data for clean reset
+-- { [character] = { [partName] = {size, transparency, brickcolor, material, cancollide} } }
+local savedHitboxData    = {}
+
+-- ── HITBOX ────────────────────────────────────────────────────────────────────
+local function saveAndExpand(char)
+    if not char then return end
+    local p = Players:GetPlayerFromCharacter(char)
+    if p == LP then return end
+
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if hum and hum.Health <= 0 then return end
+
+    local isR15 = hum and hum.RigType == Enum.HumanoidRigType.R15
+
+    local targets = {"HumanoidRootPart", "Head"}
+    if isR15 then
+        for _, n in ipairs({"UpperTorso","LowerTorso","LeftUpperArm","RightUpperArm","LeftUpperLeg","RightUpperLeg"}) do
+            targets[#targets+1] = n
+        end
+    end
+
+    if not savedHitboxData[char] then savedHitboxData[char] = {} end
+
+    for _, name in ipairs(targets) do
+        local part = char:FindFirstChild(name)
+        if part and part:IsA("BasePart") then
+            -- save original on first expand only
+            if not savedHitboxData[char][name] then
+                savedHitboxData[char][name] = {
+                    size         = part.Size,
+                    transparency = part.Transparency,  -- FIX: save real transparency
+                    brickcolor   = part.BrickColor,
+                    material     = part.Material,
+                    cancollide   = part.CanCollide,
+                    massless     = part.Massless,
+                }
+            end
+            part.Size         = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
+            part.Transparency = hitboxTransp
+            part.BrickColor   = name == "Head" and BrickColor.new("Bright red") or BrickColor.new("Dark red")
+            part.Material     = Enum.Material.ForceField
+            part.CanCollide   = false
+            if name == "Head" then part.Massless = true end
+        end
+    end
+end
+
+local function restoreChar(char)
+    if not char then return end
+    local data = savedHitboxData[char]
+    if not data then return end
+    for name, orig in pairs(data) do
+        local part = char:FindFirstChild(name)
+        if part and part:IsA("BasePart") then
+            pcall(function()
+                part.Size         = orig.size
+                part.Transparency = orig.transparency  -- FIX: restore real value
+                part.BrickColor   = orig.brickcolor
+                part.Material     = orig.material
+                part.CanCollide   = orig.cancollide
+                if name == "Head" then part.Massless = orig.massless end
+            end)
+        end
+    end
+    savedHitboxData[char] = nil
+end
+
+local function applyToAll()
+    for _, p in ipairs(Players:GetPlayers()) do
+        if isEnemy(p) and p.Character then saveAndExpand(p.Character) end
+    end
+end
+
+local function restoreAll()
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p.Character then restoreChar(p.Character) end
+    end
+    savedHitboxData = {}
+end
+
+local function toggleHitboxes(enabled)
+    hitboxEnabled = enabled
+    playSound("rbxassetid://12221976")
+
+    if hitboxConn then hitboxConn:Disconnect() hitboxConn = nil end  -- FIX: proper cleanup
+
+    if enabled then
+        applyToAll()
+        -- FIX: RunService connection instead of coroutine
+        hitboxConn = RunService.Heartbeat:Connect(function()
+            if not hitboxEnabled then return end
+            applyToAll()
+        end)
+    else
+        restoreAll()
+    end
+end
+
+-- ── ESP ───────────────────────────────────────────────────────────────────────
+local function clearESP(player)
+    if espGuis[player] then
+        pcall(function() espGuis[player]:Destroy() end)
+        espGuis[player] = nil
+    end
+    if espConns[player] then
+        pcall(function() espConns[player]:Disconnect() end)  -- FIX: disconnect render conn
+        espConns[player] = nil
+    end
+end
+
+local function createESP(player)
+    clearESP(player)
+    if not player or not player.Character or player == LP then return end
+    if not isEnemy(player) then return end
+
+    local head    = player.Character:FindFirstChild("Head")
+    local root    = player.Character:FindFirstChild("HumanoidRootPart")
+    local anchor  = head or root
+    if not anchor then return end
+
+    local bg      = Instance.new("BillboardGui")
+    bg.Adornee    = anchor
+    bg.Size       = UDim2.new(0, 100, 0, 50)
+    bg.StudsOffset= Vector3.new(0, 2, 0)
+    bg.AlwaysOnTop= true
+    bg.Parent     = anchor
+
+    local lbl         = Instance.new("TextLabel", bg)
+    lbl.Size          = UDim2.new(1, 0, 1, 0)
+    lbl.BackgroundTransparency = 1
+    lbl.TextColor3    = Color3.new(1, 0, 0)
+    lbl.TextStrokeTransparency= 0
+    lbl.Text          = player.Name
+    lbl.TextScaled    = true
+    lbl.Font          = Enum.Font.SourceSansBold
+
+    espGuis[player] = bg
+
+    local lastT = tick()
+    -- FIX: store connection so it can be cleaned up
+    espConns[player] = RunService.RenderStepped:Connect(function()
+        if not bg or not bg.Parent then
+            clearESP(player)
+            return
+        end
+        if tick() - lastT < 0.1 then return end
+        lastT = tick()
+        local pr = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+        local lr = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
+        if pr and lr then
+            local dist = (lr.Position - pr.Position).Magnitude
+            local sz   = math.clamp(100 - dist * 0.5, 10, 100)
+            bg.Size    = UDim2.new(0, sz, 0, sz * 0.5)
+        end
+    end)
+end
+
+local function toggleESP(enabled)
+    espEnabled = enabled
+    playSound("rbxassetid://12221976")
+    if enabled then
+        for _, p in ipairs(Players:GetPlayers()) do
+            if isEnemy(p) then createESP(p) end
+        end
+    else
+        for p, _ in pairs(espGuis) do clearESP(p) end
+    end
+end
+
+-- ── PLAYER TRACKING ───────────────────────────────────────────────────────────
+local function trackPlayer(player)
+    if not player then return end
+    if not isEnemy(player) then return end
+
+    player.CharacterAdded:Connect(function(char)
+        task.wait(1)
+        local hum = char:WaitForChild("Humanoid")
+        hum.HealthChanged:Connect(function()
+            if hitboxEnabled then
+                if hum.Health > 0 then saveAndExpand(char) else restoreChar(char) end
+            end
+        end)
+        if hitboxEnabled then saveAndExpand(char) end
+        if espEnabled     then createESP(player)   end
+    end)
+
+    if player.Character then
+        if hitboxEnabled then saveAndExpand(player.Character) end
+        if espEnabled     then createESP(player)              end
+    end
+end
+
+for _, p in ipairs(Players:GetPlayers()) do trackPlayer(p) end
+Players.PlayerAdded:Connect(trackPlayer)
+Players.PlayerRemoving:Connect(function(p) clearESP(p) end)
+
+-- ── STANDARD UI ───────────────────────────────────────────────────────────────
+local fovInc = uiLibrary:AddButton("(Fov +)", function()
+    workspace.CurrentCamera.FieldOfView = math.clamp(workspace.CurrentCamera.FieldOfView + 5, 1, 120)
+end)
+local fovDec = uiLibrary:AddButton("(Fov -)", function()
+    workspace.CurrentCamera.FieldOfView = math.clamp(workspace.CurrentCamera.FieldOfView - 5, 1, 120)
+end)
+local hbInc = uiLibrary:AddButton("(Hitbox +)", function()
+    hitboxSize = math.clamp(hitboxSize + 5, 1, 50)
+    if hitboxEnabled then applyToAll() end
+end)
+local hbDec = uiLibrary:AddButton("(Hitbox -)", function()
+    hitboxSize = math.clamp(hitboxSize - 5, 1, 50)
+    if hitboxEnabled then applyToAll() end
+end)
+
+uiLibrary:AddButton("FullBright", function()
+    local L = Lighting
+    local function applyFB()
+        L.Brightness        = 2
+        L.OutdoorAmbient    = Color3.fromRGB(255,255,255)
+        L.Ambient           = Color3.fromRGB(255,255,255)
+        L.TimeOfDay         = "14:00:00"
+        L.FogStart          = 0
+        L.FogEnd            = 100000
+        L.FogColor          = Color3.fromRGB(255,255,255)
+    end
+    applyFB()
+    if getgenv().fbConn then getgenv().fbConn:Disconnect() end
+    getgenv().fbConn = RunService.Heartbeat:Connect(applyFB)
+end)
+
+uiLibrary:AddButton("AntiLag", function()
+    loadstring(game:HttpGet("https://raw.githubusercontent.com/OBFhm5650lol/Al/refs/heads/main/AntiLag", true))()
+end)
+uiLibrary:AddButton("AntiKick", function()
+    loadstring(game:HttpGet("https://raw.githubusercontent.com/OBFhm5650lol/AntkickLol/refs/heads/main/Antikicklol"))()
+end)
+
+uiLibrary:AddToggle("FOV Toggle", function(e)
+    fovInc.Visible = e
+    fovDec.Visible = e
+end, false)
+
+uiLibrary:AddToggle("Expand Hitbox", function(e)
+    toggleHitboxes(e)
+    hbInc.Visible = e
+    hbDec.Visible = e
+end, false)
+
+uiLibrary:AddToggle("ESP", function(e) toggleESP(e) end, false)
+
+uiLibrary:AddToggle("FPP Toggle", function(e)
+    LP.CameraMode = e and Enum.CameraMode.LockFirstPerson or Enum.CameraMode.Classic
+end, false)
+
+-- ── SUPER POWER / NOCLIP / INSTANT RECOVERY ───────────────────────────────────
+getgenv().superPowerEnabled    = false
+getgenv().noclipEnabled        = false
+getgenv().instantRecovery      = false
+getgenv().isRecovering         = false
+getgenv().recoveryDelay        = 0.6
+
+uiLibrary:AddToggle("Super Power (Speed/InfJump)", function(e)
+    getgenv().superPowerEnabled = e
+    if not e then
+        local hum = getHum(LP)
+        if hum then hum.WalkSpeed = 16 hum.JumpPower = 50 end
+    end
+end, false)
+
+uiLibrary:AddToggle("Ghost Mode (Noclip)", function(e)
+    getgenv().noclipEnabled = e
+end, false)
+
+uiLibrary:AddToggle("Instant Recovery (Fast Stand)", function(e)
+    getgenv().instantRecovery = e
+end, false)
+
+uiLibrary:AddButton("(Recovery Delay +0.1s)", function()
+    getgenv().recoveryDelay = math.clamp(
+        math.round(((getgenv().recoveryDelay or 0.6) + 0.1) * 10) / 10, 0, 10)
+    notify("Hitblox", "Recovery Delay: " .. getgenv().recoveryDelay .. "s")
+end)
+uiLibrary:AddButton("(Recovery Delay -0.1s)", function()
+    getgenv().recoveryDelay = math.clamp(
+        math.round(((getgenv().recoveryDelay or 0.6) - 0.1) * 10) / 10, 0, 10)
+    notify("Hitblox", "Recovery Delay: " .. getgenv().recoveryDelay .. "s")
+end)
+
+RunService.Stepped:Connect(function()
+    local char = LP.Character
+    if not char then return end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+
+    if hum and getgenv().superPowerEnabled then
+        hum.WalkSpeed   = 120
+        hum.JumpPower   = 150
+        hum.UseJumpPower= true
+    end
+
+    if getgenv().noclipEnabled then
+        for _, part in ipairs(char:GetDescendants()) do
+            if part:IsA("BasePart") and part.CanCollide then
+                part.CanCollide = false
+            end
+        end
+    end
+
+    if hum and hrp and getgenv().instantRecovery then
+        local state = hum:GetState()
+        local isKnocked = hum.PlatformStand or hum.Sit
+            or state == Enum.HumanoidStateType.FallingDown
+            or state == Enum.HumanoidStateType.Ragdoll
+            or state == Enum.HumanoidStateType.GettingUp
+
+        if isKnocked then
+            hrp.AssemblyAngularVelocity = Vector3.zero
+            if not getgenv().isRecovering then
+                getgenv().isRecovering = true
+                task.spawn(function()
+                    task.wait(getgenv().recoveryDelay or 0.6)
+                    if char and hum and hrp and hum.Health > 0 then
+                        hum.PlatformStand = false
+                        hum.Sit           = false
+                        hum:ChangeState(Enum.HumanoidStateType.Running)
+                        hrp.AssemblyAngularVelocity = Vector3.zero
+                        local _, ry, _ = hrp.CFrame:ToOrientation()
+                        hrp.CFrame = CFrame.new(hrp.Position + Vector3.new(0,1.5,0)) * CFrame.Angles(0,ry,0)
+                    end
+                    task.wait(0.2)
+                    getgenv().isRecovering = false
+                end)
+            end
+        else
+            getgenv().isRecovering = false
+        end
+    end
+end)
+
+UserInputService.JumpRequest:Connect(function()
+    if getgenv().superPowerEnabled then
+        local hum = getHum(LP)
+        if hum then hum:ChangeState(Enum.HumanoidStateType.Jumping) end
+    end
+end)
+
+-- ── GOD KILL AURA ─────────────────────────────────────────────────────────────
+local AURA_COOLDOWN = 0.05   -- FIX: rate-limit firetouchinterest, not every PreRender
+local lastAuraFire  = 0
+
+uiLibrary:AddToggle("GOD Kill-Aura (Close Range)", function(enabled)
+    getgenv().godAuraEnabled = enabled
+    if enabled then
+        if not getgenv().godAuraConn then
+            getgenv().godAuraConn = RunService.Heartbeat:Connect(function()  -- FIX: Heartbeat not PreRender
+                if not getgenv().godAuraEnabled then return end
+                local now = tick()
+                if now - lastAuraFire < AURA_COOLDOWN then return end
+                lastAuraFire = now
+
+                local char = LP.Character
+                if not char then return end
+                local myRoot = char:FindFirstChild("HumanoidRootPart")
+                local hum    = char:FindFirstChildOfClass("Humanoid")
+                if not (myRoot and hum and hum.Health > 0) then return end
+
+                local tool   = char:FindFirstChildOfClass("Tool")
+                if not tool then
+                    local bp = LP:FindFirstChild("Backpack")
+                    if bp then
+                        local t = bp:FindFirstChildOfClass("Tool")
+                        if t then hum:EquipTool(t) end
+                    end
+                    return
+                end
+
+                local handle = tool:FindFirstChild("Handle") or tool:FindFirstChildWhichIsA("BasePart")
+                if not handle then return end
+                tool:Activate()
+
+                local myPos = myRoot.Position
+                for _, p in ipairs(Players:GetPlayers()) do
+                    if isEnemy(p) and p.Character then
+                        local ec   = p.Character
+                        local eHum = ec:FindFirstChildOfClass("Humanoid")
+                        local eRoot= ec:FindFirstChild("HumanoidRootPart") or ec:FindFirstChild("UpperTorso")
+                        if eRoot and eHum and eHum.Health > 0 then
+                            local off   = myPos - eRoot.Position
+                            local distSq= off.X*off.X + off.Y*off.Y + off.Z*off.Z
+                            if distSq <= GOD_RANGE_SQ then
+                                for _, pt in ipairs({eRoot, ec:FindFirstChild("Head"),
+                                    ec:FindFirstChild("UpperTorso"), ec:FindFirstChild("LowerTorso")}) do
+                                    if pt and firetouchinterest then
+                                        firetouchinterest(handle, pt, 0)
+                                        firetouchinterest(handle, pt, 1)
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end)
+        end
+    else
+        if getgenv().godAuraConn then
+            getgenv().godAuraConn:Disconnect()
+            getgenv().godAuraConn = nil
+        end
+    end
+end, false)
+
+-- ── ANTI-FLING BUTTON ─────────────────────────────────────────────────────────
+pcall(function()
+    if CoreGui:FindFirstChild("AntiFlingGui") then CoreGui.AntiFlingGui:Destroy() end
+end)
+
+local flingGui = Instance.new("ScreenGui")
+flingGui.Name         = "AntiFlingGui"
+flingGui.ResetOnSpawn = false
+pcall(function() flingGui.Parent = CoreGui end)
+if not flingGui.Parent then flingGui.Parent = LP:WaitForChild("PlayerGui") end
+
+local flingBtn = Instance.new("TextButton")
+flingBtn.Size             = UDim2.new(0,130,0,45)
+flingBtn.Position         = UDim2.new(0.85,-10,0.45,0)
+flingBtn.BackgroundColor3 = Color3.fromRGB(25,25,25)
+flingBtn.BorderSizePixel  = 0
+flingBtn.Text             = "Anti-Fling: OFF"
+flingBtn.TextColor3       = Color3.fromRGB(255,75,75)
+flingBtn.TextSize         = 14
+flingBtn.Font             = Enum.Font.SourceSansBold
+flingBtn.Active           = true
+flingBtn.Draggable        = true
+flingBtn.Parent           = flingGui
+Instance.new("UICorner", flingBtn).CornerRadius = UDim.new(0,8)
+local fStroke = Instance.new("UIStroke", flingBtn)
+fStroke.Color     = Color3.fromRGB(255,75,75)
+fStroke.Thickness = 2
+
+local noFallEnabled = false
+local noFallConn    = nil
+
+local function executeACR(char, hum, hrp)
+    if not (char and hum and hrp) then return end
+    pcall(function()
+        hrp.Anchored = true
+        hrp.AssemblyLinearVelocity  = Vector3.zero
+        hrp.AssemblyAngularVelocity = Vector3.zero
+        hum.PlatformStand = false
+        hum.Sit           = false
+        local pos  = hrp.Position
+        local look = hrp.CFrame.LookVector
+        local flat = Vector3.new(look.X,0,look.Z)
+        if flat.Magnitude < 0.1 then flat = Vector3.new(0,0,-1) end
+        flat = flat.Unit
+        hrp.CFrame = CFrame.new(pos + Vector3.new(0,2.5,0), pos + Vector3.new(0,2.5,0) + flat)
+        hum:ChangeState(Enum.HumanoidStateType.Freefall)
+        task.wait(0.05)
+        hrp.Anchored = false
+        hum.Jump     = true
+    end)
+end
+
+local function setStates(hum, on)
+    if not hum then return end
+    hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, not on)
+    hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll,     not on)
+end
+
+local function toggleAntiFling(on)
+    noFallEnabled = on
+    local char = LP.Character
+    local hum  = char and char:FindFirstChildOfClass("Humanoid")
+    local hrp  = char and char:FindFirstChild("HumanoidRootPart")
+
+    if on then
+        flingBtn.Text       = "Anti-Fling: ON"
+        flingBtn.TextColor3 = Color3.fromRGB(75,255,75)
+        fStroke.Color       = Color3.fromRGB(75,255,75)
+        executeACR(char, hum, hrp)
+        setStates(hum, true)
+        if not noFallConn then
+            noFallConn = RunService.Heartbeat:Connect(function()
+                pcall(function()
+                    local c = LP.Character
+                    if not c then return end
+                    local r = c:FindFirstChild("HumanoidRootPart")
+                    local h = c:FindFirstChildOfClass("Humanoid")
+                    if r and h then
+                        local lv = r.AssemblyLinearVelocity
+                        local av = r.AssemblyAngularVelocity
+                        if Vector3.new(lv.X,0,lv.Z).Magnitude > 150 or av.Magnitude > 75 then
+                            executeACR(c, h, r)
+                        end
+                        if h.PlatformStand then
+                            h.PlatformStand = false
+                            h.Jump          = true
+                        end
+                    end
+                end)
+            end)
+        end
+    else
+        flingBtn.Text       = "Anti-Fling: OFF"
+        flingBtn.TextColor3 = Color3.fromRGB(255,75,75)
+        fStroke.Color       = Color3.fromRGB(255,75,75)
+        if noFallConn then noFallConn:Disconnect() noFallConn = nil end
+        setStates(hum, false)
+        executeACR(char, hum, hrp)
+    end
+end
+
+flingBtn.MouseButton1Click:Connect(function() toggleAntiFling(not noFallEnabled) end)
+LP.CharacterAdded:Connect(function(c)
+    if noFallEnabled then
+        task.wait(0.5)
+        setStates(c:WaitForChild("Humanoid"), true)
+    end
+end)
+
+-- ── GLOBAL AURA — FIX: no longer teleports to every enemy every frame ────────
+-- now: teleport to ONE random enemy, strike, return — with 0.08s min gap
+local GLOBAL_STRIKE_CD = 0.08
+local lastGlobalStrike = 0
+
+uiLibrary:AddToggle("Global Autohit (Cross-map)", function(enabled)
+    getgenv().globalAuraEnabled = enabled
+    if enabled then
+        if not getgenv().globalAuraConn then
+            getgenv().globalAuraConn = RunService.Heartbeat:Connect(function()
+                if not getgenv().globalAuraEnabled then return end
+                local now = tick()
+                if now - lastGlobalStrike < GLOBAL_STRIKE_CD then return end
+                lastGlobalStrike = now
+
+                local char = LP.Character
+                if not char then return end
+                local myRoot = char:FindFirstChild("HumanoidRootPart")
+                local hum    = char:FindFirstChildOfClass("Humanoid")
+                if not (myRoot and hum and hum.Health > 0) then return end
+
+                local origin = myRoot.CFrame
+
+                -- pick ONE target this tick, cycle through them
+                local enemies = {}
+                for _, p in ipairs(Players:GetPlayers()) do
+                    if isEnemy(p) and p.Character then
+                        local eHum  = p.Character:FindFirstChildOfClass("Humanoid")
+                        local eRoot = p.Character:FindFirstChild("HumanoidRootPart")
+                        if eRoot and eHum and eHum.Health > 0 then
+                            local off = origin.Position - eRoot.Position
+                            if off.X*off.X+off.Y*off.Y+off.Z*off.Z <= GLOBAL_RANGE_SQ then
+                                enemies[#enemies+1] = {root = eRoot, char = p.Character}
+                            end
+                        end
+                    end
+                end
+
+                if #enemies == 0 then return end
+                local target = enemies[math.random(#enemies)]
+
+                local tool   = char:FindFirstChildOfClass("Tool")
+                local handle = tool and (tool:FindFirstChild("Handle") or tool:FindFirstChildWhichIsA("BasePart"))
+
+                myRoot.CFrame = target.root.CFrame * CFrame.new(0,0,1)
+                myRoot.AssemblyAngularVelocity = Vector3.new(100000,100000,100000)
+
+                if tool and handle then
+                    tool:Activate()
+                    if firetouchinterest then
+                        firetouchinterest(handle, target.root, 0)
+                        firetouchinterest(handle, target.root, 1)
+                    end
+                end
+
+                task.wait(0.01)
+                myRoot.AssemblyAngularVelocity = Vector3.zero
+                myRoot.AssemblyLinearVelocity  = Vector3.zero
+                myRoot.CFrame = origin
+            end)
+        end
+    else
+        if getgenv().globalAuraConn then
+            getgenv().globalAuraConn:Disconnect()
+            getgenv().globalAuraConn = nil
+        end
+    end
+end, false)
+
+-- ════════════════════════════════════════════════════════════════
+--  NEW UNIQUE FEATURES
+-- ════════════════════════════════════════════════════════════════
+
+-- ── 1. KILL STREAK COUNTER ────────────────────────────────────────────────────
+-- tracks kills by watching enemy health drop to 0
+local streakGui = Instance.new("ScreenGui")
+streakGui.Name         = "StreakGui"
+streakGui.ResetOnSpawn = false
+pcall(function() streakGui.Parent = CoreGui end)
+if not streakGui.Parent then streakGui.Parent = LP:WaitForChild("PlayerGui") end
+
+local streakLabel = Instance.new("TextLabel")
+streakLabel.Size                  = UDim2.new(0,200,0,50)
+streakLabel.Position              = UDim2.new(0.5,-100,0,10)
+streakLabel.BackgroundTransparency= 1
+streakLabel.TextColor3            = Color3.fromRGB(255,200,0)
+streakLabel.TextStrokeTransparency= 0
+streakLabel.Font                  = Enum.Font.GothamBold
+streakLabel.TextSize              = 24
+streakLabel.Text                  = ""
+streakLabel.Parent                = streakGui
+
+local function flashStreak(text)
+    streakLabel.Text             = text
+    streakLabel.TextTransparency = 0
+    local tw = TweenService:Create(
+        streakLabel,
+        TweenInfo.new(1.5, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+        {TextTransparency = 1}
+    )
+    tw:Play()
+end
+
+local function getStreakText(n)
+    if n >= 10 then return "💀 UNSTOPPABLE x"..n
+    elseif n >= 7 then return "🔥 RAMPAGE x"..n
+    elseif n >= 5 then return "⚡ KILLING SPREE x"..n
+    elseif n >= 3 then return "🐂 BULL RUN x"..n
+    else return "Kill x"..n end
+end
+
+local trackedHealthConns = {}
+
+local function watchEnemy(player)
+    if trackedHealthConns[player] then return end
+    local function hookChar(char)
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        if not hum then return end
+        trackedHealthConns[player] = hum.Died:Connect(function()
+            local now = tick()
+            if now - lastKillTime < 8 then
+                killStreak = killStreak + 1
+            else
+                killStreak = 1
+            end
+            lastKillTime = now
+            flashStreak(getStreakText(killStreak))
+            playSound("rbxassetid://12221976")
+        end)
+    end
+    hookChar(player.Character)
+    player.CharacterAdded:Connect(hookChar)
+end
+
+for _, p in ipairs(Players:GetPlayers()) do
+    if isEnemy(p) then watchEnemy(p) end
+end
+Players.PlayerAdded:Connect(function(p)
+    if isEnemy(p) then watchEnemy(p) end
+end)
+
+-- ── 2. GROUND LOCK — kills Y knockback, keeps XZ movement ────────────────────
+-- server only sees normal movement, purely client velocity clamp
+uiLibrary:AddToggle("Ground Lock (No Knockback)", function(enabled)
+    groundLockEnabled = enabled
+    if groundLockConn then groundLockConn:Disconnect() groundLockConn = nil end
+    if enabled then
+        groundLockConn = RunService.Heartbeat:Connect(function()
+            local char = LP.Character
+            local hrp  = char and char:FindFirstChild("HumanoidRootPart")
+            if not hrp then return end
+            local lv = hrp.AssemblyLinearVelocity
+            -- if Y velocity is strong upward (knockback) — clamp it
+            if lv.Y > 30 then
+                hrp.AssemblyLinearVelocity = Vector3.new(lv.X, math.min(lv.Y, 30), lv.Z)
+            end
+            -- kill spin always
+            local av = hrp.AssemblyAngularVelocity
+            if av.Magnitude > 5 then
+                hrp.AssemblyAngularVelocity = Vector3.zero
+            end
+        end)
+    end
+end, false)
+
+-- ── 3. FLING SURF — redirect incoming fling toward nearest enemy ──────────────
+-- when someone flings you, instead of flying off the island you fly INTO someone
+uiLibrary:AddToggle("Fling Surf (Redirect Flings)", function(enabled)
+    flingurfEnabled = enabled
+    if flingurfConn then flingurfConn:Disconnect() flingurfConn = nil end
+    if enabled then
+        flingurfConn = RunService.Heartbeat:Connect(function()
+            local char = LP.Character
+            local hrp  = char and char:FindFirstChild("HumanoidRootPart")
+            if not hrp then return end
+            local lv = hrp.AssemblyLinearVelocity
+            local spd = lv.Magnitude
+            -- only kick in when we're actually being flung (high speed)
+            if spd < 80 then return end
+
+            -- find nearest enemy and redirect velocity toward them
+            local myPos   = hrp.Position
+            local bestDist= math.huge
+            local bestPos = nil
+
+            for _, p in ipairs(Players:GetPlayers()) do
+                if isEnemy(p) and p.Character then
+                    local eRoot = p.Character:FindFirstChild("HumanoidRootPart")
+                    if eRoot then
+                        local d = (myPos - eRoot.Position).Magnitude
+                        if d < bestDist and d > 1 then
+                            bestDist = d
+                            bestPos  = eRoot.Position
+                        end
+                    end
+                end
+            end
+
+            if bestPos then
+                local dir = (bestPos - myPos).Unit
+                hrp.AssemblyLinearVelocity = dir * spd  -- keep speed, change direction
+            end
+        end)
+    end
+end, false)
+
+-- ── 4. CROWD MAGNET — charge toward densest cluster, not just nearest ─────────
+-- finds the position with the most enemies within 20 studs and drives into it
+uiLibrary:AddToggle("Crowd Magnet (Brawl Ram)", function(enabled)
+    crowdMagnetEnabled = enabled
+    if crowdMagnetConn then crowdMagnetConn:Disconnect() crowdMagnetConn = nil end
+    if enabled then
+        crowdMagnetConn = RunService.Heartbeat:Connect(function()
+            local char = LP.Character
+            local hrp  = char and char:FindFirstChild("HumanoidRootPart")
+            local hum  = char and char:FindFirstChildOfClass("Humanoid")
+            if not (hrp and hum and hum.Health > 0) then return end
+
+            local CLUSTER_RADIUS = 20
+            local myPos = hrp.Position
+
+            -- collect enemy positions
+            local positions = {}
+            for _, p in ipairs(Players:GetPlayers()) do
+                if isEnemy(p) and p.Character then
+                    local eRoot = p.Character:FindFirstChild("HumanoidRootPart")
+                    local eHum  = p.Character:FindFirstChildOfClass("Humanoid")
+                    if eRoot and eHum and eHum.Health > 0 then
+                        positions[#positions+1] = eRoot.Position
+                    end
+                end
+            end
+
+            if #positions == 0 then return end
+
+            -- score each candidate by how many others are within cluster radius
+            local bestScore = -1
+            local bestPos   = nil
+
+            for _, candPos in ipairs(positions) do
+                local score = 0
+                for _, otherPos in ipairs(positions) do
+                    if (candPos - otherPos).Magnitude <= CLUSTER_RADIUS then
+                        score = score + 1
+                    end
+                end
+                if score > bestScore then
+                    bestScore = score
+                    bestPos   = candPos
+                end
+            end
+
+            if bestPos then
+                local dir = (bestPos - myPos).Unit
+                local bv  = hrp:FindFirstChild("CrowdMagnet_BV")
+                if not bv then
+                    bv          = Instance.new("BodyVelocity")
+                    bv.Name     = "CrowdMagnet_BV"
+                    bv.MaxForce = Vector3.new(math.huge,0,math.huge)
+                    bv.Parent   = hrp
+                end
+                bv.Velocity = dir * (hum.WalkSpeed * 3)
+            end
+        end)
+    else
+        -- clean up BodyVelocity
+        local hrp = getHRP(LP)
+        if hrp then
+            local bv = hrp:FindFirstChild("CrowdMagnet_BV")
+            if bv then bv:Destroy() end
+        end
+    end
+end, false)
+
+-- ── 5. AUTO RESPAWN — instant respawn, no death screen ───────────────────────
+uiLibrary:AddToggle("Auto Respawn", function(enabled)
+    if autoRespawnConn then autoRespawnConn:Disconnect() autoRespawnConn = nil end
+    if enabled then
+        local function hookDeath(char)
+            local hum = char:WaitForChild("Humanoid")
+            hum.Died:Connect(function()
+                task.wait(0.1)
+                LP:LoadCharacter()
+            end)
+        end
+        if LP.Character then hookDeath(LP.Character) end
+        autoRespawnConn = LP.CharacterAdded:Connect(hookDeath)
+    end
+end, false)
+
+-- ── 6. SPECTATOR ALERT — know when someone's camera is on you ────────────────
+-- checks which players have camera subject pointing at your character parts
+uiLibrary:AddToggle("Spectator Alert", function(enabled)
+    if specAlertConn then specAlertConn:Disconnect() specAlertConn = nil end
+    if enabled then
+        local lastAlert   = 0
+        local lastWatcher = ""
+        specAlertConn = RunService.Heartbeat:Connect(function()
+            local now = tick()
+            if now - lastAlert < 3 then return end  -- alert max every 3s
+            local myChar = LP.Character
+            if not myChar then return end
+            for _, p in ipairs(Players:GetPlayers()) do
+                if p ~= LP then
+                    -- spectators typically have no character or their cam follows your parts
+                    local pChar = p.Character
+                    if not pChar then
+                        -- spectating someone — rough heuristic: no active character
+                        if p.Name ~= lastWatcher then
+                            lastWatcher = p.Name
+                            lastAlert   = now
+                            notify("👁 Spectator Alert", p.Name .. " may be watching you", 3)
+                        end
+                    end
+                end
+            end
+        end)
+    end
+end, false)
+
+-- ── CLEANUP ON RESPAWN ────────────────────────────────────────────────────────
+LP.CharacterAdded:Connect(function()
+    -- clear old hitbox save data for our own character (irrelevant but safe)
+    killStreak = 0
+end)
+
+print("[Hitblox v6.0] Kovak Edition loaded.")
