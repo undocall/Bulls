@@ -1,0 +1,1045 @@
+-- ═══════════ GUESS THE REAL SIZE - AUTO WIN v2 ═══════════
+-- now with countries, continents, landmarks, planets, everything
+
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+
+-- ═══════════ MASTER DATABASE ═══════════
+-- height = vertical, length = horizontal/diameter, area = for countries
+
+local DB = {
+    -- ═══════════ CONTINENTS ═══════════
+    ["asia"]={height=10400,length=10400,area=44580000},
+    ["africa"]={height=7400,length=7400,area=30700000},
+    ["north america"]={height=8300,length=8300,area=24710000},
+    ["south america"]={height=7400,length=7400,area=17840000},
+    ["antarctica"]={height=5100,length=5100,area=14200000},
+    ["europe"]={height=4900,length=4900,area=10180000},
+    ["australia"]={height=3700,length=3700,area=8600000},
+    ["oceania"]={height=5300,length=5300,area=8500000},
+    
+    -- ═══════════ COUNTRIES (by area in km², converted to rough size) ═══════════
+    ["russia"]={height=4400,length=4400,area=17098242},
+    ["canada"]={height=4500,length=4500,area=9984670},
+    ["china"]={height=4300,length=4300,area=9596961},
+    ["united states"]={height=4500,length=4500,area=9372610},
+    ["usa"]={height=4500,length=4500,area=9372610},
+    ["brazil"]={height=4400,length=4400,area=8515767},
+    ["australia country"]={height=3700,length=3700,area=7692024},
+    ["india"]={height=3200,length=3200,area=3287263},
+    ["argentina"]={height=3800,length=3800,area=2780400},
+    ["kazakhstan"]={height=3000,length=3000,area=2724900},
+    ["algeria"]={height=2400,length=2400,area=2381741},
+    ["democratic republic of the congo"]={height=2300,length=2300,area=2344858},
+    ["drc"]={height=2300,length=2300,area=2344858},
+    ["congo"]={height=2300,length=2300,area=2344858},
+    ["greenland"]={height=2600,length=2600,area=2166086},
+    ["saudi arabia"]={height=2100,length=2100,area=2149690},
+    ["mexico"]={height=3100,length=3100,area=1964375},
+    ["indonesia"]={height=5000,length=5000,area=1904569},
+    ["sudan"]={height=2100,length=2100,area=1861484},
+    ["libya"]={height=1900,length=1900,area=1759540},
+    ["iran"]={height=2500,length=2500,area=1648195},
+    ["mongolia"]={height=2400,length=2400,area=1564116},
+    ["peru"]={height=2100,length=2100,area=1285216},
+    ["chad"]={height=1800,length=1800,area=1284000},
+    ["niger"]={height=1900,length=1900,area=1267000},
+    ["angola"]={height=1300,length=1300,area=1246700},
+    ["mali"]={height=1800,length=1800,area=1240192},
+    ["south africa"]={height=1200,length=1200,area=1221037},
+    ["colombia"]={height=1800,length=1800,area=1141748},
+    ["ethiopia"]={height=1300,length=1300,area=1104300},
+    ["bolivia"]={height=1500,length=1500,area=1098581},
+    ["mauritania"]={height=1300,length=1300,area=1030700},
+    ["egypt"]={height=1000,length=1000,area=1002450},
+    ["tanzania"]={height=1200,length=1200,area=947303},
+    ["nigeria"]={height=1200,length=1200,area=923768},
+    ["venezuela"]={height=1200,length=1200,area=916445},
+    ["pakistan"]={height=1600,length=1600,area=881913},
+    ["namibia"]={height=1500,length=1500,area=825615},
+    ["mozambique"]={height=2500,length=2500,area=801590},
+    ["turkey"]={height=1600,length=1600,area=783562},
+    ["chile"]={height=4600,length=4600,area=756102},
+    ["zambia"]={height=1400,length=1400,area=752618},
+    ["myanmar"]={height=2000,length=2000,area=676578},
+    ["afghanistan"]={height=1200,length=1200,area=652230},
+    ["somalia"]={height=1800,length=1800,area=637657},
+    ["france"]={height=1000,length=1000,area=643801},
+    ["ukraine"]={height=1300,length=1300,area=603500},
+    ["madagascar"]={height=1500,length=1500,area=587041},
+    ["botswana"]={height=1100,length=1100,area=581730},
+    ["kenya"]={height=800,length=800,area=580367},
+    ["thailand"]={height=1600,length=1600,area=513120},
+    ["spain"]={height=1000,length=1000,area=505992},
+    ["turkmenistan"]={height=1100,length=1100,area=488100},
+    ["cameroon"]={height=1200,length=1200,area=475442},
+    ["papua new guinea"]={height=1400,length=1400,area=462840},
+    ["yemen"]={height=1000,length=1000,area=455000},
+    ["uzbekistan"]={height=1400,length=1400,area=447400},
+    ["morocco"]={height=1000,length=1000,area=446550},
+    ["iraq"]={height=1000,length=1000,area=438317},
+    ["paraguay"]={height=1000,length=1000,area=406752},
+    ["zimbabwe"]={height=800,length=800,area=390757},
+    ["norway"]={height=2600,length=2600,area=385207},
+    ["japan"]={height=3000,length=3000,area=377915},
+    ["germany"]={height=800,length=800,area=357386},
+    ["republic of the congo"]={height=1300,length=1300,area=342000},
+    ["finland"]={height=1100,length=1100,area=338424},
+    ["vietnam"]={height=1600,length=1600,area=331212},
+    ["malaysia"]={height=1500,length=1500,area=330803},
+    ["norway country"]={height=2600,length=2600,area=385207},
+    ["poland"]={height=800,length=800,area=312679},
+    ["ivory coast"]={height=700,length=700,area=322463},
+    ["oman"]={height=1000,length=1000,area=309500},
+    ["italaly"]={height=1200,length=1200,area=301340},
+    ["italy"]={height=1200,length=1200,area=301340},
+    ["philippines"]={height=1800,length=1800,area=300000},
+    ["ecuador"]={height=700,length=700,area=276841},
+    ["burkina faso"]={height=700,length=700,area=274200},
+    ["new zealand"]={height=1600,length=1600,area=270467},
+    ["gabon"]={height=700,length=700,area=267668},
+    ["guinea"]={height=700,length=700,area=245857},
+    ["united kingdom"]={height=1300,length=1300,area=242495},
+    ["uk"]={height=1300,length=1300,area=242495},
+    ["ghana"]={height=700,length=700,area=238533},
+    ["romania"]={height=700,length=700,area=238391},
+    ["laos"]={height=1100,length=1100,area=236800},
+    ["guyana"]={height=800,length=800,area=214969},
+    ["belarus"]={height=600,length=600,area=207600},
+    ["kyrgyzstan"]={height=900,length=900,area=199951},
+    ["senegal"]={height=700,length=700,area=196722},
+    ["syria"]={height=600,length=600,area=185180},
+    ["cambodia"]={height=700,length=700,area=181035},
+    ["uruguay"]={height=600,length=600,area=176215},
+    ["suriname"]={height=700,length=700,area=163820},
+    ["tunisia"]={height=800,length=800,area=163610},
+    ["bangladesh"]={height=500,length=500,area=147570},
+    ["nepal"]={height=800,length=800,area=147181},
+    ["tajikistan"]={height=700,length=700,area=143100},
+    ["greece"]={height=500,length=500,area=131957},
+    ["nicaragua"]={height=500,length=500,area=130373},
+    ["north korea"]={height=600,length=600,area=120538},
+    ["eritrea"]={height=900,length=900,area=117600},
+    ["malawi"]={height=900,length=900,area=118484},
+    ["benin"]={height=500,length=500,area=112622},
+    ["honduras"]={height=600,length=600,area=112492},
+    ["liberia"]={height=500,length=500,area=111369},
+    ["bulgaria"]={height=500,length=500,area=110994},
+    ["cuba"]={height=1200,length=1200,area=109884},
+    ["guatemala"]={height=500,length=500,area=108889},
+    ["iceland"]={height=500,length=500,area=103000},
+    ["south korea"]={height=500,length=500,area=100210},
+    ["hungary"]={height=500,length=500,area=93028},
+    ["portugal"]={height=500,length=500,area=92090},
+    ["jordan"]={height=500,length=500,area=89342},
+    ["azerbaijan"]={height=400,length=400,area=86600},
+    ["austria"]={height=500,length=500,area=83871},
+    ["united arab emirates"]={height=500,length=500,area=83600},
+    ["uae"]={height=500,length=500,area=83600},
+    ["czech republic"]={height=500,length=500,area=78867},
+    ["czechia"]={height=500,length=500,area=78867},
+    ["panama"]={height=700,length=700,area=75417},
+    ["serbia"]={height=500,length=500,area=77000},
+    ["ireland"]={height=500,length=500,area=70273},
+    ["georgia"]={height=400,length=400,area=69700},
+    ["sri lanka"]={height=400,length=400,area=65610},
+    ["lithuania"]={height=400,length=400,area=65300},
+    ["latvia"]={height=400,length=400,area=64559},
+    ["croatia"]={height=400,length=400,area=56594},
+    ["bosnia and herzegovina"]={height=400,length=400,area=51197},
+    ["costa rica"]={height=300,length=300,area=51100},
+    ["slovakia"]={height=400,length=400,area=49037},
+    ["dominican republic"]={height=400,length=400,area=48671},
+    ["estonia"]={height=400,length=400,area=45227},
+    ["denmark"]={height=400,length=400,area=42933},
+    ["netherlands"]={height=300,length=300,area=41850},
+    ["switzerland"]={height=300,length=300,area=41284},
+    ["bhutan"]={height=400,length=400,area=38394},
+    ["taiwan"]={height=400,length=400,area=36193},
+    ["armenia"]={height=300,length=300,area=29743},
+    ["albania"]={height=300,length=300,area=28748},
+    ["kuwait"]={height=200,length=200,area=17818},
+    ["israel"]={height=500,length=500,area=20770},
+    ["moldova"]={height=300,length=300,area=33846},
+    ["north macedonia"]={height=300,length=300,area=25713},
+    ["slovenia"]={height=200,length=200,area=20273},
+    ["fiji"]={height=600,length=600,area=18272},
+    ["belgium"]={height=300,length=300,area=30528},
+    ["jamaica"]={height=200,length=200,area=10991},
+    ["lebanon"]={height=200,length=200,area=10452},
+    ["cyprus"]={height=200,length=200,area=9251},
+    ["luxembourg"]={height=100,length=100,area=2586},
+    ["malta"]={height=100,length=100,area=316},
+    ["singapore"]={height=100,length=100,area=728},
+    ["bahrain"]={height=100,length=100,area=765},
+    ["qatar"]={height=100,length=100,area=11586},
+    ["brunei"]={height=100,length=100,area=5765},
+    ["trinidad and tobago"]={height=100,length=100,area=5130},
+    ["bahamas"]={height=600,length=600,area=13943},
+    ["vanuatu"]={height=900,length=900,area=12189},
+    ["barbados"]={height=100,length=100,area=430},
+    ["maldives"]={height=800,length=800,area=298},
+    
+    -- ═══════════ OCEANS / SEAS ═══════════
+    ["pacific ocean"]={height=11000,length=11000,area=165250000},
+    ["atlantic ocean"]={height=8600,length=8600,area=106460000},
+    ["indian ocean"]={height=7400,length=7400,area=70560000},
+    ["southern ocean"]={height=4800,length=4800,area=21960000},
+    ["arctic ocean"]={height=4000,length=4000,area=14056000},
+    ["mediterranean sea"]={height=1500,length=3900,area=2510000},
+    ["south china sea"]={height=1800,length=1800,area=3500000},
+    ["caribbean sea"]={height=2500,length=2500,area=2754000},
+    ["bering sea"]={height=3800,length=3800,area=2315000},
+    ["gulf of mexico"]={height=1500,length=1500,area=1550000},
+    ["sea of okhotsk"]={height=3400,length=3400,area=1590000},
+    ["sea of japan"]={height=1750,length=1750,area=978000},
+    ["hudson bay"]={height=260,length=260,area=1230000},
+    ["east china sea"]={height=270,length=270,area=1249000},
+    ["andaman sea"]={height=1000,length=1000,area=797000},
+    ["black sea"]={height=2200,length=2200,area=436400},
+    ["red sea"]={height=2250,length=2250,area=438000},
+    ["baltic sea"]={height=1600,length=1600,area=377000},
+    ["persian gulf"]={height=1000,length=1000,area=251000},
+    ["yellow sea"]={height=1400,length=1400,area=380000},
+    ["north sea"]={height=960,length=960,area=750000},
+    ["coral sea"]={height=4800,length=4800,area=4791000},
+    ["tasman sea"]={height=2800,length=2800,area=2300000},
+    ["arabian sea"]={height=5000,length=5000,area=3862000},
+    ["bay of bengal"]={height=2600,length=2600,area=2172000},
+    ["gulf of california"]={height=1200,length=1200,area=160000},
+    ["barents sea"]={height=300,length=300,area=1405000},
+    ["kara sea"]={height=600,length=600,area=926000},
+    ["laptev sea"]={height=677,length=677,area=614000},
+    ["east siberian sea"]={height=900,length=900,area=987000},
+    ["chukchi sea"]={height=700,length=700,area=620000},
+    ["beaufort sea"]={height=4760,length=4760,area=184000},
+    ["lincoln sea"]={height=100,length=100,area=64000},
+    ["wandel sea"]={height=100,length=100,area=10000},
+    ["greenland sea"]={height=1200,length=1200,area=475000},
+    ["norwegian sea"]={height=1750,length=1750,area=1383000},
+    ["biscay"]={height=5000,length=5000,area=223000},
+    ["gulf of guinea"]={height=2000,length=2000,area=1150000},
+    ["gulf of alaska"]={height=1200,length=1200,area=1532000},
+    ["bristol channel"]={height=100,length=100,area=24000},
+    ["english channel"]={height=100,length=100,area=75000},
+    ["irish sea"]={height=100,length=100,area=46000},
+    ["bay of biscay"]={height=100,length=100,area=223000},
+    ["adriatic sea"]={height=200,length=200,area=138600},
+    ["aegean sea"]={height=600,length=600,area=214000},
+    ["tyrrhenian sea"]={height=400,length=400,area=275000},
+    ["ionian sea"]={height=400,length=400,area=157000},
+    ["ligurian sea"]={height=100,length=100,area=15000},
+    ["balearic sea"]={height=100,length=100,area=87000},
+    ["alboran sea"]={height=100,length=100,area=86000},
+    ["sea of marmara"]={height=100,length=100,area=11500},
+    ["sea of azov"]={height=100,length=100,area=39000},
+    ["caspian sea"]={height=1200,length=1200,area=386400},
+    ["dead sea"]={height=100,length=100,area=810},
+    ["great lakes"]={height=100,length=100,area=244000},
+    ["lake superior"]={height=100,length=100,area=82100},
+    ["lake michigan"]={height=100,length=100,area=58000},
+    ["lake huron"]={height=100,length=100,area=59600},
+    ["lake erie"]={height=100,length=100,area=25700},
+    ["lake ontario"]={height=100,length=100,area=19000},
+    ["lake baikal"]={height=1600,length=1600,area=31500},
+    ["lake victoria"]={height=100,length=100,area=68800},
+    ["lake tanganyika"]={height=700,length=700,area=32900},
+    ["great slave lake"]={height=100,length=100,area=27000},
+    ["great bear lake"]={height=100,length=100,area=31000},
+    ["lake malawi"]={height=600,length=600,area=29600},
+    ["great salt lake"]={height=100,length=100,area=4400},
+    
+    -- ═══════════ RIVERS ═══════════
+    ["nile river"]={height=6650,length=6650},
+    ["amazon river"]={height=6400,length=6400},
+    ["yangtze river"]={height=6300,length=6300},
+    ["mississippi river"]={height=3770,length=3770},
+    ["yenisei river"]={height=5539,length=5539},
+    ["yellow river"]={height=5464,length=5464},
+    ["ob river"]={height=5410,length=5410},
+    ["parana river"]={height=4880,length=4880},
+    ["congo river"]={height=4700,length=4700},
+    ["amur river"]={height=4444,length=4444},
+    ["lena river"]={height=4400,length=4400},
+    ["mekong river"]={height=4350,length=4350},
+    ["mackenzie river"]={height=4241,length=4241},
+    ["niger river"]={height=4200,length=4200},
+    [" Brahmaputra river"]={height=3848,length=3848},
+    ["missouri river"]={height=3767,length=3767},
+    ["indus river"]={height=3180,length=3180},
+    ["sao francisco river"]={height=2914,length=2914},
+    ["saint lawrence river"]={height=3058,length=3058},
+    ["rio grande"]={height=3051,length=3051},
+    ["danube river"]={height=2850,length=2850},
+    ["volga river"]={height=3530,length=3530},
+    [" Madeira river"]={height=3250,length=3250},
+    ["purus river"]={height=3210,length=3210},
+    ["yukon river"]={height=3190,length=3190},
+    ["indigirka river"]={height=2900,length=2900},
+    [" Kolyma river"]={height=2513,length=2513},
+    [" Rhine river"]={height=1230,length=1230},
+    [" Seine river"]={height=776,length=776},
+    [" Thames river"]={height=346,length=346},
+    [" Tiber river"]={height=406,length=406},
+    [" Euphrates river"]={height=2800,length=2800},
+    [" Tigris river"]={height=1850,length=1850},
+    [" Jordan river"]={height=251,length=251},
+    [" Colorado river"]={height=2330,length=2330},
+    [" Columbia river"]={height=2000,length=2000},
+    [" Ohio river"]={height=1579,length=1579},
+    [" Tennessee river"]={height=1049,length=1049},
+    [" Hudson river"]={height=507,length=507},
+    [" Potomac river"]={height=405,length=405},
+    
+    -- ═══════════ MOUNTAINS ═══════════
+    ["mount everest"]={height=8849,length=8849},
+    ["k2"]={height=8611,length=8611},
+    ["kangchenjunga"]={height=8586,length=8586},
+    ["lhotse"]={height=8516,length=8516},
+    ["makalu"]={height=8485,length=8485},
+    ["cho olu"]={height=8188,length=8188},
+    ["dhaulagiri"]={height=8167,length=8167},
+    ["manaslu"]={height=8163,length=8163},
+    ["nanga parbat"]={height=8126,length=8126},
+    ["annapurna"]={height=8091,length=8091},
+    ["gasherbrum i"]={height=8080,length=8080},
+    ["broad peak"]={height=8051,length=8051},
+    ["gasherbrum ii"]={height=8035,length=8035},
+    ["shishapangma"]={height=8027,length=8027},
+    ["gyachung kang"]={height=7952,length=7952},
+    ["annapurna ii"]={height=7937,length=7937},
+    ["gasherbrum iii"]={height=7952,length=7952},
+    ["gasherbrum iv"]={height=7885,length=7885},
+    [" himalayas"]={height=8849,length=2400},
+    ["andes"]={height=6962,length=7000},
+    [" rocky mountains"]={height=4401,length=4800},
+    [" alps"]={height=4808,length=1200},
+    [" appalachian mountains"]={height=2037,length=3200},
+    [" ural mountains"]={height=1895,length=2500},
+    [" atlas mountains"]={height=4167,length=2500},
+    [" great dividing range"]={height=2228,length=3500},
+    [" drakensberg"]={height=3482,length=1000},
+    [" scandinavian mountains"]={height=2469,length=2900},
+    [" japanese alps"]={height=3193,length=1500},
+    [" kunlun mountains"]={height=7649,length=3000},
+    [" tian shan"]={height=7439,length=2800},
+    [" altai mountains"]={height=4506,length=2000},
+    [" carpathian mountains"]={height=2655,length=1500},
+    [" pyrenees"]={height=3404,length=430},
+    [" apennine mountains"]={height=2912,length=1000},
+    [" cantabrian mountains"]={height=2648,length=300},
+    [" dinaric alps"]={height=2678,length=645},
+    [" balkan mountains"]={height=2376,length=560},
+    [" crimean mountains"]={height=1545,length=150},
+    [" pontic mountains"]={height=3937,length=1000},
+    [" zagros mountains"]={height=4409,length=1600},
+    [" elburz mountains"]={height=5610,length=900},
+    [" hindu kush"]={height=7690,length=966},
+    [" pamir mountains"]={height=7495,length=500},
+    [" tien shan mountains"]={height=7439,length=2800},
+    [" khangai mountains"]={height=4031,length=700},
+    [" sayan mountains"]={height=3491,length=1000},
+    [" verkhoyansk range"]={height=2389,length=1200},
+    [" chersky range"]={height=3147,length=1000},
+    [" kamchatka mountains"]={height=4750,length=1200},
+    [" sierra nevada"]={height=4421,length=640},
+    [" cascade range"]={height=4392,length=1100},
+    [" coast mountains"]={height=4016,length=1600},
+    [" alaska range"]={height=6190,length=1000},
+    [" brooks range"]={height=2736,length=1100},
+    [" mackenzie mountains"]={height=2959,length=1000},
+    [" torngat mountains"]={height=1652,length=300},
+    [" laurentian mountains"]={height=1166,length=500},
+    [" Appalachian mountains"]={height=2037,length=3200},
+    [" ouachita mountains"]={height=839,length=300},
+    [" ozark plateau"]={height=600,length=400},
+    [" black hills"]={height=2207,length=200},
+    [" superstitious mountains"]={height=1552,length=60},
+    [" sangre de cristo mountains"]={height=4401,length=300},
+    [" wasatch range"]={height=3636,length=400},
+    [" uinta mountains"]={height=4123,length=250},
+    [" wind river range"]={height=4401,length=200},
+    [" teton range"]={height=4197,length=100},
+    [" bitterroot range"]={height=3157,length=300},
+    [" salmon river mountains"]={height=3361,length=250},
+    [" clearwater mountains"]={height=2762,length=200},
+    [" sawtooth range"]={height=3221,length=100},
+    [" white clouds"]={height=3651,length=100},
+    [" pioneer mountains"]={height=3651,length=150},
+    [" lost river range"]={height=3651,length=100},
+    [" lempo mountains"]={height=3651,length=100},
+    [" smoky mountains"]={height=2025,length=300},
+    [" blue ridge mountains"]={height=2037,length=1000},
+    [" green mountains"]={height=1339,length=400},
+    [" white mountains"]={height=1917,length=200},
+    [" adirondack mountains"]={height=1629,length=250},
+    [" catskill mountains"]={height=1274,length=150},
+    [" pocono mountains"]={height=694,length=100},
+    [" allegheny mountains"]={height=1166,length=500},
+    [" cumberland mountains"]={height=1263,length=200},
+    [" cumberland plateau"]={height=1263,length=300},
+    [" blue mountains"]={height=1111,length=100},
+    [" great dividing range"]={height=2228,length=3500},
+    [" australian alps"]={height=2228,length=500},
+    [" snowy mountains"]={height=2228,length=200},
+    [" grampian mountains"]={height=1167,length=100},
+    [" flinders ranges"]={height=1167,length=400},
+    [" macdonnell ranges"]={height=1531,length=400},
+    [" hamersley ranges"]={height=1235,length=500},
+    [" musgrave ranges"]={height=1440,length=200},
+    [" petermann ranges"]={height=1440,length=200},
+    
+    -- ═══════════ LANDMARKS / BUILDINGS ═══════════
+    ["eiffel tower"]={height=330,length=330},
+    ["burj khalifa"]={height=828,length=828},
+    ["merdeka 118"]={height=678,length=678},
+    ["shanghai tower"]={height=632,length=632},
+    ["abraj al bait"]={height=601,length=601},
+    ["ping an finance centre"]={height=599,length=599},
+    ["lotte world tower"]={height=555,length=555},
+    ["one world trade center"]={height=541,length=541},
+    ["guangzhou ctf finance centre"]={height=530,length=530},
+    ["tianjin ctf finance centre"]={height=530,length=530},
+    ["china zun"]={height=528,length=528},
+    ["taipei 101"]={height=508,length=508},
+    ["shanghai world financial center"]={height=492,length=492},
+    ["international commerce centre"]={height=484,length=484},
+    ["wuhan greenland center"]={height=475,length=475},
+    ["landszhengzhou tower"]={height=475,length=475},
+    ["petronas tower 1"]={height=452,length=452},
+    ["petronas tower 2"]={height=452,length=452},
+    ["zifeng tower"]={height=450,length=450},
+    ["suzhou zhongnan center"]={height=450,length=450},
+    ["willis tower"]={height=442,length=442},
+    ["kingkey 100 finance center"]={height=442,length=442},
+    ["guangzhou international finance center"]={height=439,length=439},
+    ["wuhan greenland plaza"]={height=436,length=436},
+    ["twin towers guangzhou"]={height=436,length=436},
+    ["one prudential plaza"]={height=303,length=303},
+    ["the shard"]={height=310,length=310},
+    ["statue of unity"]={height=182,length=182},
+    ["statue of liberty"]={height=93,length=93},
+    ["great pyramid of giza"]={height=139,length=230},
+    ["pyramid of khufu"]={height=139,length=230},
+    ["pyramid of khafre"]={height=136,length=215},
+    ["pyramid of menkaure"]={height=65,length=105},
+    ["great sphinx of giza"]={height=20,length=73},
+    ["temple of artemis"]={height=18,length=115},
+    ["hanging gardens of babylon"]={height=25,length=100},
+    ["mausoleum at halicarnassus"]={height=45,length=45},
+    ["colossus of rhodes"]={height=33,length=33},
+    ["lighthouse of alexandria"]={height=100,length=100},
+    ["stonehenge"]={height=7,length=100},
+    ["great wall of china"]={height=7,length=21196},
+    ["taj mahal"]={height=73,length=73},
+    ["machu picchu"]={height=7,length=7},
+    ["christ the redeemer"]={height=30,length=30},
+    ["chichen itza"]={height=30,length=30},
+    ["colosseum"]={height=50,length=188},
+    ["roman colosseum"]={height=50,length=188},
+    ["leaning tower of pisa"]={height=56,length=56},
+    ["hagia sophia"]={height=55,length=55},
+    ["blue mosque"]={height=43,length=43},
+    ["milan cathedral"]={height=108,length=158},
+    ["seville cathedral"]={height=105,length=135},
+    ["liverpool cathedral"]={height=101,length=189},
+    ["st. peter's basilica"]={height=136,length=220},
+    ["notre-dame de paris"]={height=69,length=127},
+    ["westminster abbey"]={height=69,length=156},
+    ["sagrada familia"]={height=170,length=170},
+    ["saint basil's cathedral"]={height=65,length=65},
+    ["himeji castle"]={height=46,length=46},
+    ["palace of versailles"]={height=30,length=640},
+    ["forbidden city"]={height=35,length=960},
+    ["kremlin"]={height=71,length=282},
+    ["louvre museum"]={height=21,length=170},
+    ["empire state building"]={height=443,length=443},
+    ["chrysler building"]={height=319,length=319},
+    ["30 rockefeller plaza"]={height=259,length=259},
+    ["flatiron building"]={height=87,length=87},
+    ["woolworth building"]={height=241,length=241},
+    ["metropolitan life tower"]={height=213,length=213},
+    [" Singer building"]={height=187,length=187},
+    ["philadelphia city hall"]={height=167,length=167},
+    [" woolworth building"]={height=241,length=241},
+    ["new york life building"]={height=187,length=187},
+    ["times square tower"]={height=111,length=111},
+    ["goldman sachs tower"]={height=238,length=238},
+    ["bank of america tower"]={height=366,length=366},
+    ["new york times building"]={height=319,length=319},
+    ["one57"]={height=306,length=306},
+    ["432 park avenue"]={height=426,length=426},
+    ["111 west 57th street"]={height=435,length=435},
+    ["central park tower"]={height=472,length=472},
+    [" 30 hudson yards"]={height=387,length=387},
+    ["35 hudson yards"]={height=304,length=304},
+    ["15 hudson yards"]={height=278,length=278},
+    [" one vanderbilt"]={height=397,length=397},
+    ["the steinway tower"]={height=435,length=435},
+    ["111 w 57th street"]={height=435,length=435},
+    ["shanghai tower"]={height=632,length=632},
+    ["merdeka 118"]={height=678,length=678},
+    ["lotte world tower"]={height=555,length=555},
+    ["ping an finance centre"]={height=599,length=599},
+    ["guangzhou ctf finance centre"]={height=530,length=530},
+    ["tianjin ctf finance centre"]={height=530,length=530},
+    ["china zun"]={height=528,length=528},
+    ["taipei 101"]={height=508,length=508},
+    ["shanghai world financial center"]={height=492,length=492},
+    ["international commerce centre"]={height=484,length=484},
+    ["wuhan greenland center"]={height=475,length=475},
+    ["landszhengzhou tower"]={height=475,length=475},
+    ["petronas tower 1"]={height=452,length=452},
+    ["petronas tower 2"]={height=452,length=452},
+    ["zifeng tower"]={height=450,length=450},
+    ["suzhou zhongnan center"]={height=450,length=450},
+    ["kingkey 100 finance center"]={height=442,length=442},
+    ["guangzhou international finance center"]={height=439,length=439},
+    ["wuhan greenland plaza"]={height=436,length=436},
+    ["twin towers guangzhou"]={height=436,length=436},
+    [" goldman sachs tower"]={height=238,length=238},
+    [" bank of america tower"]={height=366,length=366},
+    [" new york times building"]={height=319,length=319},
+    [" one57"]={height=306,length=306},
+    [" 432 park avenue"]={height=426,length=426},
+    [" 111 west 57th street"]={height=435,length=435},
+    [" central park tower"]={height=472,length=472},
+    [" 30 hudson yards"]={height=387,length=387},
+    [" 35 hudson yards"]={height=304,length=304},
+    [" 15 hudson yards"]={height=278,length=278},
+    [" one vanderbilt"]={height=397,length=397},
+    [" the steinway tower"]={height=435,length=435},
+    [" 111 w 57th street"]={height=435,length=435},
+    
+    -- ═══════════ PLANETS / SPACE ═══════════
+    ["sun"]={height=1391000,length=1391000},
+    ["jupiter"]={height=139820,length=139820},
+    ["saturn"]={height=116460,length=116460},
+    ["uranus"]={height=50724,length=50724},
+    ["neptune"]={height=49244,length=49244},
+    ["earth"]={height=12742,length=12742},
+    ["venus"]={height=12104,length=12104},
+    ["mars"]={height=6779,length=6779},
+    ["mercury"]={height=4879,length=4879},
+    ["moon"]={height=3474,length=3474},
+    ["pluto"]={height=2377,length=2377},
+    ["ceres"]={height=940,length=940},
+    ["eris"]={height=2326,length=2326},
+    ["haumea"]={height=1560,length=1560},
+    ["makemake"]={height=1430,length=1430},
+    ["ganymede"]={height=5268,length=5268},
+    ["titan"]={height=5150,length=5150},
+    ["callisto"]={height=4821,length=4821},
+    ["io"]={height=3643,length=3643},
+    ["moon"]={height=3474,length=3474},
+    ["europa"]={height=3122,length=3122},
+    ["triton"]={height=2707,length=2707},
+    ["titania"]={height=1578,length=1578},
+    ["rhea"]={height=1527,length=1527},
+    ["oberon"]={height=1523,length=1523},
+    ["iapetus"]={height=1469,length=1469},
+    ["charon"]={height=1212,length=1212},
+    ["umbriel"]={height=1169,length=1169},
+    ["ariel"]={height=1158,length=1158},
+    ["dione"]={height=1122,length=1122},
+    ["tethys"]={height=1062,length=1062},
+    ["enceladus"]={height=504,length=504},
+    ["mimas"]={height=396,length=396},
+    ["phobos"]={height=27,length=27},
+    ["deimos"]={height=15,length=15},
+    ["vesta"]={height=525,length=525},
+    ["pallas"]={height=512,length=512},
+    ["hygiea"]={height=434,length=434},
+    ["interamnia"]={height=332,length=332},
+    ["davida"]={height=270,length=270},
+    ["cybele"]={height=240,length=240},
+    
+    -- ═══════════ ANIMALS (from previous, still included) ═══════════
+    ["white rhino"]={height=1.8,length=3.7},
+    ["rhino"]={height=1.8,length=3.7},
+    ["black rhino"]={height=1.6,length=3.5},
+    ["brown bear"]={height=1.3,length=2.1},
+    ["grizzly bear"]={height=1.3,length=2.1},
+    ["polar bear"]={height=1.5,length=2.4},
+    ["panda"]={height=0.9,length=1.5},
+    ["black bear"]={height=1.1,length=1.8},
+    ["koala"]={height=0.6,length=0.8},
+    ["african elephant"]={height=3.3,length=6.5},
+    ["elephant"]={height=3.3,length=6.5},
+    ["asian elephant"]={height=2.7,length=5.5},
+    ["giraffe"]={height=5.5,length=7.5},
+    ["hippo"]={height=1.5,length=3.5},
+    ["hippopotamus"]={height=1.5,length=3.5},
+    ["lion"]={height=1.2,length=2.5},
+    ["tiger"]={height=1.1,length=2.8},
+    ["siberian tiger"]={height=1.1,length=3.0},
+    ["wolf"]={height=0.8,length=1.5},
+    ["gray wolf"]={height=0.8,length=1.5},
+    ["dog"]={height=0.6,length=1.0},
+    ["domestic dog"]={height=0.6,length=1.0},
+    ["great dane"]={height=0.9,length=1.4},
+    ["chihuahua"]={height=0.2,length=0.35},
+    ["cat"]={height=0.3,length=0.5},
+    ["domestic cat"]={height=0.3,length=0.5},
+    ["horse"]={height=1.6,length=2.4},
+    ["cow"]={height=1.5,length=2.5},
+    ["pig"]={height=0.8,length=1.3},
+    ["sheep"]={height=0.7,length=1.2},
+    ["goat"]={height=0.6,length=1.0},
+    ["domestic goose"]={height=0.8,length=0.9},
+    ["goose"]={height=0.8,length=0.9},
+    ["canada goose"]={height=0.9,length=1.0},
+    ["duck"]={height=0.4,length=0.6},
+    ["chicken"]={height=0.4,length=0.6},
+    ["turkey"]={height=0.8,length=1.0},
+    ["ostrich"]={height=2.8,length=3.0},
+    ["emu"]={height=1.9,length=2.0},
+    ["penguin"]={height=1.1,length=1.2},
+    ["emperor penguin"]={height=1.2,length=1.3},
+    ["eagle"]={height=0.4,length=0.9},
+    ["bald eagle"]={height=0.4,length=0.9},
+    ["albatross"]={height=0.4,length=1.1},
+    ["flamingo"]={height=1.5,length=1.5},
+    ["crane"]={height=1.2,length=1.2},
+    ["swan"]={height=1.0,length=1.3},
+    ["pelican"]={height=0.9,length=1.3},
+    ["stork"]={height=1.0,length=1.1},
+    ["heron"]={height=0.9,length=1.0},
+    ["human"]={height=1.7,length=1.7},
+    ["person"]={height=1.7,length=1.7},
+    ["man"]={height=1.75,length=1.75},
+    ["woman"]={height=1.6,length=1.6},
+    ["child"]={height=1.2,length=1.2},
+    ["baby"]={height=0.5,length=0.5},
+    ["blue whale"]={height=4.5,length=30},
+    ["whale"]={height=4.5,length=30},
+    ["humpback whale"]={height=4.0,length=15},
+    ["sperm whale"]={height=4.0,length=16},
+    ["orca"]={height=2.5,length=8},
+    ["dolphin"]={height=0.8,length=2.5},
+    ["shark"]={height=1.5,length=4},
+    ["great white shark"]={height=2.0,length=6},
+    ["hammerhead shark"]={height=1.5,length=5},
+    ["crocodile"]={height=0.5,length=5},
+    ["alligator"]={height=0.4,length=4},
+    ["saltwater crocodile"]={height=0.6,length=6},
+    ["komodo dragon"]={height=0.5,length=2.5},
+    ["iguana"]={height=0.5,length=1.5},
+    ["chameleon"]={height=0.3,length=0.4},
+    ["snake"]={height=0.1,length=1.5},
+    ["python"]={height=0.1,length=6},
+    ["anaconda"]={height=0.1,length=9},
+    ["king cobra"]={height=0.1,length=5.5},
+    ["cobra"]={height=0.1,length=3},
+    ["turtle"]={height=0.3,length=0.5},
+    ["sea turtle"]={height=0.5,length=1.2},
+    ["leatherback turtle"]={height=0.7,length=2.0},
+    ["frog"]={height=0.1,length=0.15},
+    ["bullfrog"]={height=0.15,length=0.2},
+    ["salamander"]={height=0.1,length=0.2},
+    ["ant"]={height=0.005,length=0.01},
+    ["bee"]={height=0.015,length=0.02},
+    ["wasp"]={height=0.015,length=0.02},
+    ["spider"]={height=0.02,length=0.05},
+    ["tarantula"]={height=0.05,length=0.1},
+    ["scorpion"]={height=0.02,length=0.09},
+    ["snail"]={height=0.03,length=0.05},
+    ["mouse"]={height=0.05,length=0.1},
+    ["rat"]={height=0.1,length=0.25},
+    ["rabbit"]={height=0.3,length=0.4},
+    ["hare"]={height=0.4,length=0.55},
+    ["squirrel"]={height=0.15,length=0.25},
+    ["hamster"]={height=0.07,length=0.15},
+    ["guinea pig"]={height=0.1,length=0.25},
+    ["hedgehog"]={height=0.1,length=0.25},
+    ["bat"]={height=0.05,length=0.15},
+    ["deer"]={height=1.2,length=1.8},
+    ["moose"]={height=2.0,length=3.0},
+    ["elk"]={height=1.5,length=2.5},
+    ["reindeer"]={height=1.3,length=2.0},
+    ["antelope"]={height=1.0,length=1.5},
+    ["gazelle"]={height=0.8,length=1.2},
+    ["zebra"]={height=1.4,length=2.2},
+    ["camel"]={height=2.0,length=3.0},
+    ["llama"]={height=1.7,length=2.0},
+    ["alpaca"]={height=1.2,length=1.5},
+    ["gorilla"]={height=1.7,length=2.0},
+    ["chimpanzee"]={height=1.2,length=1.4},
+    ["orangutan"]={height=1.4,length=1.6},
+    ["baboon"]={height=0.7,length=1.0},
+    ["lemur"]={height=0.4,length=0.6},
+    ["sloth"]={height=0.6,length=0.7},
+    ["armadillo"]={height=0.2,length=0.5},
+    ["porcupine"]={height=0.3,length=0.7},
+    ["platypus"]={height=0.1,length=0.5},
+    ["wombat"]={height=0.3,length=0.9},
+    ["kangaroo"]={height=1.8,length=2.0},
+    ["wallaby"]={height=0.9,length=1.0},
+    ["fox"]={height=0.4,length=0.9},
+    ["red fox"]={height=0.4,length=0.9},
+    ["raccoon"]={height=0.3,length=0.7},
+    ["skunk"]={height=0.2,length=0.6},
+    ["otter"]={height=0.3,length=0.9},
+    ["beaver"]={height=0.3,length=0.8},
+    ["badger"]={height=0.2,length=0.7},
+    ["weasel"]={height=0.1,length=0.4},
+    ["mink"]={height=0.1,length=0.5},
+    ["ferret"]={height=0.1,length=0.5},
+    ["meerkat"]={height=0.3,length=0.4},
+    ["mongoose"]={height=0.2,length=0.6},
+    ["hyena"]={height=0.8,length=1.6},
+    ["jackal"]={height=0.5,length=1.0},
+    ["coyote"]={height=0.5,length=1.2},
+    ["lynx"]={height=0.5,length=0.9},
+    ["bobcat"]={height=0.4,length=0.8},
+    ["leopard"]={height=0.7,length=1.8},
+    ["cheetah"]={height=0.8,length=1.9},
+    ["jaguar"]={height=0.7,length=1.8},
+    ["cougar"]={height=0.7,length=1.9},
+    ["mountain lion"]={height=0.7,length=1.9},
+    ["snow leopard"]={height=0.6,length=1.7},
+    ["wolverine"]={height=0.4,length=1.0},
+    ["bison"]={height=1.9,length=3.0},
+    ["buffalo"]={height=1.7,length=3.0},
+    ["african buffalo"]={height=1.7,length=3.2},
+    ["yak"]={height=1.7,length=2.7},
+    ["musk ox"]={height=1.4,length=2.2},
+    
+    -- ═══════════ OBJECTS (from previous, still included) ═══════════
+    ["football"]={height=0.22,length=0.28},
+    ["soccer ball"]={height=0.22,length=0.22},
+    ["basketball"]={height=0.24,length=0.24},
+    ["tennis ball"]={height=0.067,length=0.067},
+    ["baseball"]={height=0.074,length=0.074},
+    ["golf ball"]={height=0.043,length=0.043},
+    ["bowling ball"]={height=0.22,length=0.22},
+    ["pencil"]={height=0.19,length=0.19},
+    ["pen"]={height=0.14,length=0.14},
+    ["book"]={height=0.03,length=0.25},
+    ["phone"]={height=0.15,length=0.15},
+    ["tv"]={height=1.2,length=2.0},
+    ["laptop"]={height=0.35,length=0.35},
+    ["car"]={height=1.5,length=4.5},
+    ["bus"]={height=3.2,length=12},
+    ["truck"]={height=3.5,length=16},
+    ["train"]={height=4.0,length=25},
+    ["airplane"]={height=12,length=70},
+    ["rocket"]={height=111,length=111},
+    ["ship"]={height=50,length=300},
+    ["coin"]={height=0.002,length=0.024},
+    ["credit card"]={height=0.054,length=0.086},
+    ["banana"]={height=0.04,length=0.18},
+    ["apple"]={height=0.08,length=0.08},
+    ["orange"]={height=0.075,length=0.075},
+    ["watermelon"]={height=0.45,length=0.45},
+    ["egg"]={height=0.057,length=0.057},
+    ["pizza"]={height=0.03,length=0.35},
+    ["hamburger"]={height=0.1,length=0.1},
+    ["donut"]={height=0.04,length=0.09},
+    ["cookie"]={height=0.01,length=0.08},
+    ["cake"]={height=0.15,length=0.25},
+}
+
+-- ═══════════ PARSE TEXT ═══════════
+
+local function parseObject(text)
+    -- patterns: "Name (height to scale)" or "Name (adjust the length)"
+    local name = text:gsub("%s*%(.-%)%s*$", ""):lower()
+    local dim = "length"
+    if text:lower():find("height") then dim = "height" end
+    if text:lower():find("length") then dim = "length" end
+    
+    -- look up in db
+    local entry = DB[name]
+    if not entry then
+        -- try partial match
+        for dbName, data in pairs(DB) do
+            if name:find(dbName, 1, true) or dbName:find(name, 1, true) then
+                entry = data
+                break
+            end
+        end
+    end
+    
+    if entry then
+        return name, entry[dim] or entry.length or entry.height
+    end
+    return name, nil
+end
+
+-- ═══════════ FIND THINGS ═══════════
+
+local function getRoundTexts()
+    local texts = {}
+    local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
+    if not playerGui then return texts end
+    
+    for _, obj in pairs(playerGui:GetDescendants()) do
+        if obj:IsA("TextLabel") and obj.Text ~= "" then
+            local t = obj.Text
+            if t:find("to scale") or t:find("adjust the") then
+                table.insert(texts, t)
+            end
+        end
+    end
+    return texts
+end
+
+local function findSmallerUIScale()
+    local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
+    if not playerGui then return nil end
+    
+    for _, obj in pairs(playerGui:GetDescendants()) do
+        if obj.Name == "Smaller" then
+            local scale = obj:FindFirstChildWhichIsA("UIScale")
+            if scale then return scale end
+        end
+    end
+    return nil
+end
+
+local function findSubmitButton()
+    local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
+    if not playerGui then return nil end
+    
+    for _, obj in pairs(playerGui:GetDescendants()) do
+        if obj:IsA("TextButton") then
+            if obj.Text:lower():find("submit") then
+                return obj
+            end
+        end
+    end
+    return nil
+end
+
+-- ═══════════ UI HUD ═══════════
+
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "SizeSolver"
+ScreenGui.ResetOnSpawn = false
+
+local parentGui
+pcall(function() parentGui = gethui() end)
+if not parentGui then
+    pcall(function() parentGui = game:GetService("CoreGui") end)
+end
+if not parentGui then
+    parentGui = LocalPlayer:WaitForChild("PlayerGui")
+end
+ScreenGui.Parent = parentGui
+
+local frame = Instance.new("Frame")
+frame.Size = UDim2.new(0, 260, 0, 105)
+frame.Position = UDim2.new(0.5, -130, 0, 5)
+frame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+frame.BorderSizePixel = 0
+frame.Parent = ScreenGui
+
+local fCorner = Instance.new("UICorner")
+fCorner.CornerRadius = UDim.new(0, 6)
+fCorner.Parent = frame
+
+local titleL = Instance.new("TextLabel")
+titleL.Size = UDim2.new(1, 0, 0, 22)
+titleL.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+titleL.Text = "SIZE SOLVER v2"
+titleL.TextColor3 = Color3.fromRGB(0, 255, 150)
+titleL.Font = Enum.Font.GothamBold
+titleL.TextSize = 12
+titleL.Parent = frame
+
+local infoL = Instance.new("TextLabel")
+infoL.Size = UDim2.new(1, -10, 0, 20)
+infoL.Position = UDim2.new(0, 5, 0, 27)
+infoL.BackgroundTransparency = 1
+infoL.Text = "Ref: - | Guess: -"
+infoL.TextColor3 = Color3.fromRGB(180, 180, 180)
+infoL.Font = Enum.Font.Gotham
+infoL.TextSize = 11
+infoL.TextXAlignment = Enum.TextXAlignment.Left
+infoL.Parent = frame
+
+local answerL = Instance.new("TextLabel")
+answerL.Size = UDim2.new(1, -10, 0, 30)
+answerL.Position = UDim2.new(0, 5, 0, 48)
+answerL.BackgroundTransparency = 1
+answerL.Text = "Scale: -"
+answerL.TextColor3 = Color3.fromRGB(255, 200, 0)
+answerL.Font = Enum.Font.GothamBold
+answerL.TextSize = 16
+answerL.Parent = frame
+
+local autoBtn = Instance.new("TextButton")
+autoBtn.Size = UDim2.new(0, 125, 0, 22)
+autoBtn.Position = UDim2.new(0, 5, 1, -27)
+autoBtn.BackgroundColor3 = Color3.fromRGB(0, 160, 70)
+autoBtn.Text = "AUTO: ON"
+autoBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+autoBtn.Font = Enum.Font.GothamBold
+autoBtn.TextSize = 10
+autoBtn.Parent = frame
+
+local aCorner = Instance.new("UICorner")
+aCorner.CornerRadius = UDim.new(0, 4)
+aCorner.Parent = autoBtn
+
+local subBtn = Instance.new("TextButton")
+subBtn.Size = UDim2.new(0, 125, 0, 22)
+subBtn.Position = UDim2.new(0.5, 0, 1, -27)
+subBtn.BackgroundColor3 = Color3.fromRGB(50, 100, 200)
+subBtn.Text = "SET & SUBMIT"
+subBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+subBtn.Font = Enum.Font.GothamBold
+subBtn.TextSize = 10
+subBtn.Parent = frame
+
+local sCorner = Instance.new("UICorner")
+sCorner.CornerRadius = UDim.new(0, 4)
+sCorner.Parent = subBtn
+
+-- drag
+local dragging, dragStart, startPos
+titleL.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = true
+        dragStart = input.Position
+        startPos = frame.Position
+    end
+end)
+titleL.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = false
+    end
+end)
+game:GetService("UserInputService").InputChanged:Connect(function(input)
+    if dragging and (input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseMovement) then
+        local delta = input.Position - dragStart
+        frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+end)
+
+-- ═══════════ LOGIC ═══════════
+
+local autoMode = true
+local currentRef, currentRefSize
+local currentGuess, currentGuessSize
+local correctScale = nil
+
+local function doRound()
+    local texts = getRoundTexts()
+    currentRef, currentRefSize = nil, nil
+    currentGuess, currentGuessSize = nil, nil
+    correctScale = nil
+    
+    for _, t in pairs(texts) do
+        if t:lower():find("to scale") then
+            local name, size = parseObject(t)
+            currentRef = name
+            currentRefSize = size
+        elseif t:lower():find("adjust") then
+            local name, size = parseObject(t)
+            currentGuess = name
+            currentGuessSize = size
+        end
+    end
+    
+    if currentRefSize and currentGuessSize then
+        correctScale = currentGuessSize / currentRefSize
+        answerL.Text = "Scale: " .. string.format("%.3f", correctScale)
+        answerL.TextColor3 = Color3.fromRGB(0, 255, 100)
+        infoL.Text = "Ref: " .. currentRef .. " (" .. currentRefSize .. ") | Guess: " .. currentGuess .. " (" .. currentGuessSize .. ")"
+        
+        if autoMode then
+            local uiScale = findSmallerUIScale()
+            if uiScale then
+                uiScale.Scale = correctScale
+                print("Set scale to " .. correctScale)
+                
+                task.wait(0.5)
+                local submit = findSubmitButton()
+                if submit then
+                    for _, conn in pairs(getconnections(submit.MouseButton1Click)) do
+                        conn:Fire()
+                    end
+                    pcall(function()
+                        game:GetService("VirtualInputManager"):SendMouseButtonEvent(
+                            submit.AbsolutePosition.X + submit.AbsoluteSize.X/2,
+                            submit.AbsolutePosition.Y + submit.AbsoluteSize.Y/2,
+                            0, true, game, 1
+                        )
+                        task.wait(0.05)
+                        game:GetService("VirtualInputManager"):SendMouseButtonEvent(
+                            submit.AbsolutePosition.X + submit.AbsoluteSize.X/2,
+                            submit.AbsolutePosition.Y + submit.AbsoluteSize.Y/2,
+                            0, false, game, 1
+                        )
+                    end)
+                    print("Submitted!")
+                end
+            else
+                print("Could not find UIScale in Smaller")
+            end
+        end
+    else
+        if currentRef and not currentRefSize then
+            answerL.Text = "Unknown: " .. currentRef
+            answerL.TextColor3 = Color3.fromRGB(255, 100, 100)
+        elseif currentGuess and not currentGuessSize then
+            answerL.Text = "Unknown: " .. currentGuess
+            answerL.TextColor3 = Color3.fromRGB(255, 100, 100)
+        else
+            answerL.Text = "Waiting for round..."
+            answerL.TextColor3 = Color3.fromRGB(255, 200, 0)
+        end
+        infoL.Text = "Ref: " .. tostring(currentRef) .. " | Guess: " .. tostring(currentGuess)
+    end
+end
+
+-- ═══════════ BUTTONS ═══════════
+
+autoBtn.MouseButton1Click:Connect(function()
+    autoMode = not autoMode
+    if autoMode then
+        autoBtn.Text = "AUTO: ON"
+        autoBtn.BackgroundColor3 = Color3.fromRGB(0, 160, 70)
+    else
+        autoBtn.Text = "AUTO: OFF"
+        autoBtn.BackgroundColor3 = Color3.fromRGB(160, 50, 50)
+    end
+end)
+
+subBtn.MouseButton1Click:Connect(function()
+    if correctScale then
+        local uiScale = findSmallerUIScale()
+        if uiScale then
+            uiScale.Scale = correctScale
+            print("Scale set to " .. correctScale)
+        end
+    end
+end)
+
+-- ═══════════ MAIN LOOP ═══════════
+
+local lastRound = nil
+
+task.spawn(function()
+    while true do
+        local texts = getRoundTexts()
+        
+        local roundKey = ""
+        for _, t in pairs(texts) do roundKey = roundKey .. t end
+        
+        if roundKey ~= "" and roundKey ~= lastRound then
+            lastRound = roundKey
+            doRound()
+        elseif roundKey == "" and lastRound ~= nil then
+            lastRound = nil
+            answerL.Text = "Waiting for round..."
+            answerL.TextColor3 = Color3.fromRGB(255, 200, 0)
+        end
+        
+        task.wait(1)
+    end
+end)
+
+print("Size Solver v2 loaded with countries, continents, landmarks, and more")
