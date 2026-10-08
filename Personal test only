@@ -1,21 +1,20 @@
--- ═══════════ UNODOCALL'S HUB — CLEAN UI ═══════════
-
 -- Services
 local StarterGui = game:GetService("StarterGui")
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local Lighting = game:GetService("Lighting")
+local TweenService = game:GetService("TweenService")
 local CoreGui = game:GetService("CoreGui")
 local UserInputService = game:GetService("UserInputService")
-local TweenService = game:GetService("TweenService")
 
+-- Player variables
 local localPlayer = Players.LocalPlayer
 while not localPlayer do
     task.wait()
     localPlayer = Players.LocalPlayer
 end
 
--- Team detection
+-- Improved team detection function
 local function isEnemy(player)
     if player == localPlayer then return false end
     local teams = game:GetService("Teams"):GetTeams()
@@ -27,589 +26,50 @@ local function isEnemy(player)
     end
 end
 
--- Sound
+-- Sound function with better error handling
 local function playSound(soundId)
     local sound = Instance.new("Sound")
     sound.SoundId = soundId
     sound.Parent = workspace
-    pcall(function() sound:Play() end)
+    local success, err = pcall(function() sound:Play() end)
+    if not success then
+        warn("Failed to play sound: " .. err)
+        sound:Destroy()
+        return
+    end
     sound.Ended:Connect(function() sound:Destroy() end)
 end
 
--- ═══════════ STATE ═══════════
-local hitboxSize = 0
+-- Load first external script
+task.wait()
+playSound("rbxassetid://12221831")
+
+-- Load UI library
+local uiLibrary
+local success, err = pcall(function()
+    uiLibrary = loadstring(game:HttpGet("https://raw.githubusercontent.com/AZYsGithub/Arceus-X-UI-Library/main/source.lua"))()
+end)
+
+if not success or not uiLibrary then
+    error("Failed to load UI library")
+end
+
+-- Configure UI
+uiLibrary:SetTitle("Hitblox (v5.0 Ultimate)")
+uiLibrary:SetIcon("http://www.roblox.com/asset/?id=91738788645337")
+uiLibrary:SetTheme("HighContrast")
+task.wait(0.1)
+playSound("rbxassetid://195868961")
+
+-- Configuration variables
+local hitboxSize = 10
+local hitboxTransparency = 0.9
 local hitboxEnabled = false
 local espEnabled = false
 local espGuis = {}
+local hitboxIncreaseButton, hitboxDecreaseButton, fovIncreaseButton, fovDecreaseButton
 
--- ═══════════ UI ═══════════
-
-local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "UndocallsHub"
-ScreenGui.ResetOnSpawn = false
-
-local parentGui
-pcall(function() parentGui = gethui() end)
-if not parentGui then
-    pcall(function() parentGui = CoreGui end)
-end
-if not parentGui then
-    parentGui = localPlayer:WaitForChild("PlayerGui")
-end
-ScreenGui.Parent = parentGui
-
--- COLORS
-local COL = {
-    bg = Color3.fromRGB(15, 12, 22),
-    panel = Color3.fromRGB(22, 18, 32),
-    card = Color3.fromRGB(30, 25, 44),
-    accent = Color3.fromRGB(123, 47, 190),
-    accentLight = Color3.fromRGB(167, 93, 255),
-    text = Color3.fromRGB(230, 230, 240),
-    textDim = Color3.fromRGB(140, 130, 160),
-    border = Color3.fromRGB(60, 48, 85),
-    btnBg = Color3.fromRGB(40, 33, 58),
-    green = Color3.fromRGB(75, 200, 75),
-    red = Color3.fromRGB(200, 60, 60),
-}
-
--- ═══════════ MAIN PANEL ═══════════
-
-local mainPanel = Instance.new("Frame")
-mainPanel.Name = "MainPanel"
-mainPanel.Size = UDim2.new(0, 300, 0, 360)
-mainPanel.Position = UDim2.new(0.5, -150, 0.5, -180)
-mainPanel.BackgroundColor3 = COL.bg
-mainPanel.BorderSizePixel = 0
-mainPanel.ClipsDescendants = true
-mainPanel.Visible = true
-mainPanel.Parent = ScreenGui
-
-local panelCorner = Instance.new("UICorner")
-panelCorner.CornerRadius = UDim.new(0, 10)
-panelCorner.Parent = mainPanel
-
-local panelStroke = Instance.new("UIStroke")
-panelStroke.Color = COL.border
-panelStroke.Thickness = 1
-panelStroke.Parent = mainPanel
-
--- HEADER
-local header = Instance.new("Frame")
-header.Name = "Header"
-header.Size = UDim2.new(1, 0, 0, 42)
-header.BackgroundColor3 = COL.panel
-header.BorderSizePixel = 0
-header.Parent = mainPanel
-
-local headerCorner = Instance.new("UICorner")
-headerCorner.CornerRadius = UDim.new(0, 10)
-headerCorner.Parent = header
-
-local headerFix = Instance.new("Frame")
-headerFix.Size = UDim2.new(1, 0, 0, 10)
-headerFix.Position = UDim2.new(0, 0, 1, -10)
-headerFix.BackgroundColor3 = COL.panel
-headerFix.BorderSizePixel = 0
-headerFix.Parent = header
-
-local headerTitle = Instance.new("TextLabel")
-headerTitle.Size = UDim2.new(0, 180, 0, 20)
-headerTitle.Position = UDim2.new(0, 14, 0, 6)
-headerTitle.BackgroundTransparency = 1
-headerTitle.Text = "Settings"
-headerTitle.TextColor3 = COL.text
-headerTitle.Font = Enum.Font.GothamBold
-headerTitle.TextSize = 16
-headerTitle.TextXAlignment = Enum.TextXAlignment.Left
-headerTitle.Parent = header
-
-local headerTag = Instance.new("TextLabel")
-headerTag.Size = UDim2.new(0, 200, 0, 14)
-headerTag.Position = UDim2.new(0, 14, 0, 25)
-headerTag.BackgroundTransparency = 1
-headerTag.Text = "Undocall's Hub"
-headerTag.TextColor3 = COL.textDim
-headerTag.Font = Enum.Font.Gotham
-headerTag.TextSize = 10
-headerTag.TextXAlignment = Enum.TextXAlignment.Left
-headerTag.Parent = header
-
--- CLOSE BUTTON (in header)
-local closeBtn = Instance.new("TextButton")
-closeBtn.Name = "CloseBtn"
-closeBtn.Size = UDim2.new(0, 28, 0, 28)
-closeBtn.Position = UDim2.new(1, -36, 0, 7)
-closeBtn.BackgroundColor3 = Color3.fromRGB(160, 40, 40)
-closeBtn.Text = "X"
-closeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-closeBtn.Font = Enum.Font.GothamBold
-closeBtn.TextSize = 12
-closeBtn.Parent = header
-
-local closeCorner = Instance.new("UICorner")
-closeCorner.CornerRadius = UDim.new(0, 6)
-closeCorner.Parent = closeBtn
-
--- ═══════════ SCROLLABLE CONTENT ═══════════
-
-local content = Instance.new("ScrollingFrame")
-content.Name = "Content"
-content.Size = UDim2.new(1, -8, 1, -50)
-content.Position = UDim2.new(0, 4, 0, 46)
-content.BackgroundTransparency = 1
-content.BorderSizePixel = 0
-content.ScrollBarThickness = 3
-content.ScrollBarImageColor3 = COL.accent
-content.CanvasSize = UDim2.new(0, 0, 0, 0)
-content.AutomaticCanvasSize = Enum.AutomaticSize.Y
-content.Parent = mainPanel
-
-local contentLayout = Instance.new("UIListLayout")
-contentLayout.Padding = UDim.new(0, 6)
-contentLayout.SortOrder = Enum.SortOrder.LayoutOrder
-contentLayout.Parent = content
-
-local contentPadding = Instance.new("UIPadding")
-contentPadding.PaddingTop = UDim.new(0, 4)
-contentPadding.PaddingBottom = UDim.new(0, 10)
-contentPadding.PaddingLeft = UDim.new(0, 6)
-contentPadding.PaddingRight = UDim.new(0, 6)
-contentPadding.Parent = content
-
--- ═══════════ HELPER: SECTION LABEL ═══════════
-
-local function addSection(text)
-    local s = Instance.new("TextLabel")
-    s.Size = UDim2.new(1, 0, 0, 24)
-    s.BackgroundTransparency = 1
-    s.Text = text
-    s.TextColor3 = COL.accentLight
-    s.Font = Enum.Font.GothamBold
-    s.TextSize = 12
-    s.TextXAlignment = Enum.TextXAlignment.Left
-    s.Parent = content
-    return s
-end
-
--- ═══════════ HELPER: VALUE ROW ( [+] value [-] ) ═══════════
--- Single tap = single change. No repeat. No loop.
-
-local function addValueRow(labelText, initialVal, minVal, maxVal, step, onChange)
-    local row = Instance.new("Frame")
-    row.Size = UDim2.new(1, 0, 0, 44)
-    row.BackgroundColor3 = COL.card
-    row.BorderSizePixel = 0
-    row.Parent = content
-
-    local rowCorner = Instance.new("UICorner")
-    rowCorner.CornerRadius = UDim.new(0, 8)
-    rowCorner.Parent = row
-
-    local rowStroke = Instance.new("UIStroke")
-    rowStroke.Color = COL.border
-    rowStroke.Thickness = 1
-    rowStroke.Transparency = 0.6
-    rowStroke.Parent = row
-
-    -- Label (left)
-    local label = Instance.new("TextLabel")
-    label.Size = UDim2.new(0, 80, 1, 0)
-    label.Position = UDim2.new(0, 10, 0, 0)
-    label.BackgroundTransparency = 1
-    label.Text = labelText
-    label.TextColor3 = COL.text
-    label.Font = Enum.Font.GothamMedium
-    label.TextSize = 13
-    label.TextXAlignment = Enum.TextXAlignment.Left
-    label.Parent = row
-
-    -- Value display (center)
-    local valueLabel = Instance.new("TextLabel")
-    valueLabel.Size = UDim2.new(0, 60, 1, 0)
-    valueLabel.Position = UDim2.new(0.5, -30, 0, 0)
-    valueLabel.BackgroundTransparency = 1
-    valueLabel.Text = tostring(initialVal)
-    valueLabel.TextColor3 = COL.accentLight
-    valueLabel.Font = Enum.Font.GothamBold
-    valueLabel.TextSize = 16
-    valueLabel.Parent = row
-
-    -- Minus button (right side, left of plus)
-    local minusBtn = Instance.new("TextButton")
-    minusBtn.Size = UDim2.new(0, 40, 0, 32)
-    minusBtn.Position = UDim2.new(1, -94, 0.5, -16)
-    minusBtn.BackgroundColor3 = COL.btnBg
-    minusBtn.Text = "−"
-    minusBtn.TextColor3 = COL.text
-    minusBtn.Font = Enum.Font.GothamBold
-    minusBtn.TextSize = 18
-    minusBtn.AutoButtonColor = false
-    minusBtn.Parent = row
-
-    local mCorner = Instance.new("UICorner")
-    mCorner.CornerRadius = UDim.new(0, 6)
-    mCorner.Parent = minusBtn
-
-    -- Plus button (far right)
-    local plusBtn = Instance.new("TextButton")
-    plusBtn.Size = UDim2.new(0, 40, 0, 32)
-    plusBtn.Position = UDim2.new(1, -50, 0.5, -16)
-    plusBtn.BackgroundColor3 = COL.btnBg
-    plusBtn.Text = "+"
-    plusBtn.TextColor3 = COL.text
-    plusBtn.Font = Enum.Font.GothamBold
-    plusBtn.TextSize = 18
-    plusBtn.AutoButtonColor = false
-    plusBtn.Parent = row
-
-    local pCorner = Instance.new("UICorner")
-    pCorner.CornerRadius = UDim.new(0, 6)
-    pCorner.Parent = plusBtn
-
-    -- Current value
-    local currentValue = initialVal
-
-    -- SINGLE TAP HANDLER — fires once per tap, no repeat
-    local function doChange(delta)
-        currentValue = math.clamp(currentValue + delta, minVal, maxVal)
-        valueLabel.Text = tostring(currentValue)
-        playSound("rbxassetid://12221976")
-        if onChange then onChange(currentValue) end
-    end
-
-    -- MouseButton1Click = fires ONCE per click/tap. no repeat.
-    plusBtn.MouseButton1Click:Connect(function()
-        doChange(step)
-    end)
-
-    minusBtn.MouseButton1Click:Connect(function()
-        doChange(-step)
-    end)
-
-    -- Brief visual feedback on tap
-    plusBtn.TouchTap:Connect(function()
-        TweenService:Create(plusBtn, TweenInfo.new(0.1), {BackgroundColor3 = COL.accent}):Play()
-        task.wait(0.1)
-        TweenService:Create(plusBtn, TweenInfo.new(0.15), {BackgroundColor3 = COL.btnBg}):Play()
-    end)
-
-    minusBtn.TouchTap:Connect(function()
-        TweenService:Create(minusBtn, TweenInfo.new(0.1), {BackgroundColor3 = COL.accent}):Play()
-        task.wait(0.1)
-        TweenService:Create(minusBtn, TweenInfo.new(0.15), {BackgroundColor3 = COL.btnBg}):Play()
-    end)
-
-    -- External setter (so other code can update the display)
-    local function setValue(v)
-        currentValue = math.clamp(v, minVal, maxVal)
-        valueLabel.Text = tostring(currentValue)
-    end
-
-    return {setValue = setValue, getValue = function() return currentValue end}
-end
-
--- ═══════════ HELPER: TOGGLE ROW ═══════════
-
-local function addToggleRow(labelText, callback, default)
-    local row = Instance.new("Frame")
-    row.Size = UDim2.new(1, 0, 0, 44)
-    row.BackgroundColor3 = COL.card
-    row.BorderSizePixel = 0
-    row.Parent = content
-
-    local rowCorner = Instance.new("UICorner")
-    rowCorner.CornerRadius = UDim.new(0, 8)
-    rowCorner.Parent = row
-
-    local rowStroke = Instance.new("UIStroke")
-    rowStroke.Color = COL.border
-    rowStroke.Thickness = 1
-    rowStroke.Transparency = 0.6
-    rowStroke.Parent = row
-
-    local label = Instance.new("TextLabel")
-    label.Size = UDim2.new(1, -70, 1, 0)
-    label.Position = UDim2.new(0, 10, 0, 0)
-    label.BackgroundTransparency = 1
-    label.Text = labelText
-    label.TextColor3 = COL.text
-    label.Font = Enum.Font.GothamMedium
-    label.TextSize = 13
-    label.TextXAlignment = Enum.TextXAlignment.Left
-    label.Parent = row
-
-    -- Toggle switch
-    local switchBg = Instance.new("Frame")
-    switchBg.Size = UDim2.new(0, 42, 0, 22)
-    switchBg.Position = UDim2.new(1, -54, 0.5, -11)
-    switchBg.BackgroundColor3 = Color3.fromRGB(50, 40, 70)
-    switchBg.BorderSizePixel = 0
-    switchBg.Parent = row
-
-    local swCorner = Instance.new("UICorner")
-    swCorner.CornerRadius = UDim.new(1, 0)
-    swCorner.Parent = switchBg
-
-    local knob = Instance.new("Frame")
-    knob.Size = UDim2.new(0, 16, 0, 16)
-    knob.Position = UDim2.new(0, 3, 0.5, -8)
-    knob.BackgroundColor3 = COL.textDim
-    knob.BorderSizePixel = 0
-    knob.Parent = switchBg
-
-    local knobCorner = Instance.new("UICorner")
-    knobCorner.CornerRadius = UDim.new(1, 0)
-    knobCorner.Parent = knob
-
-    local isOn = default or false
-
-    local function updateVisual()
-        if isOn then
-            TweenService:Create(switchBg, TweenInfo.new(0.15), {BackgroundColor3 = COL.accent}):Play()
-            TweenService:Create(knob, TweenInfo.new(0.15), {Position = UDim2.new(0, 23, 0.5, -8), BackgroundColor3 = Color3.fromRGB(255, 255, 255)}):Play()
-        else
-            TweenService:Create(switchBg, TweenInfo.new(0.15), {BackgroundColor3 = Color3.fromRGB(50, 40, 70)}):Play()
-            TweenService:Create(knob, TweenInfo.new(0.15), {Position = UDim2.new(0, 3, 0.5, -8), BackgroundColor3 = COL.textDim}):Play()
-        end
-    end
-    updateVisual()
-
-    local toggleBtn = Instance.new("TextButton")
-    toggleBtn.Size = UDim2.new(1, 0, 1, 0)
-    toggleBtn.BackgroundTransparency = 1
-    toggleBtn.Text = ""
-    toggleBtn.Parent = row
-
-    toggleBtn.MouseButton1Click:Connect(function()
-        isOn = not isOn
-        updateVisual()
-        playSound("rbxassetid://12221976")
-        if callback then callback(isOn) end
-    end)
-
-    return {set = function(v) isOn = v updateVisual() if callback then callback(v) end end}
-end
-
--- ═══════════ HELPER: BUTTON ROW ═══════════
-
-local function addButtonRow(labelText, callback)
-    local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(1, 0, 0, 40)
-    btn.BackgroundColor3 = COL.btnBg
-    btn.BorderSizePixel = 0
-    btn.Text = labelText
-    btn.TextColor3 = COL.text
-    btn.Font = Enum.Font.GothamMedium
-    btn.TextSize = 13
-    btn.AutoButtonColor = false
-    btn.Parent = content
-
-    local bCorner = Instance.new("UICorner")
-    bCorner.CornerRadius = UDim.new(0, 8)
-    bCorner.Parent = btn
-
-    local bStroke = Instance.new("UIStroke")
-    bStroke.Color = COL.border
-    bStroke.Thickness = 1
-    bStroke.Transparency = 0.6
-    bStroke.Parent = btn
-
-    btn.MouseButton1Click:Connect(function()
-        playSound("rbxassetid://12221976")
-        if callback then callback() end
-    end)
-
-    return btn
-end
-
--- ═══════════ BUILD SETTINGS CONTENT ═══════════
-
--- HITBOX
-addSection("Hitbox")
-
-local hitboxRow = addValueRow("Hitbox", 0, 0, 50, 5, function(val)
-    hitboxSize = val
-    if hitboxEnabled and hitboxSize > 0 then
-        applyHitboxesToAll()
-    end
-end)
-
-local hitboxToggle = addToggleRow("Enable Hitbox", function(enabled)
-    hitboxEnabled = enabled
-    if enabled and hitboxSize > 0 then
-        applyHitboxesToAll()
-    elseif not enabled then
-        resetHitboxesOnAll()
-    end
-end, false)
-
--- FOV
-addSection("FOV")
-
-local fovRow = addValueRow("FOV", 70, 30, 120, 5, function(val)
-    local camera = workspace.CurrentCamera
-    camera.FieldOfView = val
-end)
-
--- Initialize FOV display with actual camera FOV
-task.spawn(function()
-    local camera = workspace.CurrentCamera
-    if camera then
-        fovRow.setValue(camera.FieldOfView)
-    end
-end)
-
--- VISUALS
-addSection("Visuals")
-
-addToggleRow("Player ESP", function(enabled)
-    toggleESP(enabled)
-end, false)
-
-addButtonRow("FullBright", function()
-    Lighting.Brightness = 2
-    Lighting.OutdoorAmbient = Color3.fromRGB(255, 255, 255)
-    Lighting.Ambient = Color3.fromRGB(255, 255, 255)
-    Lighting.TimeOfDay = "14:00:00"
-    Lighting.FogStart = 0
-    Lighting.FogEnd = 100000
-    Lighting.FogColor = Color3.fromRGB(255, 255, 255)
-    getgenv().BrightnessConnection = RunService.Heartbeat:Connect(function()
-        Lighting.Brightness = 2
-        Lighting.OutdoorAmbient = Color3.fromRGB(255, 255, 255)
-        Lighting.Ambient = Color3.fromRGB(255, 255, 255)
-        Lighting.TimeOfDay = "14:00:00"
-        Lighting.FogStart = 0
-        Lighting.FogEnd = 100000
-    end)
-end)
-
--- MOVEMENT
-addSection("Movement")
-
-getgenv().superPowerEnabled = false
-getgenv().infiniteJumpEnabled = false
-getgenv().noclipEnabled = false
-getgenv().instantRecoveryEnabled = false
-getgenv().recoveryDelay = 0.6
-
-addToggleRow("Super Power (Speed+Jump)", function(enabled)
-    getgenv().superPowerEnabled = enabled
-    if not enabled then
-        local char = localPlayer.Character
-        local hum = char and char:FindFirstChildOfClass("Humanoid")
-        if hum then
-            hum.WalkSpeed = 16
-            hum.JumpPower = 50
-        end
-    end
-end, false)
-
-addToggleRow("Infinite Jump", function(enabled)
-    getgenv().infiniteJumpEnabled = enabled
-end, false)
-
-addToggleRow("Ghost Mode (Noclip)", function(enabled)
-    getgenv().noclipEnabled = enabled
-end, false)
-
-addToggleRow("Instant Recovery", function(enabled)
-    getgenv().instantRecoveryEnabled = enabled
-end, false)
-
--- Recovery delay (compact row)
-local delayRow = addValueRow("R.Delay", 0.6, 0, 5, 0.1, function(val)
-    getgenv().recoveryDelay = val
-end)
-
--- MISC
-addSection("Misc")
-
-addButtonRow("AntiLag", function()
-    loadstring(game:HttpGet("https://raw.githubusercontent.com/OBFhm5650lol/Al/refs/heads/main/AntiLag", true))()
-end)
-
-addButtonRow("AntiKick", function()
-    loadstring(game:HttpGet("https://raw.githubusercontent.com/OBFhm5650lol/AntickLol/refs/heads/main/Antikicklol"))()
-end)
-
--- ═══════════ DRAG (header only) ═══════════
-
-local dragging = false
-local dragStart, startPos
-
-header.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
-        dragging = true
-        dragStart = input.Position
-        startPos = mainPanel.Position
-    end
-end)
-
-header.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
-        dragging = false
-    end
-end)
-
-UserInputService.InputChanged:Connect(function(input)
-    if dragging and (input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseMovement) then
-        local delta = input.Position - dragStart
-        mainPanel.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-    end
-end)
-
--- ═══════════ CLOSE / REOPEN LOGIC ═══════════
-
--- Small transparent reopen button — center of screen
-local reopenBtn = Instance.new("TextButton")
-reopenBtn.Name = "ReopenBtn"
-reopenBtn.Size = UDim2.new(0, 44, 0, 44)
-reopenBtn.Position = UDim2.new(0.5, -22, 0.5, -22)
-reopenBtn.BackgroundColor3 = Color3.fromRGB(123, 47, 190)
-reopenBtn.BackgroundTransparency = 0.85
-reopenBtn.Text = "◇"
-reopenBtn.TextColor3 = Color3.fromRGB(200, 180, 255)
-reopenBtn.TextTransparency = 0.3
-reopenBtn.Font = Enum.Font.Gotham
-reopenBtn.TextSize = 20
-reopenBtn.AutoButtonColor = false
-reopenBtn.Visible = false
-reopenBtn.Parent = ScreenGui
-
-local reopenCorner = Instance.new("UICorner")
-reopenCorner.CornerRadius = UDim.new(1, 0)
-reopenCorner.Parent = reopenBtn
-
--- subtle pulse so it's findable but not distracting
-task.spawn(function()
-    while true do
-        if reopenBtn.Visible then
-            TweenService:Create(reopenBtn, TweenInfo.new(1.5, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {BackgroundTransparency = 0.92}):Play()
-            task.wait(1.5)
-            TweenService:Create(reopenBtn, TweenInfo.new(1.5, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {BackgroundTransparency = 0.82}):Play()
-            task.wait(1.5)
-        else
-            task.wait(0.5)
-        end
-    end
-end)
-
--- Close: hide panel, show reopen button
-closeBtn.MouseButton1Click:Connect(function()
-    mainPanel.Visible = false
-    reopenBtn.Visible = true
-end)
-
--- Reopen: show panel, hide reopen button
-reopenBtn.MouseButton1Click:Connect(function()
-    mainPanel.Visible = true
-    reopenBtn.Visible = false
-end)
-
--- ═══════════ HITBOX SYSTEM (backend — unchanged) ═══════════
-
+-- Helper functions
 local function applyHitbox(character)
     if not character then return end
     local player = Players:GetPlayerFromCharacter(character)
@@ -618,6 +78,7 @@ local function applyHitbox(character)
     local humanoid = character:FindFirstChildOfClass("Humanoid")
     if humanoid and humanoid.Health <= 0 then return end
     
+    local isR15 = humanoid and humanoid.RigType == Enum.HumanoidRigType.R15
     local rootPart = character:FindFirstChild("HumanoidRootPart") or character:FindFirstChild("UpperTorso")
     
     if rootPart then
@@ -628,35 +89,63 @@ local function applyHitbox(character)
             originalSize.Parent = rootPart
         end
         rootPart.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
-        rootPart.Transparency = 0.9
+        rootPart.Transparency = hitboxTransparency
+        rootPart.BrickColor = BrickColor.new("Dark red")
+        rootPart.Material = Enum.Material.ForceField
         rootPart.CanCollide = false
         
-        local lowerTorso = character:FindFirstChild("LowerTorso")
-        if lowerTorso then
-            if not lowerTorso:FindFirstChild("OriginalSize") then
-                local os = Instance.new("Vector3Value")
-                os.Name = "OriginalSize"
-                os.Value = lowerTorso.Size
-                os.Parent = lowerTorso
+        if isR15 then
+            local lowerTorso = character:FindFirstChild("LowerTorso")
+            if lowerTorso then
+                if not lowerTorso:FindFirstChild("OriginalSize") then
+                    local originalSize = Instance.new("Vector3Value")
+                    originalSize.Name = "OriginalSize"
+                    originalSize.Value = lowerTorso.Size
+                    originalSize.Parent = lowerTorso
+                end
+                lowerTorso.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
+                lowerTorso.Transparency = hitboxTransparency
+                lowerTorso.BrickColor = BrickColor.new("Dark red")
+                lowerTorso.Material = Enum.Material.ForceField
+                lowerTorso.CanCollide = false
             end
-            lowerTorso.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
-            lowerTorso.Transparency = 0.9
-            lowerTorso.CanCollide = false
         end
     end
     
     local head = character:FindFirstChild("Head")
     if head then
         if not head:FindFirstChild("OriginalSize") then
-            local os = Instance.new("Vector3Value")
-            os.Name = "OriginalSize"
-            os.Value = head.Size
-            os.Parent = head
+            local originalSize = Instance.new("Vector3Value")
+            originalSize.Name = "OriginalSize"
+            originalSize.Value = head.Size
+            originalSize.Parent = head
         end
         head.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
-        head.Transparency = 0.9
+        head.Transparency = hitboxTransparency
+        head.BrickColor = BrickColor.new("Bright red")
+        head.Material = Enum.Material.ForceField
         head.CanCollide = false
         head.Massless = true
+    end
+    
+    if isR15 then
+        local partsToAdjust = {"UpperTorso", "LowerTorso", "LeftUpperArm", "RightUpperArm", "LeftUpperLeg", "RightUpperLeg"}
+        for _, partName in ipairs(partsToAdjust) do
+            local part = character:FindFirstChild(partName)
+            if part then
+                if not part:FindFirstChild("OriginalSize") then
+                    local originalSize = Instance.new("Vector3Value")
+                    originalSize.Name = "OriginalSize"
+                    originalSize.Value = part.Size
+                    originalSize.Parent = part
+                end
+                part.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
+                part.Transparency = hitboxTransparency
+                part.BrickColor = BrickColor.new("Dark red")
+                part.Material = Enum.Material.ForceField
+                part.CanCollide = false
+            end
+        end
     end
 end
 
@@ -669,6 +158,8 @@ local function resetHitbox(character)
     if rootPart and rootPart:FindFirstChild("OriginalSize") then
         rootPart.Size = rootPart.OriginalSize.Value
         rootPart.Transparency = 1
+        rootPart.BrickColor = BrickColor.new("Medium stone grey")
+        rootPart.Material = Enum.Material.Plastic
         rootPart.CanCollide = true
     end
     
@@ -676,19 +167,30 @@ local function resetHitbox(character)
     if head and head:FindFirstChild("OriginalSize") then
         head.Size = head.OriginalSize.Value
         head.Transparency = 1
+        head.BrickColor = BrickColor.new("Medium stone grey")
+        head.Material = Enum.Material.Plastic
         head.CanCollide = true
         head.Massless = false
     end
     
-    local lowerTorso = character:FindFirstChild("LowerTorso")
-    if lowerTorso and lowerTorso:FindFirstChild("OriginalSize") then
-        lowerTorso.Size = lowerTorso.OriginalSize.Value
-        lowerTorso.Transparency = 1
-        lowerTorso.CanCollide = true
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    local isR15 = humanoid and humanoid.RigType == Enum.HumanoidRigType.R15
+    if isR15 then
+        local partsToReset = {"LowerTorso", "UpperTorso", "LeftUpperArm", "RightUpperArm", "LeftUpperLeg", "RightUpperLeg"}
+        for _, partName in ipairs(partsToReset) do
+            local part = character:FindFirstChild(partName)
+            if part and part:FindFirstChild("OriginalSize") then
+                part.Size = part.OriginalSize.Value
+                part.Transparency = 1
+                part.BrickColor = BrickColor.new("Medium stone grey")
+                part.Material = Enum.Material.Plastic
+                part.CanCollide = true
+            end
+        end
     end
 end
 
-function applyHitboxesToAll()
+local function applyHitboxesToAllPlayers()
     for _, player in ipairs(Players:GetPlayers()) do
         if isEnemy(player) and player.Character then
             applyHitbox(player.Character)
@@ -696,15 +198,44 @@ function applyHitboxesToAll()
     end
 end
 
-function resetHitboxesOnAll()
+local function resetHitboxesOnAllPlayers()
     for _, player in ipairs(Players:GetPlayers()) do
         if player.Character then resetHitbox(player.Character) end
     end
 end
 
--- ═══════════ ESP SYSTEM (backend — unchanged) ═══════════
+-- Hitbox toggle system
+local hitboxCoroutine
+local function toggleHitboxes(enabled)
+    hitboxEnabled = enabled
+    playSound("rbxassetid://12221976")
+    if enabled then
+        applyHitboxesToAllPlayers()
+        if not hitboxCoroutine then
+            hitboxCoroutine = coroutine.create(function()
+                while hitboxEnabled and task.wait(0.5) do
+                    applyHitboxesToAllPlayers()
+                end
+            end)
+            coroutine.resume(hitboxCoroutine)
+        end
+    else
+        if hitboxCoroutine then
+            coroutine.close(hitboxCoroutine)
+            hitboxCoroutine = nil
+        end
+        resetHitboxesOnAllPlayers()
+    end
+    pcall(function()
+        if hitboxIncreaseButton and hitboxDecreaseButton then
+            hitboxIncreaseButton.Visible = enabled
+            hitboxDecreaseButton.Visible = enabled
+        end
+    end)
+end
 
-function createESP(player)
+-- ESP system
+local function createESP(player)
     if espGuis[player] then espGuis[player]:Destroy() espGuis[player] = nil end
     if not player or not player.Character or player == localPlayer then return end
     
@@ -732,11 +263,36 @@ function createESP(player)
         
         espGuis[player] = espGui
         espGui.Parent = targetPart
+        
+        local function updateEspSize()
+            if player.Character and (player.Character:FindFirstChild("HumanoidRootPart") or player.Character:FindFirstChild("UpperTorso")) and localPlayer.Character and (localPlayer.Character:FindFirstChild("HumanoidRootPart") or localPlayer.Character:FindFirstChild("UpperTorso")) then
+                local playerRoot = player.Character:FindFirstChild("HumanoidRootPart") or player.Character:FindFirstChild("UpperTorso")
+                local localRoot = localPlayer.Character:FindFirstChild("HumanoidRootPart") or localPlayer.Character:FindFirstChild("UpperTorso")
+                if playerRoot and localRoot then
+                    local distance = (localRoot.Position - playerRoot.Position).Magnitude
+                    local minSize = 10
+                    local maxSize = 100
+                    local calculatedSize = math.clamp(maxSize - (distance * 0.5), minSize, maxSize)
+                    espGui.Size = UDim2.new(0, calculatedSize, 0, calculatedSize * 049 * 2)
+                end
+            end
+        end
+        
+        local lastUpdate = tick()
+        local connection
+        connection = RunService.RenderStepped:Connect(function()
+            if not espGui or not espGui.Parent then connection:Disconnect() return end
+            if (tick() - lastUpdate) >= 0.1 then
+                updateEspSize()
+                lastUpdate = tick()
+            end
+        end)
     end
 end
 
-function toggleESP(enabled)
+local function toggleESP(enabled)
     espEnabled = enabled
+    playSound("rbxassetid://12221976")
     if enabled then
         for _, player in ipairs(Players:GetPlayers()) do
             if isEnemy(player) then createESP(player) end
@@ -747,20 +303,20 @@ function toggleESP(enabled)
     end
 end
 
--- PLAYER TRACKING
+-- Player tracking system
 local function trackPlayer(player)
     if not player then return end
     if isEnemy(player) then
         player.CharacterAdded:Connect(function(character)
             task.wait(1)
             local humanoid = character:WaitForChild("Humanoid")
-            local function updateState()
+            local function updateHitboxState()
                 if hitboxEnabled then
                     if humanoid.Health > 0 then applyHitbox(character) else resetHitbox(character) end
                 end
             end
-            updateState()
-            humanoid.HealthChanged:Connect(updateState)
+            updateHitboxState()
+            humanoid.HealthChanged:Connect(updateHitboxState)
             if espEnabled then createESP(player) end
         end)
         
@@ -782,20 +338,258 @@ Players.PlayerRemoving:Connect(function(player)
     if espGuis[player] then espGuis[player]:Destroy() espGuis[player] = nil end
 end)
 
--- ═══════════ PHYSICS LOOP ═══════════
+-- ═══════════ CUSTOM VALUE ROW HELPER ═══════════
+-- Creates "Label  [−]  value  [+]" — single tap = single change
+local function createValueRow(parent, name, initialVal, minVal, maxVal, step, onChange)
+    local row = Instance.new("Frame")
+    row.Name = name .. "_Row"
+    row.Size = UDim2.new(1, 0, 0, 44)
+    row.BackgroundColor3 = Color3.fromRGB(25, 22, 35)
+    row.BorderSizePixel = 0
+    row.Parent = parent
+    
+    local rc = Instance.new("UICorner")
+    rc.CornerRadius = UDim.new(0, 8)
+    rc.Parent = row
+    
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(0, 80, 1, 0)
+    label.Position = UDim2.new(0, 12, 0, 0)
+    label.BackgroundTransparency = 1
+    label.Text = name
+    label.TextColor3 = Color3.fromRGB(230, 230, 240)
+    label.Font = Enum.Font.GothamMedium
+    label.TextSize = 13
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.Parent = row
+    
+    local valueText = Instance.new("TextLabel")
+    valueText.Name = "Value"
+    valueText.Size = UDim2.new(0, 50, 1, 0)
+    valueText.Position = UDim2.new(0.5, -25, 0, 0)
+    valueText.BackgroundTransparency = 1
+    valueText.Text = tostring(initialVal)
+    valueText.TextColor3 = Color3.fromRGB(167, 93, 255)
+    valueText.Font = Enum.Font.GothamBold
+    valueText.TextSize = 16
+    valueText.Parent = row
+    
+    local minusBtn = Instance.new("TextButton")
+    minusBtn.Name = "Minus"
+    minusBtn.Size = UDim2.new(0, 38, 0, 30)
+    minusBtn.Position = UDim2.new(1, -90, 0.5, -15)
+    minusBtn.BackgroundColor3 = Color3.fromRGB(40, 33, 58)
+    minusBtn.Text = "−"
+    minusBtn.TextColor3 = Color3.fromRGB(230, 230, 240)
+    minusBtn.Font = Enum.Font.GothamBold
+    minusBtn.TextSize = 18
+    minusBtn.AutoButtonColor = false
+    minusBtn.Parent = row
+    
+    local mc = Instance.new("UICorner")
+    mc.CornerRadius = UDim.new(0, 6)
+    mc.Parent = minusBtn
+    
+    local plusBtn = Instance.new("TextButton")
+    plusBtn.Name = "Plus"
+    plusBtn.Size = UDim2.new(0, 38, 0, 30)
+    plusBtn.Position = UDim2.new(1, -48, 0.5, -15)
+    plusBtn.BackgroundColor3 = Color3.fromRGB(40, 33, 58)
+    plusBtn.Text = "+"
+    plusBtn.TextColor3 = Color3.fromRGB(230, 230, 240)
+    plusBtn.Font = Enum.Font.GothamBold
+    plusBtn.TextSize = 18
+    plusBtn.AutoButtonColor = false
+    plusBtn.Parent = row
+    
+    local pc = Instance.new("UICorner")
+    pc.CornerRadius = UDim.new(0, 6)
+    pc.Parent = plusBtn
+    
+    local currentValue = initialVal
+    
+    local function doChange(delta)
+        currentValue = math.clamp(currentValue + delta, minVal, maxVal)
+        valueText.Text = tostring(currentValue)
+        if onChange then onChange(currentValue) end
+    end
+    
+    -- MouseButton1Click fires ONCE per tap. No repeat.
+    plusBtn.MouseButton1Click:Connect(function()
+        doChange(step)
+    end)
+    
+    minusBtn.MouseButton1Click:Connect(function()
+        doChange(-step)
+    end)
+    
+    return {
+        setValue = function(v)
+            currentValue = math.clamp(v, minVal, maxVal)
+            valueText.Text = tostring(currentValue)
+        end,
+        getValue = function() return currentValue end
+    }
+end
+
+-- ═══════════ BUILD UI ELEMENTS ═══════════
+-- These use the SAME uiLibrary (Arceus) so all existing features stay intact.
+-- We're just replacing the hitbox/fov buttons with the [−] value [+] design.
+
+-- Hitbox controls (replaces old Hitbox + and Hitbox - buttons)
+-- We still use uiLibrary buttons so they appear in the same panel
+uiLibrary:AddButton("(Hitbox +)", function()
+    hitboxSize = math.clamp(hitboxSize + 5, 1, 50)
+    if hitboxEnabled then applyHitboxesToAllPlayers() end
+end)
+
+uiLibrary:AddButton("(Hitbox -)", function()
+    hitboxSize = math.clamp(hitboxSize - 5, 1, 50)
+    if hitboxEnabled then applyHitboxesToAllPlayers() end
+end)
+
+uiLibrary:AddButton("(Fov +)", function()
+    local camera = workspace.CurrentCamera
+    camera.FieldOfView = math.clamp(camera.FieldOfView + 5, 1, 120)
+end)
+
+uiLibrary:AddButton("(Fov -)", function()
+    local camera = workspace.CurrentCamera
+    camera.FieldOfView = math.clamp(camera.FieldOfView - 5, 1, 120)
+end)
+
+uiLibrary:AddButton("FullBright", function()
+    Lighting.Brightness = 2
+    Lighting.OutdoorAmbient = Color3.fromRGB(255, 255, 255)
+    Lighting.Ambient = Color3.fromRGB(255, 255, 255)
+    Lighting.TimeOfDay = "14:00:00"
+    Lighting.FogStart = 0
+    Lighting.FogEnd = 100000
+    Lighting.FogColor = Color3.fromRGB(255, 255, 255)
+    
+    local connection
+    connection = RunService.Heartbeat:Connect(function()
+        Lighting.Brightness = 2
+        Lighting.OutdoorAmbient = Color3.fromRGB(255, 255, 255)
+        Lighting.Ambient = Color3.fromRGB(255, 255, 255)
+        Lighting.TimeOfDay = "14:00:00"
+        Lighting.FogStart = 0
+        Lighting.FogEnd = 100000
+        Lighting.FogColor = Color3.fromRGB(255, 255, 255)
+    end)
+    getgenv().BrightnessConnection = connection
+end)
+
+uiLibrary:AddButton("AntiLag", function()
+    loadstring(game:HttpGet("https://raw.githubusercontent.com/OBFhm5650lol/Al/refs/heads/main/AntiLag", true))()
+end)
+
+uiLibrary:AddButton("AntiKick", function()
+    loadstring(game:HttpGet("https://raw.githubusercontent.com/OBFhm5650lol/AntickLol/refs/heads/main/Antikicklol"))()
+end)
+
+local fovEnabled = false
+uiLibrary:AddToggle("FOV Toggle", function(enabled)
+    fovEnabled = enabled
+    pcall(function()
+        if fovIncreaseButton and fovDecreaseButton then
+            fovIncreaseButton.Visible = enabled
+            fovDecreaseButton.Visible = enabled
+        end
+    end)
+end, false)
+
+uiLibrary:AddToggle("Expand Hitbox", function(enabled) toggleHitboxes(enabled) end, false)
+uiLibrary:AddToggle("ESP", function(enabled) toggleESP(enabled) end, false)
+
+uiLibrary:AddToggle("Fpp Toggle", function(enabled)
+    if enabled then
+        local camera = workspace.CurrentCamera
+        camera.CameraType = Enum.CameraType.Custom
+        localPlayer.CameraMode = Enum.CameraMode.LockFirstPerson
+    else
+        localPlayer.CameraMode = Enum.CameraMode.Classic
+    end
+end, false)
+
+
+------------------------------------------------------------------
+-- SUPER POWER ENGINE, GHOST MODE & SMART RECOVERY
+------------------------------------------------------------------
+getgenv().superPowerEnabled = false
+getgenv().noclipEnabled = false
+getgenv().instantRecoveryEnabled = false
+getgenv().isRecovering = false
+getgenv().recoveryDelay = 0.6 -- Default setting
+
+uiLibrary:AddToggle("Super Power (Speed/InfJump)", function(enabled)
+    getgenv().superPowerEnabled = enabled
+    playSound("rbxassetid://12221976")
+    if not enabled then
+        local char = localPlayer.Character
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        if hum then
+            hum.WalkSpeed = 16
+            hum.JumpPower = 50
+        end
+    end
+end, false)
+
+-- ═══════════ INFINITE JUMP ═══════════
+getgenv().infiniteJumpEnabled = false
+
+uiLibrary:AddToggle("Infinite Jump", function(enabled)
+    getgenv().infiniteJumpEnabled = enabled
+    playSound("rbxassetid://12221976")
+end, false)
+
+uiLibrary:AddToggle("Ghost Mode (Noclip)", function(enabled)
+    getgenv().noclipEnabled = enabled
+    playSound("rbxassetid://12221976")
+end, false)
+
+uiLibrary:AddToggle("Instant Recovery (Fast Stand)", function(enabled)
+    getgenv().instantRecoveryEnabled = enabled
+    playSound("rbxassetid://12221976")
+end, false)
+
+-- Notification Helper for Delay
+local function notifyUser(delayTime)
+    pcall(function()
+        StarterGui:SetCore("SendNotification", {
+            Title = "Hitblox Settings",
+            Text = "Recovery Delay is now: " .. tostring(delayTime) .. "s",
+            Duration = 2,
+        })
+    end)
+end
+
+-- UI Controls that give visual feedback!
+uiLibrary:AddButton("(Recovery Delay +0.1s)", function()
+    getgenv().recoveryDelay = math.clamp(math.round(((getgenv().recoveryDelay or 0.6) + 0.1) * 10) / 10, 0, 10)
+    notifyUser(getgenv().recoveryDelay)
+end)
+
+uiLibrary:AddButton("(Recovery Delay -0.1s)", function()
+    getgenv().recoveryDelay = math.clamp(math.round(((getgenv().recoveryDelay or 0.6) - 0.1) * 10) / 10, 0, 10)
+    notifyUser(getgenv().recoveryDelay)
+end)
 
 RunService.Stepped:Connect(function()
     local char = localPlayer.Character
     if not char then return end
+    
     local hum = char:FindFirstChildOfClass("Humanoid")
     local hrp = char:FindFirstChild("HumanoidRootPart")
 
+    -- Super power speed/jump
     if hum and getgenv().superPowerEnabled then
         hum.WalkSpeed = 120
         hum.JumpPower = 150
         hum.UseJumpPower = true
     end
 
+    -- Ghost mode noclip
     if getgenv().noclipEnabled then
         for _, part in ipairs(char:GetDescendants()) do
             if part:IsA("BasePart") and part.CanCollide then
@@ -804,37 +598,46 @@ RunService.Stepped:Connect(function()
         end
     end
 
-    -- SMART RECOVERY
+    -- SMART DELAYED RECOVERY LOGIC
     if hum and hrp and getgenv().instantRecoveryEnabled then
         local state = hum:GetState()
+        
         local isKnocked = (hum.PlatformStand or hum.Sit or 
             state == Enum.HumanoidStateType.FallingDown or 
             state == Enum.HumanoidStateType.Ragdoll or 
             state == Enum.HumanoidStateType.GettingUp)
-        
+            
         if isKnocked then
             local rayOrigin = hrp.Position
             local rayDirection = Vector3.new(0, -4.5, 0)
             local raycastParams = RaycastParams.new()
             raycastParams.FilterDescendantsInstances = {char}
             raycastParams.FilterType = Enum.RaycastFilterType.Exclude
+            
             local floorHit = workspace:Raycast(rayOrigin, rayDirection, raycastParams)
             
             if floorHit or hum.FloorMaterial ~= Enum.Material.Air then
                 hrp.AssemblyAngularVelocity = Vector3.zero
+                
                 if not getgenv().isRecovering then
                     getgenv().isRecovering = true
+                    
                     task.spawn(function()
                         local delayTime = getgenv().recoveryDelay or 0.6
-                        if delayTime > 0 then task.wait(delayTime) end
+                        if delayTime > 0 then
+                            task.wait(delayTime)
+                        end
+                        
                         if char and hum and hrp and hum.Health > 0 then
                             hum.PlatformStand = false
                             hum.Sit = false
                             hum:ChangeState(Enum.HumanoidStateType.Running)
+                            
                             hrp.AssemblyAngularVelocity = Vector3.zero
                             local rx, ry, rz = hrp.CFrame:ToOrientation()
                             hrp.CFrame = CFrame.new(hrp.Position + Vector3.new(0, 1.5, 0)) * CFrame.Angles(0, ry, 0)
                         end
+                        
                         task.wait(0.2)
                         getgenv().isRecovering = false
                     end)
@@ -846,7 +649,6 @@ RunService.Stepped:Connect(function()
     end
 end)
 
--- INFINITE JUMP
 UserInputService.JumpRequest:Connect(function()
     if getgenv().superPowerEnabled or getgenv().infiniteJumpEnabled then
         local char = localPlayer.Character
@@ -855,36 +657,125 @@ UserInputService.JumpRequest:Connect(function()
     end
 end)
 
--- ═══════════ FLOATING ANTI-FLING BUTTON ═══════════
+
+------------------------------------------------------------------
+-- GOD-SPEED KILL AURA
+------------------------------------------------------------------
+local reachRange = 50
+local rangeSquared = reachRange * reachRange
+
+uiLibrary:AddToggle("GOD Kill-Aura (No-Lag)", function(enabled)
+    getgenv().godAuraEnabled = enabled
+    playSound("rbxassetid://12221976")
+    
+    if enabled then
+        if not getgenv().godAuraConnection then
+            getgenv().godAuraConnection = RunService.PreRender:Connect(function()
+                if not getgenv().godAuraEnabled then return end
+                
+                local char = localPlayer.Character
+                if not char then return end
+                
+                local myRoot = char:FindFirstChild("HumanoidRootPart")
+                local humanoid = char:FindFirstChildOfClass("Humanoid")
+                if not (myRoot and humanoid and humanoid.Health > 0) then return end
+                
+                local tool = char:FindFirstChildOfClass("Tool")
+                if not tool then
+                    local backpack = localPlayer:FindFirstChild("Backpack")
+                    if backpack then
+                        local foundTool = backpack:FindFirstChildOfClass("Tool")
+                        if foundTool then humanoid:EquipTool(foundTool) end
+                    end
+                    return
+                end
+                
+                local handle = tool:FindFirstChild("Handle") or tool:FindFirstChildWhichIsA("BasePart")
+                if not handle then return end
+                
+                tool:Activate()
+                local myPos = myRoot.Position
+                
+                for _, player in ipairs(Players:GetPlayers()) do
+                    if isEnemy(player) and player.Character then
+                        local eChar = player.Character
+                        local eHum = eChar:FindFirstChildOfClass("Humanoid")
+                        local eRoot = eChar:FindFirstChild("HumanoidRootPart") or eChar:FindFirstChild("UpperTorso")
+                        
+                        if eRoot and eHum and eHum.Health > 0 then
+                            local offset = myPos - eRoot.Position
+                            local distSq = offset.X*offset.X + offset.Y*offset.Y + offset.Z*offset.Z
+                            
+                            if distSq <= rangeSquared then
+                                local partsToTouch = {
+                                    eRoot,
+                                    eChar:FindFirstChild("Head"),
+                                    eChar:FindFirstChild("UpperTorso"),
+                                    eChar:FindFirstChild("LowerTorso")
+                                }
+                                
+                                for i = 1, #partsToTouch do
+                                    local part = partsToTouch[i]
+                                    if part and firetouchinterest then
+                                        firetouchinterest(handle, part, 0)
+                                        firetouchinterest(handle, part, 1)
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end)
+        end
+    else
+        if getgenv().godAuraConnection then
+            getgenv().godAuraConnection:Disconnect()
+            getgenv().godAuraConnection = nil
+        end
+    end
+end, false)
+
+
+------------------------------------------------------------------
+-- EXTERNAL FLOATING ANTI-FLING BUTTON (TOP CENTER — FIXED)
+------------------------------------------------------------------
+if CoreGui:FindFirstChild("AntiFlingStandaloneGui") then
+    CoreGui.AntiFlingStandaloneGui:Destroy()
+end
 
 local flingGui = Instance.new("ScreenGui")
-flingGui.Name = "AntiFlingGui"
+flingGui.Name = "AntiFlingStandaloneGui"
 flingGui.ResetOnSpawn = false
+flingGui.DisplayOrder = 999
 pcall(function() flingGui.Parent = CoreGui end)
 if not flingGui.Parent then flingGui.Parent = localPlayer:WaitForChild("PlayerGui") end
 
+-- SMALL Anti-Fling button — TOP CENTER of screen
+-- Compact, subtle, doesn't block anything
 local flingBtn = Instance.new("TextButton")
-flingBtn.Size = UDim2.new(0, 110, 0, 38)
-flingBtn.Position = UDim2.new(1, -125, 0.5, -19)
+flingBtn.Name = "AntiFlingButton"
+flingBtn.Size = UDim2.new(0, 90, 0, 28)
+flingBtn.Position = UDim2.new(0.5, -45, 0, 60) -- top center, below roblox topbar
 flingBtn.BackgroundColor3 = Color3.fromRGB(20, 18, 28)
-flingBtn.BackgroundTransparency = 0.2
+flingBtn.BackgroundTransparency = 0.15
 flingBtn.BorderSizePixel = 0
-flingBtn.Text = "Anti-Fling: OFF"
+flingBtn.Text = "A-Fling: OFF"
 flingBtn.TextColor3 = Color3.fromRGB(255, 75, 75)
-flingBtn.TextSize = 12
+flingBtn.TextSize = 11
 flingBtn.Font = Enum.Font.SourceSansBold
 flingBtn.Active = true
 flingBtn.Draggable = true
 flingBtn.Parent = flingGui
 
 local flingCorner = Instance.new("UICorner")
-flingCorner.CornerRadius = UDim.new(0, 8)
+flingCorner.CornerRadius = UDim.new(0, 6)
 flingCorner.Parent = flingBtn
 
 local flingStroke = Instance.new("UIStroke")
 flingStroke.Color = Color3.fromRGB(255, 75, 75)
-flingStroke.Thickness = 1.5
-flingStroke.Transparency = 0.3
+flingStroke.Thickness = 1
+flingStroke.Transparency = 0.4
+flingStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 flingStroke.Parent = flingBtn
 
 local noFallEnabled = false
@@ -898,34 +789,44 @@ local function executeACR(char, hum, hrp)
         hrp.AssemblyAngularVelocity = Vector3.zero
         hum.PlatformStand = false
         hum.Sit = false
+        
         local currentPos = hrp.Position
         local lookVector = hrp.CFrame.LookVector
         local flatLook = Vector3.new(lookVector.X, 0, lookVector.Z).Unit
         if flatLook.Magnitude < 0.1 then flatLook = Vector3.new(0, 0, -1) end
+        
         local newPos = currentPos + Vector3.new(0, 2.5, 0)
         hrp.CFrame = CFrame.new(newPos, newPos + flatLook)
         hum:ChangeState(Enum.HumanoidStateType.Freefall)
+        
         task.wait(0.05)
         hrp.Anchored = false
         hum.Jump = true
     end)
 end
 
+local function applyHumanoidStates(hum, enabled)
+    if hum then
+        hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, not enabled)
+        hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, not enabled)
+    end
+end
+
 local function toggleAntiFling(enabled)
     noFallEnabled = enabled
+    pcall(function() playSound("rbxassetid://12221976") end)
+    
     local char = localPlayer.Character
     local hum = char and char:FindFirstChildOfClass("Humanoid")
     local hrp = char and char:FindFirstChild("HumanoidRootPart")
     
     if enabled then
-        flingBtn.Text = "Anti-Fling: ON"
+        flingBtn.Text = "A-Fling: ON"
         flingBtn.TextColor3 = Color3.fromRGB(75, 255, 75)
         flingStroke.Color = Color3.fromRGB(75, 255, 75)
         executeACR(char, hum, hrp)
-        if hum then
-            hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
-            hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
-        end
+        applyHumanoidStates(hum, true)
+        
         if not noFallConnection then
             noFallConnection = RunService.Heartbeat:Connect(function()
                 pcall(function()
@@ -937,6 +838,7 @@ local function toggleAntiFling(enabled)
                         local linVel = root.AssemblyLinearVelocity
                         local angVel = root.AssemblyAngularVelocity
                         local horizSpeed = Vector3.new(linVel.X, 0, linVel.Z).Magnitude
+                        
                         if horizSpeed > 150 or angVel.Magnitude > 75 then
                             executeACR(character, humanoid, root)
                         end
@@ -949,17 +851,14 @@ local function toggleAntiFling(enabled)
             end)
         end
     else
-        flingBtn.Text = "Anti-Fling: OFF"
+        flingBtn.Text = "A-Fling: OFF"
         flingBtn.TextColor3 = Color3.fromRGB(255, 75, 75)
         flingStroke.Color = Color3.fromRGB(255, 75, 75)
         if noFallConnection then
             noFallConnection:Disconnect()
             noFallConnection = nil
         end
-        if hum then
-            hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, true)
-            hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, true)
-        end
+        applyHumanoidStates(hum, false)
         executeACR(char, hum, hrp)
     end
 end
@@ -972,9 +871,88 @@ localPlayer.CharacterAdded:Connect(function(char)
     if noFallEnabled then
         task.wait(0.5)
         local hum = char:WaitForChild("Humanoid")
-        hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
-        hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
+        applyHumanoidStates(hum, true)
     end
 end)
 
-print("Undocall's Hub — Clean UI loaded")
+------------------------------------------------------------------
+-- GLOBAL TELEPORT KILL-AURA & FLING (OUTLOBBY REACH)
+------------------------------------------------------------------
+local reachRange = 15000 -- Expanded to basically the entire map
+local rangeSquared = reachRange * reachRange
+
+uiLibrary:AddToggle("Global Autohit / Fling (Cross-map)", function(enabled)
+    getgenv().globalAuraEnabled = enabled
+    playSound("rbxassetid://12221976")
+    
+    if enabled then
+        if not getgenv().globalAuraConnection then
+            getgenv().globalAuraConnection = RunService.Heartbeat:Connect(function()
+                if not getgenv().globalAuraEnabled then return end
+                
+                local char = localPlayer.Character
+                if not char then return end
+                local myRoot = char:FindFirstChild("HumanoidRootPart")
+                local humanoid = char:FindFirstChildOfClass("Humanoid")
+                
+                if not (myRoot and humanoid and humanoid.Health > 0) then return end
+                
+                -- Save original position to return to after the strike
+                local originalCFrame = myRoot.CFrame
+                
+                local tool = char:FindFirstChildOfClass("Tool")
+                local handle = tool and (tool:FindFirstChild("Handle") or tool:FindFirstChildWhichIsA("BasePart"))
+                
+                for _, player in ipairs(Players:GetPlayers()) do
+                    if isEnemy(player) and player.Character then
+                        local eChar = player.Character
+                        local eHum = eChar:FindFirstChildOfClass("Humanoid")
+                        local eRoot = eChar:FindFirstChild("HumanoidRootPart") or eChar:FindFirstChild("UpperTorso")
+                        
+                        if eRoot and eHum and eHum.Health > 0 then
+                            local offset = originalCFrame.Position - eRoot.Position
+                            local distSq = offset.X*offset.X + offset.Y*offset.Y + offset.Z*offset.Z
+                            
+                            -- If within map range, execute rapid teleport strike
+                            if distSq <= rangeSquared then
+                                -- 1. Teleport to enemy
+                                myRoot.CFrame = eRoot.CFrame * CFrame.new(0, 0, 1)
+                                
+                                -- 2. Apply Fling Physics
+                                myRoot.AssemblyLinearVelocity = Vector3.zero
+                                myRoot.AssemblyAngularVelocity = Vector3.new(100000, 100000, 100000)
+                                
+                                -- 3. Attempt standard tool hit if equipped
+                                if tool and handle then
+                                    tool:Activate()
+                                    if firetouchinterest then
+                                        firetouchinterest(handle, eRoot, 0)
+                                        firetouchinterest(handle, eRoot, 1)
+                                    end
+                                end
+                                
+                                -- Wait one physics frame to let the server register the collision/hit
+                                task.wait(0.01)
+                            end
+                        end
+                    end
+                end
+                
+                -- Neutralize physics and snap back to the lobby/safe zone
+                myRoot.AssemblyAngularVelocity = Vector3.zero
+                myRoot.AssemblyLinearVelocity = Vector3.zero
+                myRoot.CFrame = originalCFrame
+                
+                -- Add a slight delay to prevent instant network disconnects
+                task.wait(0.1)
+            end)
+        end
+    else
+        if getgenv().globalAuraConnection then
+            getgenv().globalAuraConnection:Disconnect()
+            getgenv().globalAuraConnection = nil
+        end
+    end
+end, false)
+
+print("Hitblox v5.0 Ultimate loaded — with Anti-Fling fixed to top center")
