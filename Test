@@ -54,10 +54,10 @@ if not success or not uiLibrary then
     error("Failed to load UI library")
 end
 
--- Configure UI
-uiLibrary:SetTitle("Hitblox (v5.0 Ultimate)")
-uiLibrary:SetIcon("http://www.roblox.com/asset/?id=91738788645337")
-uiLibrary:SetTheme("HighContrast")
+-- Configure UI (Title set to Undocall & visual theme revamped to Midnight)
+uiLibrary:SetTitle("Undocall")
+uiLibrary:SetIcon("http://www.roblox.com/asset/?id=7072718362")
+uiLibrary:SetTheme("Midnight")
 task.wait(0.1)
 playSound("rbxassetid://195868961")
 
@@ -255,11 +255,11 @@ local function createESP(player)
         local espLabel = Instance.new("TextLabel", espGui)
         espLabel.Size = UDim2.new(1, 0, 1, 0)
         espLabel.BackgroundTransparency = 1
-        espLabel.TextColor3 = Color3.new(1, 0, 0)
+        espLabel.TextColor3 = Color3.fromRGB(0, 255, 200)
         espLabel.TextStrokeTransparency = 0
         espLabel.Text = player.Name
         espLabel.TextScaled = true
-        espLabel.Font = Enum.Font.SourceSansBold
+        espLabel.Font = Enum.Font.GothamBold
         
         espGuis[player] = espGui
         espGui.Parent = targetPart
@@ -419,9 +419,10 @@ end, false)
 ------------------------------------------------------------------
 getgenv().superPowerEnabled = false
 getgenv().noclipEnabled = false
+getgenv().infiniteJumpEnabled = false
 getgenv().instantRecoveryEnabled = false
 getgenv().isRecovering = false
-getgenv().recoveryDelay = 0.6 -- Default setting
+getgenv().recoveryDelay = 0.6
 
 uiLibrary:AddToggle("Super Power (Speed/InfJump)", function(enabled)
     getgenv().superPowerEnabled = enabled
@@ -434,6 +435,11 @@ uiLibrary:AddToggle("Super Power (Speed/InfJump)", function(enabled)
             hum.JumpPower = 50
         end
     end
+end, false)
+
+uiLibrary:AddToggle("Infinite Jump (Standalone)", function(enabled)
+    getgenv().infiniteJumpEnabled = enabled
+    playSound("rbxassetid://12221976")
 end, false)
 
 uiLibrary:AddToggle("Ghost Mode (Noclip)", function(enabled)
@@ -450,14 +456,13 @@ end, false)
 local function notifyUser(delayTime)
     pcall(function()
         StarterGui:SetCore("SendNotification", {
-            Title = "Hitblox Settings",
+            Title = "Undocall Settings",
             Text = "Recovery Delay is now: " .. tostring(delayTime) .. "s",
             Duration = 2,
         })
     end)
 end
 
--- UI Controls that give visual feedback!
 uiLibrary:AddButton("(Recovery Delay +0.1s)", function()
     getgenv().recoveryDelay = math.clamp(math.round(((getgenv().recoveryDelay or 0.6) + 0.1) * 10) / 10, 0, 10)
     notifyUser(getgenv().recoveryDelay)
@@ -543,7 +548,7 @@ RunService.Stepped:Connect(function()
 end)
 
 UserInputService.JumpRequest:Connect(function()
-    if getgenv().superPowerEnabled then
+    if getgenv().superPowerEnabled or getgenv().infiniteJumpEnabled then
         local char = localPlayer.Character
         local hum = char and char:FindFirstChildOfClass("Humanoid")
         if hum then hum:ChangeState(Enum.HumanoidStateType.Jumping) end
@@ -630,7 +635,7 @@ end, false)
 
 
 ------------------------------------------------------------------
--- EXTERNAL FLOATING ANTI-FLING BUTTON SYSTEM
+-- REVAMPED STANDALONE ANTI-FLING BUTTON (NEON MIDNIGHT STYLE)
 ------------------------------------------------------------------
 if CoreGui:FindFirstChild("AntiFlingStandaloneGui") then
     CoreGui.AntiFlingStandaloneGui:Destroy()
@@ -644,24 +649,24 @@ if not flingGui.Parent then flingGui.Parent = localPlayer:WaitForChild("PlayerGu
 
 local flingBtn = Instance.new("TextButton")
 flingBtn.Name = "AntiFlingButton"
-flingBtn.Size = UDim2.new(0, 130, 0, 45)
+flingBtn.Size = UDim2.new(0, 140, 0, 45)
 flingBtn.Position = UDim2.new(0.85, -10, 0.45, 0)
-flingBtn.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+flingBtn.BackgroundColor3 = Color3.fromRGB(15, 15, 25)
 flingBtn.BorderSizePixel = 0
 flingBtn.Text = "Anti-Fling: OFF"
-flingBtn.TextColor3 = Color3.fromRGB(255, 75, 75)
-flingBtn.TextSize = 14
-flingBtn.Font = Enum.Font.SourceSansBold
+flingBtn.TextColor3 = Color3.fromRGB(200, 200, 220)
+flingBtn.TextSize = 13
+flingBtn.Font = Enum.Font.GothamBold
 flingBtn.Active = true
 flingBtn.Draggable = true
 flingBtn.Parent = flingGui
 
 local uiCorner = Instance.new("UICorner")
-uiCorner.CornerRadius = UDim.new(0, 8)
+uiCorner.CornerRadius = UDim.new(0, 10)
 uiCorner.Parent = flingBtn
 
 local uiStroke = Instance.new("UIStroke")
-uiStroke.Color = Color3.fromRGB(255, 75, 75)
+uiStroke.Color = Color3.fromRGB(50, 50, 80)
 uiStroke.Thickness = 2
 uiStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 uiStroke.Parent = flingBtn
@@ -710,8 +715,8 @@ local function toggleAntiFling(enabled)
     
     if enabled then
         flingBtn.Text = "Anti-Fling: ON"
-        flingBtn.TextColor3 = Color3.fromRGB(75, 255, 75)
-        uiStroke.Color = Color3.fromRGB(75, 255, 75)
+        flingBtn.TextColor3 = Color3.fromRGB(0, 255, 200)
+        uiStroke.Color = Color3.fromRGB(0, 255, 200)
         executeACR(char, hum, hrp)
         applyHumanoidStates(hum, true)
         
@@ -740,8 +745,8 @@ local function toggleAntiFling(enabled)
         end
     else
         flingBtn.Text = "Anti-Fling: OFF"
-        flingBtn.TextColor3 = Color3.fromRGB(255, 75, 75)
-        uiStroke.Color = Color3.fromRGB(255, 75, 75)
+        flingBtn.TextColor3 = Color3.fromRGB(200, 200, 220)
+        uiStroke.Color = Color3.fromRGB(50, 50, 80)
         if noFallConnection then
             noFallConnection:Disconnect()
             noFallConnection = nil
@@ -766,7 +771,7 @@ end)
 ------------------------------------------------------------------
 -- GLOBAL TELEPORT KILL-AURA & FLING (OUTLOBBY REACH)
 ------------------------------------------------------------------
-local reachRange = 15000 -- Expanded to basically the entire map
+local reachRange = 15000
 local rangeSquared = reachRange * reachRange
 
 uiLibrary:AddToggle("Global Autohit / Fling (Cross-map)", function(enabled)
@@ -785,9 +790,7 @@ uiLibrary:AddToggle("Global Autohit / Fling (Cross-map)", function(enabled)
                 
                 if not (myRoot and humanoid and humanoid.Health > 0) then return end
                 
-                -- Save original position to return to after the strike
                 local originalCFrame = myRoot.CFrame
-                
                 local tool = char:FindFirstChildOfClass("Tool")
                 local handle = tool and (tool:FindFirstChild("Handle") or tool:FindFirstChildWhichIsA("BasePart"))
                 
@@ -801,16 +804,11 @@ uiLibrary:AddToggle("Global Autohit / Fling (Cross-map)", function(enabled)
                             local offset = originalCFrame.Position - eRoot.Position
                             local distSq = offset.X*offset.X + offset.Y*offset.Y + offset.Z*offset.Z
                             
-                            -- If within map range, execute rapid teleport strike
                             if distSq <= rangeSquared then
-                                -- 1. Teleport to enemy
                                 myRoot.CFrame = eRoot.CFrame * CFrame.new(0, 0, 1)
-                                
-                                -- 2. Apply Fling Physics
                                 myRoot.AssemblyLinearVelocity = Vector3.zero
                                 myRoot.AssemblyAngularVelocity = Vector3.new(100000, 100000, 100000)
                                 
-                                -- 3. Attempt standard tool hit if equipped
                                 if tool and handle then
                                     tool:Activate()
                                     if firetouchinterest then
@@ -819,19 +817,16 @@ uiLibrary:AddToggle("Global Autohit / Fling (Cross-map)", function(enabled)
                                     end
                                 end
                                 
-                                -- Wait one physics frame to let the server register the collision/hit
                                 task.wait(0.01)
                             end
                         end
                     end
                 end
                 
-                -- Neutralize physics and snap back to the lobby/safe zone
                 myRoot.AssemblyAngularVelocity = Vector3.zero
                 myRoot.AssemblyLinearVelocity = Vector3.zero
                 myRoot.CFrame = originalCFrame
                 
-                -- Add a slight delay to prevent instant network disconnects
                 task.wait(0.1)
             end)
         end
