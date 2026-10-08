@@ -26,12 +26,21 @@ local function isEnemy(player)
     end
 end
 
--- Sound function (muted for speed)
+-- Sound function with better error handling
 local function playSound(soundId)
-    return
+    local sound = Instance.new("Sound")
+    sound.SoundId = soundId
+    sound.Parent = workspace
+    local success, err = pcall(function() sound:Play() end)
+    if not success then
+        warn("Failed to play sound: " .. err)
+        sound:Destroy()
+        return
+    end
+    sound.Ended:Connect(function() sound:Destroy() end)
 end
 
--- Load UI library (instant, no delays)
+-- Load UI library (no startup delay)
 local uiLibrary
 local success, err = pcall(function()
     uiLibrary = loadstring(game:HttpGet("https://raw.githubusercontent.com/AZYsGithub/Arceus-X-UI-Library/main/source.lua"))()
@@ -41,7 +50,9 @@ if not success or not uiLibrary then
     error("Failed to load UI library")
 end
 
+-- Configure UI
 uiLibrary:SetTitle("Hitblox (v5.0 Ultimate)")
+uiLibrary:SetIcon("http://www.roblox.com/asset/?id=91738788645337")
 uiLibrary:SetTheme("HighContrast")
 
 -- Configuration variables
@@ -191,6 +202,7 @@ end
 local hitboxCoroutine
 local function toggleHitboxes(enabled)
     hitboxEnabled = enabled
+    playSound("rbxassetid://12221976")
     if enabled then
         applyHitboxesToAllPlayers()
         if not hitboxCoroutine then
@@ -274,6 +286,7 @@ end
 
 local function toggleESP(enabled)
     espEnabled = enabled
+    playSound("rbxassetid://12221976")
     if enabled then
         for _, player in ipairs(Players:GetPlayers()) do
             if isEnemy(player) then createESP(player) end
@@ -394,6 +407,7 @@ uiLibrary:AddToggle("Fpp Toggle", function(enabled)
     end
 end, false)
 
+
 ------------------------------------------------------------------
 -- SUPER POWER ENGINE, GHOST MODE & SMART RECOVERY
 ------------------------------------------------------------------
@@ -401,10 +415,11 @@ getgenv().superPowerEnabled = false
 getgenv().noclipEnabled = false
 getgenv().instantRecoveryEnabled = false
 getgenv().isRecovering = false
-getgenv().recoveryDelay = 0.6
+getgenv().recoveryDelay = 0.6 -- Default setting
 
 uiLibrary:AddToggle("Super Power (Speed/InfJump)", function(enabled)
     getgenv().superPowerEnabled = enabled
+    playSound("rbxassetid://12221976")
     if not enabled then
         local char = localPlayer.Character
         local hum = char and char:FindFirstChildOfClass("Humanoid")
@@ -415,19 +430,22 @@ uiLibrary:AddToggle("Super Power (Speed/InfJump)", function(enabled)
     end
 end, false)
 
--- ═══════════ INFINITE JUMP (SEPARATE TOGGLE) ═══════════
+-- ═══════════ INFINITE JUMP ═══════════
 getgenv().infiniteJumpEnabled = false
 
 uiLibrary:AddToggle("Infinite Jump", function(enabled)
     getgenv().infiniteJumpEnabled = enabled
+    playSound("rbxassetid://12221976")
 end, false)
 
 uiLibrary:AddToggle("Ghost Mode (Noclip)", function(enabled)
     getgenv().noclipEnabled = enabled
+    playSound("rbxassetid://12221976")
 end, false)
 
 uiLibrary:AddToggle("Instant Recovery (Fast Stand)", function(enabled)
     getgenv().instantRecoveryEnabled = enabled
+    playSound("rbxassetid://12221976")
 end, false)
 
 -- Notification Helper for Delay
@@ -441,6 +459,7 @@ local function notifyUser(delayTime)
     end)
 end
 
+-- UI Controls that give visual feedback!
 uiLibrary:AddButton("(Recovery Delay +0.1s)", function()
     getgenv().recoveryDelay = math.clamp(math.round(((getgenv().recoveryDelay or 0.6) + 0.1) * 10) / 10, 0, 10)
     notifyUser(getgenv().recoveryDelay)
@@ -493,7 +512,7 @@ RunService.Stepped:Connect(function()
             local floorHit = workspace:Raycast(rayOrigin, rayDirection, raycastParams)
             
             if floorHit or hum.FloorMaterial ~= Enum.Material.Air then
-                hrp.AssemblyAngularVelocity = Vector3.zero
+                hrp.AssemblyAngularVelocity = Vector3.zero 
                 
                 if not getgenv().isRecovering then
                     getgenv().isRecovering = true
@@ -520,21 +539,19 @@ RunService.Stepped:Connect(function()
                 end
             end
         else
-            getgenv().isRecovering = false
+            getgenv().isRecovering = false 
         end
     end
 end)
 
--- Infinite Jump + Super Power Jump
 UserInputService.JumpRequest:Connect(function()
-    if getgenv().infiniteJumpEnabled or getgenv().superPowerEnabled then
+    if getgenv().superPowerEnabled or getgenv().infiniteJumpEnabled then
         local char = localPlayer.Character
         local hum = char and char:FindFirstChildOfClass("Humanoid")
-        if hum then
-            hum:ChangeState(Enum.HumanoidStateType.Jumping)
-        end
+        if hum then hum:ChangeState(Enum.HumanoidStateType.Jumping) end
     end
 end)
+
 
 ------------------------------------------------------------------
 -- GOD-SPEED KILL AURA
@@ -544,6 +561,7 @@ local rangeSquared = reachRange * reachRange
 
 uiLibrary:AddToggle("GOD Kill-Aura (No-Lag)", function(enabled)
     getgenv().godAuraEnabled = enabled
+    playSound("rbxassetid://12221976")
     
     if enabled then
         if not getgenv().godAuraConnection then
@@ -611,6 +629,7 @@ uiLibrary:AddToggle("GOD Kill-Aura (No-Lag)", function(enabled)
         end
     end
 end, false)
+
 
 ------------------------------------------------------------------
 -- EXTERNAL FLOATING ANTI-FLING BUTTON SYSTEM
@@ -685,6 +704,7 @@ end
 
 local function toggleAntiFling(enabled)
     noFallEnabled = enabled
+    pcall(function() playSound("rbxassetid://12221976") end)
     
     local char = localPlayer.Character
     local hum = char and char:FindFirstChildOfClass("Humanoid")
@@ -748,11 +768,12 @@ end)
 ------------------------------------------------------------------
 -- GLOBAL TELEPORT KILL-AURA & FLING (OUTLOBBY REACH)
 ------------------------------------------------------------------
-local globalReachRange = 15000
-local globalRangeSquared = globalReachRange * globalReachRange
+local reachRange = 15000 -- Expanded to basically the entire map
+local rangeSquared = reachRange * reachRange
 
 uiLibrary:AddToggle("Global Autohit / Fling (Cross-map)", function(enabled)
     getgenv().globalAuraEnabled = enabled
+    playSound("rbxassetid://12221976")
     
     if enabled then
         if not getgenv().globalAuraConnection then
@@ -766,6 +787,7 @@ uiLibrary:AddToggle("Global Autohit / Fling (Cross-map)", function(enabled)
                 
                 if not (myRoot and humanoid and humanoid.Health > 0) then return end
                 
+                -- Save original position to return to after the strike
                 local originalCFrame = myRoot.CFrame
                 
                 local tool = char:FindFirstChildOfClass("Tool")
@@ -781,11 +803,16 @@ uiLibrary:AddToggle("Global Autohit / Fling (Cross-map)", function(enabled)
                             local offset = originalCFrame.Position - eRoot.Position
                             local distSq = offset.X*offset.X + offset.Y*offset.Y + offset.Z*offset.Z
                             
-                            if distSq <= globalRangeSquared then
+                            -- If within map range, execute rapid teleport strike
+                            if distSq <= rangeSquared then
+                                -- 1. Teleport to enemy
                                 myRoot.CFrame = eRoot.CFrame * CFrame.new(0, 0, 1)
+                                
+                                -- 2. Apply Fling Physics
                                 myRoot.AssemblyLinearVelocity = Vector3.zero
                                 myRoot.AssemblyAngularVelocity = Vector3.new(100000, 100000, 100000)
                                 
+                                -- 3. Attempt standard tool hit if equipped
                                 if tool and handle then
                                     tool:Activate()
                                     if firetouchinterest then
@@ -794,16 +821,19 @@ uiLibrary:AddToggle("Global Autohit / Fling (Cross-map)", function(enabled)
                                     end
                                 end
                                 
+                                -- Wait one physics frame to let the server register the collision/hit
                                 task.wait(0.01)
                             end
                         end
                     end
                 end
                 
+                -- Neutralize physics and snap back to the lobby/safe zone
                 myRoot.AssemblyAngularVelocity = Vector3.zero
                 myRoot.AssemblyLinearVelocity = Vector3.zero
                 myRoot.CFrame = originalCFrame
                 
+                -- Add a slight delay to prevent instant network disconnects
                 task.wait(0.1)
             end)
         end
