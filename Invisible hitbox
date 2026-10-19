@@ -60,13 +60,13 @@ uiLibrary:SetTheme("HighContrast")
 
 -- Configuration variables
 local hitboxSize = 10
-local hitboxTransparency = 1 -- Totally invisible
+local hitboxTransparency = 1 -- Fully invisible
 local hitboxEnabled = false
 local espEnabled = false
 local espGuis = {}
 local hitboxIncreaseButton, hitboxDecreaseButton, fovIncreaseButton, fovDecreaseButton
 
--- Helper functions
+-- Helper functions (Completely visual-free / no color or forcefield)
 local function applyHitbox(character)
     if not character then return end
     local player = Players:GetPlayerFromCharacter(character)
@@ -85,9 +85,7 @@ local function applyHitbox(character)
             originalSize.Parent = rootPart
         end
         rootPart.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
-        rootPart.Transparency = hitboxTransparency
-        rootPart.BrickColor = BrickColor.new("Dark red")
-        rootPart.Material = Enum.Material.ForceField
+        rootPart.Transparency = 1
         rootPart.CanCollide = false
         
         if isR15 then
@@ -100,9 +98,7 @@ local function applyHitbox(character)
                     originalSize.Parent = lowerTorso
                 end
                 lowerTorso.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
-                lowerTorso.Transparency = hitboxTransparency
-                lowerTorso.BrickColor = BrickColor.new("Dark red")
-                lowerTorso.Material = Enum.Material.ForceField
+                lowerTorso.Transparency = 1
                 lowerTorso.CanCollide = false
             end
         end
@@ -117,9 +113,7 @@ local function applyHitbox(character)
             originalSize.Parent = head
         end
         head.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
-        head.Transparency = hitboxTransparency
-        head.BrickColor = BrickColor.new("Bright red")
-        head.Material = Enum.Material.ForceField
+        head.Transparency = 1
         head.CanCollide = false
         head.Massless = true
     end
@@ -136,9 +130,7 @@ local function applyHitbox(character)
                     originalSize.Parent = part
                 end
                 part.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
-                part.Transparency = hitboxTransparency
-                part.BrickColor = BrickColor.new("Dark red")
-                part.Material = Enum.Material.ForceField
+                part.Transparency = 1
                 part.CanCollide = false
             end
         end
@@ -154,8 +146,6 @@ local function resetHitbox(character)
     if rootPart and rootPart:FindFirstChild("OriginalSize") then
         rootPart.Size = rootPart.OriginalSize.Value
         rootPart.Transparency = 1
-        rootPart.BrickColor = BrickColor.new("Medium stone grey")
-        rootPart.Material = Enum.Material.Plastic
         rootPart.CanCollide = true
     end
 
@@ -163,8 +153,6 @@ local function resetHitbox(character)
     if head and head:FindFirstChild("OriginalSize") then
         head.Size = head.OriginalSize.Value
         head.Transparency = 1
-        head.BrickColor = BrickColor.new("Medium stone grey")
-        head.Material = Enum.Material.Plastic
         head.CanCollide = true
         head.Massless = false
     end
@@ -179,8 +167,6 @@ local function resetHitbox(character)
             if part and part:FindFirstChild("OriginalSize") then
                 part.Size = part.OriginalSize.Value
                 part.Transparency = 1
-                part.BrickColor = BrickColor.new("Medium stone grey")
-                part.Material = Enum.Material.Plastic
                 part.CanCollide = true
             end
         end
@@ -763,7 +749,6 @@ toggleBtn.MouseButton1Click:Connect(function()
     isMenuOpen = not isMenuOpen
     playSound("rbxassetid://12221976")
     
-    -- Toggle visibility of the UI library elements
     for _, gui in ipairs(CoreGui:GetChildren()) do
         if gui ~= toggleGui and gui:IsA("ScreenGui") then
             for _, child in ipairs(gui:GetChildren()) do
