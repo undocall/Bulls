@@ -564,17 +564,15 @@ UserInputService.JumpRequest:Connect(function()
 end)
 
 ------------------------------------------------------------------
--- SMART NATURAL ANTI-FLING SYSTEM
+-- RELIABLE SMART ANTI-FLING & LOOP BREAK SYSTEM
 ------------------------------------------------------------------
 getgenv().smartAntiFlingEnabled = false
-local flingHitCounter = 0
-local targetHitsNeeded = math.random(2, 4) -- Randomized trigger threshold (sometimes 2, 3, or 4 hits)
+local consecutiveHits = 0
 
 uiLibrary:AddToggle("Smart Anti-Fling", function(enabled)
     getgenv().smartAntiFlingEnabled = enabled
     playSound("rbxassetid://12221976")
-    flingHitCounter = 0
-    targetHitsNeeded = math.random(2, 4)
+    consecutiveHits = 0
 end, false)
 
 RunService.Heartbeat:Connect(function()
@@ -588,33 +586,30 @@ RunService.Heartbeat:Connect(function()
     local linVel = hrp.AssemblyLinearVelocity
     local angVel = hrp.AssemblyAngularVelocity
     local horizSpeed = Vector3.new(linVel.X, 0, linVel.Z).Magnitude
+    local state = hum:GetState()
+    
+    -- Detects hits, ragdolls, high velocity, or getting knocked
+    local isKnockedOrHit = (hum.PlatformStand or state == Enum.HumanoidStateType.FallingDown or state == Enum.HumanoidStateType.Ragdoll or horizSpeed > 120 or angVel.Magnitude > 50)
 
-    -- Check for abnormal speed or spin indicating a fling attack
-    if horizSpeed > 140 or angVel.Magnitude > 60 then
-        flingHitCounter = flingHitCounter + 1
-        
-        -- Random chance to sometimes skip a hit entirely or trigger after 1-4 impacts
-        if flingHitCounter >= targetHitsNeeded or (math.random(1, 4) == 1 and flingHitCounter >= 1) then
+    if isKnockedOrHit then
+        consecutiveHits = consecutiveHits + 1
+        -- Once you hit 2-3 consecutive impacts/falls, it always triggers to break the loop and prevent endless cycling
+        if consecutiveHits >= 2 then
             pcall(function()
-                hrp.AssemblyLinearVelocity = Vector3.new(0, linVel.Y * 0.2, 0)
+                hrp.AssemblyLinearVelocity = Vector3.zero
                 hrp.AssemblyAngularVelocity = Vector3.zero
                 hum.PlatformStand = false
+                hum.Sit = false
                 hum:ChangeState(Enum.HumanoidStateType.Running)
-                
-                -- Small natural upward boost adjustment to counter being buried/flung underground
                 local currentPos = hrp.Position
-                hrp.CFrame = CFrame.new(currentPos + Vector3.new(0, 1.5, 0)) * select(2, hrp.CFrame:ToOrientation())
+                hrp.CFrame = CFrame.new(currentPos + Vector3.new(0, 2, 0)) * select(2, hrp.CFrame:ToOrientation())
             end)
-            
-            -- Reset counter and randomize next target hits for a super natural feel
-            flingHitCounter = 0
-            targetHitsNeeded = math.random(1, 4)
-        else
-            -- Briefly stabilize angular velocity so it looks like physics glitching out naturally
-            task.wait(0.05)
-            if hrp then
-                hrp.AssemblyAngularVelocity = hrp.AssemblyAngularVelocity * 0.5
-            end
+            consecutiveHits = 0
+        end
+    else
+        -- Gradually cool down hit counter when stable
+        if consecutiveHits > 0 then
+            consecutiveHits = math.max(0, consecutiveHits - 0.05)
         end
     end
 end)
@@ -759,4 +754,24 @@ end, false)
 
 ------------------------------------------------------------------
 -- TINY TRANSPARENT FLOATING TOGGLE BUTTON SYSTEM
---------------------------------
+------------------------------------------------------------------
+if CoreGui:FindFirstChild("HitbloxToggleGui") then
+    CoreGui.HitbloxToggleGui:Destroy()
+end
+
+local toggleGui = Instance.new("ScreenGui")
+toggleGui.Name = "HitbloxToggleGui"
+toggleGui.ResetOnSpawn = false
+pcall(function()
+    toggleGui.Parent = CoreGui
+end)
+if not toggleGui.Parent then
+    toggleGui.Parent = localPlayer:WaitForChild("PlayerGui")
+end
+
+local toggleBtn = Instance.new("TextButton")
+toggleBtn.Name = "OpenButton"
+toggleBtn.Size = UDim2.new(0, 32, 0, 32)
+toggleBtn.Position = UDim2.new(0.02, 0, 0.45, 0)
+toggleBtn.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+toggleBtn.BackgroundTransparency = 0.5
