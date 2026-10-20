@@ -2,8 +2,7 @@
 local Players      = game:GetService("Players")
 local RunService   = game:GetService("RunService")
 local CoreGui      = game:GetService("CoreGui")
-local TweenService = game:GetService("TweenService")
-local StarterGui   = game:GetService("StarterGui")
+local UserInputService = game:GetService("UserInputService")
 
 -- Player
 local localPlayer = Players.LocalPlayer
@@ -14,6 +13,7 @@ end
 
 -- Flags
 getgenv().smartAntiFlingEnabled = false
+local hitboxEnabled = false
 
 -- Helpers
 local function isEnemy(player)
@@ -30,32 +30,12 @@ local function playSound(soundId)
     local sound = Instance.new("Sound")
     sound.SoundId = soundId
     sound.Parent = workspace
-    local ok, err = pcall(function() sound:Play() end)
-    if not ok then
-        warn("Failed to play sound: " .. err)
-        sound:Destroy()
-        return
-    end
+    pcall(function() sound:Play() end)
     sound.Ended:Connect(function() sound:Destroy() end)
 end
 
--- UI Library
-local uiLibrary
-local ok, err = pcall(function()
-    uiLibrary = loadstring(game:HttpGet(
-        "https://raw.githubusercontent.com/AZYsGithub/Arceus-X-UI-Library/main/source.lua"
-    ))()
-end)
-if not ok or not uiLibrary then error("Failed to load UI library") end
-
-uiLibrary:SetTitle("Hitblox (Lite)")
-uiLibrary:SetIcon("http://www.roblox.com/asset/?id=91738788645337")
-uiLibrary:SetTheme("HighContrast")
-
 -- Config
 local hitboxSize = 10
-local hitboxEnabled = false
-local hitboxIncreaseButton, hitboxDecreaseButton
 
 -- Hitbox helpers
 local function applyHitbox(character)
@@ -79,23 +59,14 @@ local function applyHitbox(character)
         part.CanCollide = false
     end
 
-    local rootPart = character:FindFirstChild("HumanoidRootPart")
-        or character:FindFirstChild("UpperTorso")
-    expandPart(rootPart)
+    expandPart(character:FindFirstChild("HumanoidRootPart") or character:FindFirstChild("UpperTorso"))
     if isR15 then expandPart(character:FindFirstChild("LowerTorso")) end
 
     local head = character:FindFirstChild("Head")
-    if head then
-        expandPart(head)
-        head.Massless = true
-    end
+    if head then expandPart(head) ; head.Massless = true end
 
     if isR15 then
-        for _, name in ipairs({
-            "UpperTorso", "LowerTorso",
-            "LeftUpperArm", "RightUpperArm",
-            "LeftUpperLeg", "RightUpperLeg"
-        }) do
+        for _, name in ipairs({"UpperTorso","LowerTorso","LeftUpperArm","RightUpperArm","LeftUpperLeg","RightUpperLeg"}) do
             expandPart(character:FindFirstChild(name))
         end
     end
@@ -105,7 +76,6 @@ local function resetHitbox(character)
     if not character then return end
     local player = Players:GetPlayerFromCharacter(character)
     if player and player == localPlayer then return end
-
     local function restorePart(part)
         if not part then return end
         local orig = part:FindFirstChild("OriginalSize")
@@ -115,20 +85,12 @@ local function resetHitbox(character)
             part.CanCollide = true
         end
     end
-
-    restorePart(character:FindFirstChild("HumanoidRootPart")
-        or character:FindFirstChild("UpperTorso"))
-
+    restorePart(character:FindFirstChild("HumanoidRootPart") or character:FindFirstChild("UpperTorso"))
     local head = character:FindFirstChild("Head")
     if head then restorePart(head) ; head.Massless = false end
-
     local humanoid = character:FindFirstChildOfClass("Humanoid")
     if humanoid and humanoid.RigType == Enum.HumanoidRigType.R15 then
-        for _, name in ipairs({
-            "LowerTorso", "UpperTorso",
-            "LeftUpperArm", "RightUpperArm",
-            "LeftUpperLeg", "RightUpperLeg"
-        }) do
+        for _, name in ipairs({"LowerTorso","UpperTorso","LeftUpperArm","RightUpperArm","LeftUpperLeg","RightUpperLeg"}) do
             restorePart(character:FindFirstChild(name))
         end
     end
@@ -146,17 +108,9 @@ local function resetHitboxesOnAllPlayers()
     end
 end
 
--- Hitbox loop
 local hitboxLoopActive = false
 local function toggleHitboxes(enabled)
     hitboxEnabled = enabled
-    playSound("rbxassetid://12221976")
-    pcall(function()
-        if hitboxIncreaseButton and hitboxDecreaseButton then
-            hitboxIncreaseButton.Visible = enabled
-            hitboxDecreaseButton.Visible = enabled
-        end
-    end)
     if enabled then
         applyHitboxesToAllPlayers()
         if not hitboxLoopActive then
@@ -174,75 +128,54 @@ local function toggleHitboxes(enabled)
     end
 end
 
--- Wire HealthChanged for hitbox refresh
-local function wireHealthChanged(player, character)
+local function wireHealthChanged(character)
     local humanoid = character:FindFirstChildOfClass("Humanoid")
     if not humanoid then return end
     humanoid.HealthChanged:Connect(function()
         if not hitboxEnabled then return end
-        if humanoid.Health > 0 then
-            applyHitbox(character)
-        else
-            resetHitbox(character)
-        end
+        if humanoid.Health > 0 then applyHitbox(character) else resetHitbox(character) end
     end)
-    if hitboxEnabled and humanoid.Health > 0 then
-        applyHitbox(character)
-    end
+    if hitboxEnabled and humanoid.Health > 0 then applyHitbox(character) end
 end
 
 local function trackPlayer(player)
     if not player or not isEnemy(player) then return end
     player.CharacterAdded:Connect(function(character)
         task.wait(1)
-        wireHealthChanged(player, character)
+        wireHealthChanged(character)
     end)
-    if player.Character then
-        wireHealthChanged(player, player.Character)
-    end
+    if player.Character then wireHealthChanged(player.Character) end
 end
 
 for _, p in ipairs(Players:GetPlayers()) do trackPlayer(p) end
 Players.PlayerAdded:Connect(trackPlayer)
 
--- UI: Hitbox
-hitboxIncreaseButton = uiLibrary:AddButton("(Hitbox +)", function()
-    hitboxSize = math.clamp(hitboxSize + 5, 1, 50)
-    if hitboxEnabled then applyHitboxesToAllPlayers() end
-end)
-hitboxDecreaseButton = uiLibrary:AddButton("(Hitbox -)", function()
-    hitboxSize = math.clamp(hitboxSize - 5, 1, 50)
-    if hitboxEnabled then applyHitboxesToAllPlayers() end
-end)
-
-uiLibrary:AddToggle("Expand Hitbox", toggleHitboxes, false)
-
--- Smart Anti-Fling — natural bug simulation
+-- Smart Anti-Fling — Brawl-tuned
 task.spawn(function()
     local hitCounter    = 0
     local graceUntil    = 0
     local cooldownUntil = 0
-    local nextThreshold = math.random(3, 5)
+    local nextThreshold = math.random(6, 10)
     local lastHitTime   = 0
-    local HIT_WINDOW    = 3.0
+    local lastSpeed     = 0
+    local HIT_WINDOW    = 1.8
+    local HIT_DEBOUNCE  = 0.30
+    local SPIKE_MIN     = 55
     local GRACE_DURATION = 30.0
-    local COOLDOWN_MIN  = 25.0
-    local COOLDOWN_MAX  = 45.0
+    local COOLDOWN_MIN  = 20.0
+    local COOLDOWN_MAX  = 40.0
 
     local function resetCounter()
         hitCounter    = 0
-        nextThreshold = math.random(3, 5)
+        nextThreshold = math.random(6, 10)
     end
 
     while true do
-        task.wait(0.08)
+        task.wait(0.05)
         if not getgenv().smartAntiFlingEnabled then
-            resetCounter()
-            graceUntil    = 0
-            cooldownUntil = 0
+            resetCounter() ; graceUntil = 0 ; cooldownUntil = 0 ; lastSpeed = 0
             continue
         end
-
         local char = localPlayer.Character
         if not char then resetCounter() ; continue end
         local hrp = char:FindFirstChild("HumanoidRootPart")
@@ -252,37 +185,33 @@ task.spawn(function()
         local now      = tick()
         local linVel   = hrp.AssemblyLinearVelocity
         local angVel   = hrp.AssemblyAngularVelocity
+        local speed    = linVel.Magnitude
         local horizSpd = Vector3.new(linVel.X, 0, linVel.Z).Magnitude
         local state    = hum:GetState()
 
-        local isKnocked = hum.PlatformStand
-            or hum.Sit
-            or state == Enum.HumanoidStateType.FallingDown
-            or state == Enum.HumanoidStateType.Ragdoll
-            or state == Enum.HumanoidStateType.GettingUp
-            or horizSpd > 90
-            or angVel.Magnitude > 40
+        local spike = (speed - lastSpeed) > SPIKE_MIN
+        lastSpeed   = speed
+        local isFreshHit = spike and (now - lastHitTime) > HIT_DEBOUNCE
 
-        local freshHit = isKnocked and (now - lastHitTime) > 0.8
-
-        if freshHit then
-            lastHitTime = now
-            hitCounter += 1
-        end
+        if isFreshHit then lastHitTime = now ; hitCounter = hitCounter + 1 end
 
         local inGrace    = now < graceUntil
         local inCooldown = now < cooldownUntil
+
+        local isKnocked = hum.PlatformStand or hum.Sit
+            or state == Enum.HumanoidStateType.FallingDown
+            or state == Enum.HumanoidStateType.Ragdoll
+            or state == Enum.HumanoidStateType.GettingUp
+            or horizSpd > 90 or angVel.Magnitude > 40
 
         if inGrace and isKnocked then
             pcall(function()
                 hrp.AssemblyLinearVelocity  = Vector3.zero
                 hrp.AssemblyAngularVelocity = Vector3.zero
-                hum.PlatformStand = false
-                hum.Sit = false
+                hum.PlatformStand = false ; hum.Sit = false
                 hum:ChangeState(Enum.HumanoidStateType.Running)
                 local _, ry, _ = hrp.CFrame:ToOrientation()
-                hrp.CFrame = CFrame.new(hrp.Position + Vector3.new(0, 1.5, 0))
-                    * CFrame.Angles(0, ry, 0)
+                hrp.CFrame = CFrame.new(hrp.Position + Vector3.new(0, 1.5, 0)) * CFrame.Angles(0, ry, 0)
             end)
         end
 
@@ -291,9 +220,9 @@ task.spawn(function()
                 cooldownUntil = now + math.random(COOLDOWN_MIN, COOLDOWN_MAX)
                 resetCounter()
             else
-                graceUntil    = now + GRACE_DURATION
-                hitCounter    = 0
-                nextThreshold = math.random(3, 5)
+                graceUntil = now + GRACE_DURATION
+                hitCounter = 0
+                nextThreshold = math.random(6, 10)
             end
         end
 
@@ -303,70 +232,122 @@ task.spawn(function()
             resetCounter()
         end
 
-        if hitCounter > 0 and (now - lastHitTime) > HIT_WINDOW then
-            resetCounter()
-        end
+        if hitCounter > 0 and (now - lastHitTime) > HIT_WINDOW then resetCounter() end
     end
 end)
 
-uiLibrary:AddToggle("Smart Anti-Fling (Natural Bug Sim)", function(enabled)
-    getgenv().smartAntiFlingEnabled = enabled
-    playSound("rbxassetid://12221976")
-end, false)
+-- === UI ===
+if CoreGui:FindFirstChild("HitbloxUI") then CoreGui.HitbloxUI:Destroy() end
 
--- Toggle button
-if CoreGui:FindFirstChild("HitbloxToggleGui") then
-    CoreGui.HitbloxToggleGui:Destroy()
+local gui = Instance.new("ScreenGui")
+gui.Name = "HitbloxUI"
+gui.ResetOnSpawn = false
+gui.IgnoreGuiInset = true
+pcall(function() gui.Parent = CoreGui end)
+if not gui.Parent then gui.Parent = localPlayer:WaitForChild("PlayerGui") end
+
+-- Small toggle button (28x28)
+local btn = Instance.new("TextButton")
+btn.Name = "Toggle"
+btn.Size = UDim2.new(0, 28, 0, 28)
+btn.Position = UDim2.new(0, 20, 0.4, 0)
+btn.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+btn.BackgroundTransparency = 0.25
+btn.BorderSizePixel = 0
+btn.Text = "⚡"
+btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+btn.TextSize = 15
+btn.Font = Enum.Font.SourceSansBold
+btn.AutoButtonColor = false
+btn.Active = true
+btn.Draggable = true
+btn.Parent = gui
+
+local btnCorner = Instance.new("UICorner")
+btnCorner.CornerRadius = UDim.new(1, 0)
+btnCorner.Parent = btn
+
+local btnStroke = Instance.new("UIStroke")
+btnStroke.Color = Color3.fromRGB(255, 255, 255)
+btnStroke.Transparency = 0.5
+btnStroke.Thickness = 1
+btnStroke.Parent = btn
+
+-- Popup panel that appears next to button
+local panel = Instance.new("Frame")
+panel.Name = "Panel"
+panel.Size = UDim2.new(0, 140, 0, 84)
+panel.Position = UDim2.new(0, 56, 0.4, 0)
+panel.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+panel.BackgroundTransparency = 0.1
+panel.BorderSizePixel = 0
+panel.Visible = false
+panel.Parent = gui
+
+local pCorner = Instance.new("UICorner")
+pCorner.CornerRadius = UDim.new(0, 6)
+pCorner.Parent = panel
+
+local pStroke = Instance.new("UIStroke")
+pStroke.Color = Color3.fromRGB(255, 255, 255)
+pStroke.Transparency = 0.75
+pStroke.Thickness = 1
+pStroke.Parent = panel
+
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, 0, 0, 18)
+title.BackgroundTransparency = 1
+title.Text = "Hitblox"
+title.TextColor3 = Color3.fromRGB(255, 255, 255)
+title.TextSize = 11
+title.Font = Enum.Font.SourceSansBold
+title.Parent = panel
+
+-- Toggle row helper
+local function makeToggle(labelText, yOffset, onClick)
+    local row = Instance.new("TextButton")
+    row.Size = UDim2.new(1, -12, 0, 26)
+    row.Position = UDim2.new(0, 6, 0, yOffset)
+    row.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+    row.BackgroundTransparency = 0.2
+    row.BorderSizePixel = 0
+    row.Text = labelText .. "  [ OFF ]"
+    row.TextColor3 = Color3.fromRGB(200, 200, 200)
+    row.TextSize = 11
+    row.Font = Enum.Font.SourceSans
+    row.AutoButtonColor = false
+    row.Parent = panel
+
+    local rCorner = Instance.new("UICorner")
+    rCorner.CornerRadius = UDim.new(0, 4)
+    rCorner.Parent = row
+
+    local state = false
+    row.MouseButton1Click:Connect(function()
+        state = not state
+        row.Text = labelText .. (state and "  [ ON ]" or "  [ OFF ]")
+        row.TextColor3 = state and Color3.fromRGB(120, 255, 120) or Color3.fromRGB(200, 200, 200)
+        onClick(state)
+    end)
+    return row
 end
 
-local toggleGui = Instance.new("ScreenGui")
-toggleGui.Name = "HitbloxToggleGui"
-toggleGui.ResetOnSpawn = false
-pcall(function() toggleGui.Parent = CoreGui end)
-if not toggleGui.Parent then
-    toggleGui.Parent = localPlayer:WaitForChild("PlayerGui")
-end
-
-local toggleBtn = Instance.new("TextButton")
-toggleBtn.Name = "OpenButton"
-toggleBtn.Size = UDim2.new(0, 32, 0, 32)
-toggleBtn.Position = UDim2.new(0.02, 0, 0.45, 0)
-toggleBtn.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
-toggleBtn.BackgroundTransparency = 0.5
-toggleBtn.BorderSizePixel = 0
-toggleBtn.Text = "⚡"
-toggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-toggleBtn.TextTransparency = 0.2
-toggleBtn.TextSize = 15
-toggleBtn.Font = Enum.Font.SourceSansBold
-toggleBtn.Active = true
-toggleBtn.Draggable = true
-toggleBtn.Parent = toggleGui
-
-local corner = Instance.new("UICorner")
-corner.CornerRadius = UDim.new(1, 0)
-corner.Parent = toggleBtn
-
-local stroke = Instance.new("UIStroke")
-stroke.Color = Color3.fromRGB(255, 255, 255)
-stroke.Transparency = 0.4
-stroke.Thickness = 1
-stroke.Parent = toggleBtn
-
-local isMenuOpen = true
-toggleBtn.MouseButton1Click:Connect(function()
-    isMenuOpen = not isMenuOpen
+makeToggle("Hitbox", 22, function(on)
     playSound("rbxassetid://12221976")
-    local function setVisible(guiRoot)
-        for _, gui in ipairs(guiRoot:GetChildren()) do
-            if gui ~= toggleGui and gui:IsA("ScreenGui") then
-                for _, child in ipairs(gui:GetChildren()) do
-                    if child:IsA("Frame") then child.Visible = isMenuOpen end
-                end
-            end
-        end
-    end
-    setVisible(CoreGui)
-    local pg = localPlayer:FindFirstChild("PlayerGui")
-    if pg then setVisible(pg) end
+    toggleHitboxes(on)
+end)
+
+makeToggle("Anti-Fling", 52, function(on)
+    getgenv().smartAntiFlingEnabled = on
+    playSound("rbxassetid://12221976")
+end)
+
+-- Button click: show/hide panel, position panel next to button
+local panelOpen = false
+btn.MouseButton1Click:Connect(function()
+    panelOpen = not panelOpen
+    panel.Visible = panelOpen
+    -- Position panel right next to wherever the button currently is
+    panel.Position = UDim2.new(0, btn.AbsolutePosition.X + btn.AbsoluteSize.X + 8, 0, btn.AbsolutePosition.Y)
+    playSound("rbxassetid://12221976")
 end)
