@@ -1,10 +1,10 @@
--- ═══════════ UNODOCALL'S HUB — FINAL v9 ═══════════
+-- ═══════════ UNODOCALL'S HUB — FINAL v10 ═══════════
 -- Safe kill aura — 0.75s cooldown, 1 target per cycle, FlingRemoteEvent only
 -- Key system saves to file
--- Fly: joystick-driven, mobile-friendly, camera-relative
+-- Fly: classic OG camera-relative, look-up-fly-up
 -- Target lock with @playername format
 -- Anti-fling clean, no stroke
--- NEW: instant spawn, no-bull spawn, mobile fly, fly speed buttons
+-- NEW: God Spawn (no bull, kill aura active), classic OG fly
 
 local StarterGui = game:GetService("StarterGui")
 local Players = game:GetService("Players")
@@ -112,6 +112,7 @@ local auraRange = 40
 local auraDelay = 0.75
 local lastAuraHit = 0
 local spawningDebounce = false
+local godSpawnEnabled = false
 
 getgenv().superPowerEnabled = false
 getgenv().infiniteJumpEnabled = false
@@ -119,11 +120,13 @@ getgenv().noclipEnabled = false
 getgenv().instantRecoveryEnabled = false
 getgenv().recoveryDelay = 0.6
 
--- ═══════════ FLY — JOYSTICK-DRIVEN, MOBILE-FRIENDLY ═══════════
--- No custom buttons. Move joystick / WASD to fly. Jump button / Space = up.
--- Camera direction determines forward. Hovers in place with no input.
+-- ═══════════ FLY — CLASSIC OG CAMERA-RELATIVE ═══════════
+-- Fly where you LOOK. Look up = go up. Look down = go down.
+-- Joystick forward = move along camera's actual 3D look direction.
+-- Jump = up. Left Shift = down. Hover in place when idle.
 local flyConnection = nil
-local bodyVel = nil
+local flyBodyVel = nil
+local flyBodyGyro = nil
 
 local function startFly()
     local char = lp.Character
@@ -132,70 +135,82 @@ local function startFly()
     local hum = char:FindFirstChildOfClass("Humanoid")
     if not root or not hum then return end
 
-    if bodyVel then bodyVel:Destroy() bodyVel = nil end
+    if flyBodyVel then flyBodyVel:Destroy() flyBodyVel = nil end
+    if flyBodyGyro then flyBodyGyro:Destroy() flyBodyGyro = nil end
 
-    bodyVel = Instance.new("BodyVelocity")
-    bodyVel.MaxForce = Vector3.new(1e9, 1e9, 1e9)
-    bodyVel.Velocity = Vector3.zero
-    bodyVel.Parent = root
+    flyBodyGyro = Instance.new("BodyGyro")
+    flyBodyGyro.MaxTorque = Vector3.new(1e6, 1e6, 1e6)
+    flyBodyGyro.P = 3000
+    flyBodyGyro.D = 500
+    flyBodyGyro.CFrame = root.CFrame
+    flyBodyGyro.Parent = root
+
+    flyBodyVel = Instance.new("BodyVelocity")
+    flyBodyVel.MaxForce = Vector3.new(1e9, 1e9, 1e9)
+    flyBodyVel.Velocity = Vector3.zero
+    flyBodyVel.Parent = root
 
     flyConnection = RunService.RenderStepped:Connect(function()
         if not flying then return end
-        if not bodyVel or not bodyVel.Parent then return end
-        if not lp.Character or not lp.Character:FindFirstChild("HumanoidRootPart") then return end
+        if not flyBodyVel or not flyBodyVel.Parent then return end
+        local character = lp.Character
+        if not character then return end
+        local r = character:FindFirstChild("HumanoidRootPart")
+        if not r then return end
 
         local camera = workspace.CurrentCamera
+        if not camera then return end
+
         local camLook = camera.CFrame.LookVector
         local camRight = camera.CFrame.RightVector
+        local camUp = camera.CFrame.UpVector
 
         local flatLook = Vector3.new(camLook.X, 0, camLook.Z)
         if flatLook.Magnitude > 0.001 then flatLook = flatLook.Unit end
-
         local flatRight = Vector3.new(camRight.X, 0, camRight.Z)
         if flatRight.Magnitude > 0.001 then flatRight = flatRight.Unit end
 
         local moveDir = Vector3.zero
 
-        -- Mobile: hum.MoveDirection reflects joystick input
+        -- Mobile joystick input
         local humMove = hum.MoveDirection
         if humMove.Magnitude > 0.01 then
             local fwd = humMove:Dot(flatLook)
             local right = humMove:Dot(flatRight)
-            moveDir = (flatLook * fwd) + (flatRight * right)
+            moveDir = moveDir + (camLook * fwd) + (camRight * right)
         end
 
-        -- PC: WASD keys
-        if UserInputService:IsKeyDown(Enum.KeyCode.W) then moveDir = moveDir + flatLook end
-        if UserInputService:IsKeyDown(Enum.KeyCode.S) then moveDir = moveDir - flatLook end
-        if UserInputService:IsKeyDown(Enum.KeyCode.A) then moveDir = moveDir - flatRight end
-        if UserInputService:IsKeyDown(Enum.KeyCode.D) then moveDir = moveDir + flatRight end
+        -- PC WASD
+        if UserInputService:IsKeyDown(Enum.KeyCode.W) then moveDir = moveDir + camLook end
+        if UserInputService:IsKeyDown(Enum.KeyCode.S) then moveDir = moveDir - camLook end
+        if UserInputService:IsKeyDown(Enum.KeyCode.A) then moveDir = moveDir - camRight end
+        if UserInputService:IsKeyDown(Enum.KeyCode.D) then moveDir = moveDir + camRight end
 
-        -- Jump button (mobile) or Space (PC) or hum.Jump = up
-        local upPressed = hum.Jump
-            or UserInputService:IsKeyDown(Enum.KeyCode.Space)
-        if upPressed then
-            moveDir = moveDir + Vector3.new(0, 1, 0)
+        -- Jump = up (camera-up relative)
+        if hum.Jump or UserInputService:IsKeyDown(Enum.KeyCode.Space) then
+            moveDir = moveDir + camUp
         end
 
         -- Left Shift = down
         if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then
-            moveDir = moveDir - Vector3.new(0, 1, 0)
+            moveDir = moveDir - camUp
         end
 
         if moveDir.Magnitude > 0.01 then
-            bodyVel.Velocity = moveDir.Unit * flySpeed
+            flyBodyVel.Velocity = moveDir.Unit * flySpeed
         else
-            bodyVel.Velocity = Vector3.zero
+            flyBodyVel.Velocity = Vector3.zero
         end
+
+        -- Keep body upright
+        flyBodyGyro.CFrame = CFrame.new(r.Position, r.Position + flatLook)
     end)
 end
 
 local function stopFly()
-    if flyConnection then
-        flyConnection:Disconnect()
-        flyConnection = nil
-    end
-    if bodyVel then bodyVel:Destroy() bodyVel = nil end
+    if flyConnection then flyConnection:Disconnect() flyConnection = nil end
+    if flyBodyVel then flyBodyVel:Destroy() flyBodyVel = nil end
+    if flyBodyGyro then flyBodyGyro:Destroy() flyBodyGyro = nil end
 end
 
 -- ═══════════ HITBOX ═══════════
@@ -411,6 +426,42 @@ local function smartFind(input)
         if p.DisplayName:lower():find(input, 1, true) then return p end
     end
     return nil
+end
+
+-- ═══════════ GOD SPAWN — STRIP MOUNT ═══════════
+
+local function stripMount(character)
+    if not character then return end
+    for _, d in ipairs(character:GetDescendants()) do
+        if d:IsA("Weld") or d:IsA("WeldConstraint") or d:IsA("Motor6D") then
+            local p0 = d.Part0
+            local p1 = d.Part1
+            if p0 and p1 then
+                local n0 = p0.Name:lower()
+                local n1 = p1.Name:lower()
+                if n0:find("seat") or n1:find("seat")
+                    or n0:find("bull") or n1:find("bull")
+                    or n0:find("mount") or n1:find("mount")
+                    or n0:find("vehicle") or n1:find("vehicle") then
+                    pcall(function() d:Destroy() end)
+                end
+            end
+        end
+    end
+    local hum = character:FindFirstChildOfClass("Humanoid")
+    if hum then
+        if hum.Sit then
+            hum.Sit = false
+            hum.SeatPart = nil
+            hum.Jump = true
+        end
+    end
+    for _, child in ipairs(character:GetChildren()) do
+        local n = child.Name:lower()
+        if n:find("bull") or n:find("mount") or n:find("vehicle") then
+            pcall(function() child:Destroy() end)
+        end
+    end
 end
 
 -- ═══════════ GUI ═══════════
@@ -677,10 +728,7 @@ local function addToggleRow(page, name, callback)
     return {set = function(v) isOn = v updateVisual() if callback then callback(v) end end}
 end
 
--- Value row with optional +/- buttons (used for fly speed, hitbox, fov, delay)
-local function addValueRow(page, name, initialVal, minVal, maxVal, step, onChange, showButtons)
-    showButtons = showButtons ~= false -- default true
-
+local function addValueRow(page, name, initialVal, minVal, maxVal, step, onChange)
     local row = Instance.new("Frame")
     row.Size = UDim2.new(1, 0, 0, 40)
     row.BackgroundColor3 = COL.card
@@ -713,43 +761,41 @@ local function addValueRow(page, name, initialVal, minVal, maxVal, step, onChang
 
     local currentValue = initialVal
 
-    if showButtons then
-        local minusBtn = Instance.new("TextButton")
-        minusBtn.Size = UDim2.new(0, 32, 0, 28)
-        minusBtn.Position = UDim2.new(1, -74, 0.5, -14)
-        minusBtn.BackgroundColor3 = COL.btnBg
-        minusBtn.Text = "−"
-        minusBtn.TextColor3 = COL.text
-        minusBtn.Font = Enum.Font.GothamBold
-        minusBtn.TextSize = 15
-        minusBtn.AutoButtonColor = false
-        minusBtn.Parent = row
-        local mc = Instance.new("UICorner"); mc.CornerRadius = UDim.new(0, 6); mc.Parent = minusBtn
+    local minusBtn = Instance.new("TextButton")
+    minusBtn.Size = UDim2.new(0, 32, 0, 28)
+    minusBtn.Position = UDim2.new(1, -74, 0.5, -14)
+    minusBtn.BackgroundColor3 = COL.btnBg
+    minusBtn.Text = "−"
+    minusBtn.TextColor3 = COL.text
+    minusBtn.Font = Enum.Font.GothamBold
+    minusBtn.TextSize = 15
+    minusBtn.AutoButtonColor = false
+    minusBtn.Parent = row
+    local mc = Instance.new("UICorner"); mc.CornerRadius = UDim.new(0, 6); mc.Parent = minusBtn
 
-        local plusBtn = Instance.new("TextButton")
-        plusBtn.Size = UDim2.new(0, 32, 0, 28)
-        plusBtn.Position = UDim2.new(1, -38, 0.5, -14)
-        plusBtn.BackgroundColor3 = COL.btnBg
-        plusBtn.Text = "+"
-        plusBtn.TextColor3 = COL.text
-        plusBtn.Font = Enum.Font.GothamBold
-        plusBtn.TextSize = 15
-        plusBtn.AutoButtonColor = false
-        plusBtn.Parent = row
-        local pc2 = Instance.new("UICorner"); pc2.CornerRadius = UDim.new(0, 6); pc2.Parent = plusBtn
+    local plusBtn = Instance.new("TextButton")
+    plusBtn.Size = UDim2.new(0, 32, 0, 28)
+    plusBtn.Position = UDim2.new(1, -38, 0.5, -14)
+    plusBtn.BackgroundColor3 = COL.btnBg
+    plusBtn.Text = "+"
+    plusBtn.TextColor3 = COL.text
+    plusBtn.Font = Enum.Font.GothamBold
+    plusBtn.TextSize = 15
+    plusBtn.AutoButtonColor = false
+    plusBtn.Parent = row
+    local pc2 = Instance.new("UICorner"); pc2.CornerRadius = UDim.new(0, 6); pc2.Parent = plusBtn
 
-        plusBtn.MouseButton1Click:Connect(function()
-            currentValue = math.clamp(currentValue + step, minVal, maxVal)
-            valueText.Text = tostring(currentValue)
-            if onChange then onChange(currentValue) end
-        end)
+    plusBtn.MouseButton1Click:Connect(function()
+        currentValue = math.clamp(currentValue + step, minVal, maxVal)
+        valueText.Text = tostring(currentValue)
+        if onChange then onChange(currentValue) end
+    end)
 
-        minusBtn.MouseButton1Click:Connect(function()
-            currentValue = math.clamp(currentValue - step, minVal, maxVal)
-            valueText.Text = tostring(currentValue)
-            if onChange then onChange(currentValue) end
-        end)
-    end
+    minusBtn.MouseButton1Click:Connect(function()
+        currentValue = math.clamp(currentValue - step, minVal, maxVal)
+        valueText.Text = tostring(currentValue)
+        if onChange then onChange(currentValue) end
+    end)
 
     return {setValue = function(v) currentValue = math.clamp(v, minVal, maxVal) valueText.Text = tostring(currentValue) end}
 end
@@ -823,9 +869,7 @@ getKeyBtn.Parent = keyPage
 local gkC = Instance.new("UICorner"); gkC.CornerRadius = UDim.new(0, 6); gkC.Parent = getKeyBtn
 
 getKeyBtn.MouseButton1Click:Connect(function()
-    pcall(function()
-        setclipboard(KEY_LINK)
-    end)
+    pcall(function() setclipboard(KEY_LINK) end)
     getKeyBtn.Text = "Link copied!"
     task.wait(2)
     getKeyBtn.Text = "Get Key (Discord)"
@@ -835,9 +879,7 @@ keyInput.FocusLost:Connect(function(enterPressed)
     if enterPressed then
         if checkKey(keyInput.Text) then
             keyVerified = true
-            pcall(function()
-                writefile(KEY_FILE, keyInput.Text)
-            end)
+            pcall(function() writefile(KEY_FILE, keyInput.Text) end)
             keyStatusL.Text = "Verified"
             keyStatusL.TextColor3 = COL.green
             keyInput.Text = ""
@@ -890,19 +932,15 @@ local killAuraToggle = addToggleRow(combatPage, "Kill Aura", function(enabled)
 
     if enabled then
         if not FlingRE or not SpawnerRE then findRemotes() end
-
-        -- Instant spawn — no blocking wait
         if SpawnerRE then
-            pcall(function()
-                SpawnerRE:FireServer()
-            end)
+            pcall(function() SpawnerRE:FireServer() end)
         end
     end
 end)
 
 addSection(combatPage, "Spawn Options")
 
-local noBullToggle = addToggleRow(combatPage, "Spawn No Bull (God-mode)", function(enabled)
+local noBullToggle = addToggleRow(combatPage, "God Spawn (No Bull)", function(enabled)
     if enabled and not keyVerified then
         keyStatusL.Text = "Enter key on Key page"
         keyStatusL.TextColor3 = COL.yellow
@@ -910,17 +948,23 @@ local noBullToggle = addToggleRow(combatPage, "Spawn No Bull (God-mode)", functi
         return
     end
 
+    godSpawnEnabled = enabled
+
     if enabled then
         if not SpawnerRE then findRemotes() end
         if SpawnerRE then
-            -- Try common no-bull argument shapes.
-            -- Most bull games accept (bool) or (nil, true) to skip mount.
-            pcall(function() SpawnerRE:FireServer(true) end)
-            task.wait(0.1)
-            pcall(function() SpawnerRE:FireServer(nil, true) end)
-            task.wait(0.1)
-            pcall(function() SpawnerRE:FireServer("nobull") end)
+            pcall(function() SpawnerRE:FireServer() end)
         end
+
+        task.spawn(function()
+            local tries = 0
+            while tries < 60 and godSpawnEnabled do
+                task.wait(0.05)
+                local char = lp.Character
+                if char then stripMount(char) end
+                tries = tries + 1
+            end
+        end)
     end
 end)
 
@@ -1055,7 +1099,7 @@ end)
 -- MOVEMENT PAGE
 local movePage = addPage("Movement")
 
-addToggleRow(movePage, "Fly (Joystick / WASD)", function(enabled)
+addToggleRow(movePage, "Fly (OG camera)", function(enabled)
     flying = enabled
     if enabled then
         startFly()
@@ -1064,10 +1108,9 @@ addToggleRow(movePage, "Fly (Joystick / WASD)", function(enabled)
     end
 end)
 
--- Fly speed +/- buttons
 addValueRow(movePage, "Fly Speed", 50, 10, 300, 10, function(val)
     flySpeed = val
-end, true)
+end)
 
 addToggleRow(movePage, "Super Power (Speed+Jump)", function(enabled)
     getgenv().superPowerEnabled = enabled
@@ -1143,9 +1186,7 @@ RunService.Heartbeat:Connect(function()
     end
 
     if nearest then
-        pcall(function()
-            FlingRE:FireServer(nearest)
-        end)
+        pcall(function() FlingRE:FireServer(nearest) end)
     end
 end)
 
@@ -1188,7 +1229,7 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
--- AUTO RESPAWN — only if kill aura ON, only in lobby (Y < 10)
+-- AUTO RESPAWN — kill aura only, lobby only
 lp.CharacterAdded:Connect(function(char)
     if killAuraOn and keyVerified and not spawningDebounce then
         spawningDebounce = true
@@ -1203,6 +1244,16 @@ lp.CharacterAdded:Connect(function(char)
             end
             task.wait(2)
             spawningDebounce = false
+        end)
+    end
+
+    -- God spawn: strip mount on respawn
+    if godSpawnEnabled then
+        task.spawn(function()
+            for i = 1, 60 do
+                task.wait(0.05)
+                stripMount(char)
+            end
         end)
     end
 end)
@@ -1419,5 +1470,5 @@ lp.CharacterAdded:Connect(function(char)
     end
 end)
 
-print("Undocall's Hub v9 loaded")
+print("Undocall's Hub v10 loaded")
 print("Key: " .. (keyVerified and "VERIFIED (saved)" or "NOT VERIFIED"))
