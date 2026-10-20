@@ -1,7 +1,10 @@
 -- Services
-local Players      = game:GetService("Players")
-local RunService   = game:GetService("RunService")
-local CoreGui      = game:GetService("CoreGui")
+local StarterGui = game:GetService("StarterGui")
+local Players    = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Lighting   = game:GetService("Lighting")
+local CoreGui    = game:GetService("CoreGui")
+local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 
 -- Player
@@ -12,10 +15,16 @@ while not localPlayer do
 end
 
 -- Flags
+getgenv().superPowerEnabled     = false
+getgenv().noclipEnabled         = false
+getgenv().instantRecoveryEnabled = false
+getgenv().isRecovering          = false
+getgenv().recoveryDelay         = 0.6
+getgenv().infiniteJumpEnabled   = false
 getgenv().smartAntiFlingEnabled = false
-local hitboxEnabled = false
+getgenv().godAuraEnabled        = false
+getgenv().globalAuraEnabled     = false
 
--- Helpers
 local function isEnemy(player)
     if player == localPlayer then return false end
     local teams = game:GetService("Teams"):GetTeams()
@@ -30,12 +39,33 @@ local function playSound(soundId)
     local sound = Instance.new("Sound")
     sound.SoundId = soundId
     sound.Parent = workspace
-    pcall(function() sound:Play() end)
+    local ok, err = pcall(function() sound:Play() end)
+    if not ok then
+        warn("Failed to play sound: " .. err)
+        sound:Destroy()
+        return
+    end
     sound.Ended:Connect(function() sound:Destroy() end)
 end
 
+local uiLibrary
+local ok, err = pcall(function()
+    uiLibrary = loadstring(game:HttpGet(
+        "https://raw.githubusercontent.com/AZYsGithub/Arceus-X-UI-Library/main/source.lua"
+    ))()
+end)
+if not ok or not uiLibrary then error("Failed to load UI library") end
+
+uiLibrary:SetTitle("Hitblox (v5.0 Ultimate)")
+uiLibrary:SetIcon("http://www.roblox.com/asset/?id=91738788645337")
+uiLibrary:SetTheme("HighContrast")
+
 -- Config
 local hitboxSize = 10
+local hitboxEnabled = false
+local espEnabled   = false
+local espGuis      = {}
+local hitboxIncreaseButton, hitboxDecreaseButton, fovIncreaseButton, fovDecreaseButton
 
 -- Hitbox helpers
 local function applyHitbox(character)
@@ -111,6 +141,13 @@ end
 local hitboxLoopActive = false
 local function toggleHitboxes(enabled)
     hitboxEnabled = enabled
+    playSound("rbxassetid://12221976")
+    pcall(function()
+        if hitboxIncreaseButton and hitboxDecreaseButton then
+            hitboxIncreaseButton.Visible = enabled
+            hitboxDecreaseButton.Visible = enabled
+        end
+    end)
     if enabled then
         applyHitboxesToAllPlayers()
         if not hitboxLoopActive then
@@ -128,7 +165,69 @@ local function toggleHitboxes(enabled)
     end
 end
 
-local function wireHealthChanged(character)
+-- ESP
+local function createESP(player)
+    if espGuis[player] then espGuis[player]:Destroy() ; espGuis[player] = nil end
+    if not player or not player.Character or player == localPlayer then return end
+    if not isEnemy(player) then return end
+
+    local head = player.Character:FindFirstChild("Head")
+    local rootPart = player.Character:FindFirstChild("HumanoidRootPart") or player.Character:FindFirstChild("UpperTorso")
+    local targetPart = head or rootPart
+    if not targetPart then return end
+
+    local espGui = Instance.new("BillboardGui")
+    espGui.Name = "ESP"
+    espGui.Adornee = targetPart
+    espGui.Size = UDim2.new(0, 100, 0, 50)
+    espGui.StudsOffset = Vector3.new(0, 2, 0)
+    espGui.AlwaysOnTop = true
+
+    local espLabel = Instance.new("TextLabel", espGui)
+    espLabel.Size = UDim2.new(1, 0, 1, 0)
+    espLabel.BackgroundTransparency = 1
+    espLabel.TextColor3 = Color3.new(1, 0, 0)
+    espLabel.TextStrokeTransparency = 0
+    espLabel.Text = player.Name
+    espLabel.TextScaled = true
+    espLabel.Font = Enum.Font.SourceSansBold
+
+    espGuis[player] = espGui
+    espGui.Parent = targetPart
+
+    local lastUpdate = tick()
+    local connection
+    connection = RunService.RenderStepped:Connect(function()
+        if not espGui or not espGui.Parent then connection:Disconnect() ; return end
+        if (tick() - lastUpdate) < 0.1 then return end
+        lastUpdate = tick()
+        if not player.Character or not localPlayer.Character then return end
+        local pRoot = player.Character:FindFirstChild("HumanoidRootPart") or player.Character:FindFirstChild("UpperTorso")
+        local lRoot = localPlayer.Character:FindFirstChild("HumanoidRootPart") or localPlayer.Character:FindFirstChild("UpperTorso")
+        if not (pRoot and lRoot) then return end
+        local dist = (lRoot.Position - pRoot.Position).Magnitude
+        local sz = math.clamp(100 - dist * 0.5, 10, 100)
+        espGui.Size = UDim2.new(0, sz, 0, sz * 0.5)
+    end)
+end
+
+local function toggleESP(enabled)
+    espEnabled = enabled
+    playSound("rbxassetid://12221976")
+    if enabled then
+        for _, p in ipairs(Players:GetPlayers()) do
+            if isEnemy(p) then createESP(p) end
+        end
+    else
+        for player, gui in pairs(espGuis) do
+            if gui then gui:Destroy() end
+            espGuis[player] = nil
+        end
+        espGuis = {}
+    end
+end
+
+local function wireHealthChanged(player, character)
     local humanoid = character:FindFirstChildOfClass("Humanoid")
     if not humanoid then return end
     humanoid.HealthChanged:Connect(function()
@@ -142,38 +241,212 @@ local function trackPlayer(player)
     if not player or not isEnemy(player) then return end
     player.CharacterAdded:Connect(function(character)
         task.wait(1)
-        wireHealthChanged(character)
+        wireHealthChanged(player, character)
+        if espEnabled then createESP(player) end
     end)
-    if player.Character then wireHealthChanged(player.Character) end
+    if player.Character then
+        wireHealthChanged(player, player.Character)
+        if espEnabled then createESP(player) end
+    end
 end
 
 for _, p in ipairs(Players:GetPlayers()) do trackPlayer(p) end
 Players.PlayerAdded:Connect(trackPlayer)
+Players.PlayerRemoving:Connect(function(player)
+    if espGuis[player] then espGuis[player]:Destroy() ; espGuis[player] = nil end
+end)
 
--- Smart Anti-Fling — Brawl-tuned
+-- UI buttons
+fovIncreaseButton = uiLibrary:AddButton("(Fov +)", function()
+    workspace.CurrentCamera.FieldOfView = math.clamp(workspace.CurrentCamera.FieldOfView + 5, 1, 120)
+end)
+fovDecreaseButton = uiLibrary:AddButton("(Fov -)", function()
+    workspace.CurrentCamera.FieldOfView = math.clamp(workspace.CurrentCamera.FieldOfView - 5, 1, 120)
+end)
+hitboxIncreaseButton = uiLibrary:AddButton("(Hitbox +)", function()
+    hitboxSize = math.clamp(hitboxSize + 5, 1, 50)
+    if hitboxEnabled then applyHitboxesToAllPlayers() end
+end)
+hitboxDecreaseButton = uiLibrary:AddButton("(Hitbox -)", function()
+    hitboxSize = math.clamp(hitboxSize - 5, 1, 50)
+    if hitboxEnabled then applyHitboxesToAllPlayers() end
+end)
+
+uiLibrary:AddButton("FullBright", function()
+    local function setBright()
+        Lighting.Brightness = 2
+        Lighting.OutdoorAmbient = Color3.fromRGB(255, 255, 255)
+        Lighting.Ambient = Color3.fromRGB(255, 255, 255)
+        Lighting.TimeOfDay = "14:00:00"
+        Lighting.FogStart = 0
+        Lighting.FogEnd = 100000
+        Lighting.FogColor = Color3.fromRGB(255, 255, 255)
+    end
+    setBright()
+    getgenv().BrightnessConnection = RunService.Heartbeat:Connect(setBright)
+end)
+
+uiLibrary:AddButton("AntiLag", function()
+    loadstring(game:HttpGet("https://raw.githubusercontent.com/OBFhm5650lol/Al/refs/heads/main/AntiLag", true))()
+end)
+uiLibrary:AddButton("AntiKick", function()
+    loadstring(game:HttpGet("https://raw.githubusercontent.com/OBFhm5650lol/AntkickLol/refs/heads/main/Antikicklol"))()
+end)
+
+local fovEnabled = false
+uiLibrary:AddToggle("FOV Toggle", function(enabled)
+    fovEnabled = enabled
+    pcall(function()
+        if fovIncreaseButton and fovDecreaseButton then
+            fovIncreaseButton.Visible = enabled
+            fovDecreaseButton.Visible = enabled
+        end
+    end)
+end, false)
+
+uiLibrary:AddToggle("Expand Hitbox", toggleHitboxes, false)
+uiLibrary:AddToggle("ESP", toggleESP, false)
+
+uiLibrary:AddToggle("Fpp Toggle", function(enabled)
+    if enabled then
+        workspace.CurrentCamera.CameraType = Enum.CameraType.Custom
+        localPlayer.CameraMode = Enum.CameraMode.LockFirstPerson
+    else
+        localPlayer.CameraMode = Enum.CameraMode.Classic
+    end
+end, false)
+
+uiLibrary:AddToggle("Super Power (Speed/InfJump)", function(enabled)
+    getgenv().superPowerEnabled = enabled
+    playSound("rbxassetid://12221976")
+    if not enabled then
+        local char = localPlayer.Character
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        if hum then hum.WalkSpeed = 16 ; hum.JumpPower = 50 end
+    end
+end, false)
+
+uiLibrary:AddToggle("Infinite Jump", function(enabled)
+    getgenv().infiniteJumpEnabled = enabled
+    playSound("rbxassetid://12221976")
+end, false)
+
+uiLibrary:AddToggle("Ghost Mode (Noclip)", function(enabled)
+    getgenv().noclipEnabled = enabled
+    playSound("rbxassetid://12221976")
+end, false)
+
+uiLibrary:AddToggle("Instant Recovery (Fast Stand)", function(enabled)
+    getgenv().instantRecoveryEnabled = enabled
+    playSound("rbxassetid://12221976")
+end, false)
+
+local function notifyUser(v)
+    pcall(function()
+        StarterGui:SetCore("SendNotification", {
+            Title = "Hitblox Settings",
+            Text  = "Recovery Delay is now: " .. tostring(v) .. "s",
+            Duration = 2,
+        })
+    end)
+end
+
+uiLibrary:AddButton("(Recovery Delay +0.1s)", function()
+    getgenv().recoveryDelay = math.clamp(math.round(((getgenv().recoveryDelay or 0.6) + 0.1) * 10) / 10, 0, 10)
+    notifyUser(getgenv().recoveryDelay)
+end)
+uiLibrary:AddButton("(Recovery Delay -0.1s)", function()
+    getgenv().recoveryDelay = math.clamp(math.round(((getgenv().recoveryDelay or 0.6) - 0.1) * 10) / 10, 0, 10)
+    notifyUser(getgenv().recoveryDelay)
+end)
+
+RunService.Stepped:Connect(function()
+    local char = localPlayer.Character
+    if not char then return end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+
+    if hum and getgenv().superPowerEnabled then
+        hum.WalkSpeed = 120
+        hum.JumpPower = 150
+        hum.UseJumpPower = true
+    end
+
+    if getgenv().noclipEnabled then
+        for _, part in ipairs(char:GetDescendants()) do
+            if part:IsA("BasePart") and part.CanCollide then part.CanCollide = false end
+        end
+    end
+
+    if hum and hrp and getgenv().instantRecoveryEnabled then
+        local state = hum:GetState()
+        local isKnocked = hum.PlatformStand or hum.Sit
+            or state == Enum.HumanoidStateType.FallingDown
+            or state == Enum.HumanoidStateType.Ragdoll
+            or state == Enum.HumanoidStateType.GettingUp
+        if isKnocked then
+            local rp = RaycastParams.new()
+            rp.FilterDescendantsInstances = {char}
+            rp.FilterType = Enum.RaycastFilterType.Exclude
+            local floorHit = workspace:Raycast(hrp.Position, Vector3.new(0, -4.5, 0), rp)
+            if floorHit or hum.FloorMaterial ~= Enum.Material.Air then
+                hrp.AssemblyAngularVelocity = Vector3.zero
+                if not getgenv().isRecovering then
+                    getgenv().isRecovering = true
+                    task.spawn(function()
+                        local delay = getgenv().recoveryDelay or 0.6
+                        if delay > 0 then task.wait(delay) end
+                        if char and hum and hrp and hum.Health > 0 then
+                            hum.PlatformStand = false ; hum.Sit = false
+                            hum:ChangeState(Enum.HumanoidStateType.Running)
+                            hrp.AssemblyAngularVelocity = Vector3.zero
+                            local _, ry, _ = hrp.CFrame:ToOrientation()
+                            hrp.CFrame = CFrame.new(hrp.Position + Vector3.new(0, 1.5, 0)) * CFrame.Angles(0, ry, 0)
+                        end
+                        task.wait(0.2)
+                        getgenv().isRecovering = false
+                    end)
+                end
+            end
+        else
+            getgenv().isRecovering = false
+        end
+    end
+end)
+
+UserInputService.JumpRequest:Connect(function()
+    if not (getgenv().superPowerEnabled or getgenv().infiniteJumpEnabled) then return end
+    local char = localPlayer.Character
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    if hum then hum:ChangeState(Enum.HumanoidStateType.Jumping) end
+end)
+
+-- === SMART ANTI-FLING — ground-landing counter ===
+-- Counts each time you transition from "knocked/airborne" to "grounded."
+-- That's one fall. One hit. No velocity math, no spike thresholds.
+-- After N falls (Brawl-tuned: 4-6), 50% chance to fire the "bug" grace window.
 task.spawn(function()
-    local hitCounter    = 0
+    local fallCounter   = 0
     local graceUntil    = 0
     local cooldownUntil = 0
-    local nextThreshold = math.random(6, 10)
-    local lastHitTime   = 0
-    local lastSpeed     = 0
-    local HIT_WINDOW    = 1.8
-    local HIT_DEBOUNCE  = 0.30
-    local SPIKE_MIN     = 55
+    local nextThreshold = math.random(4, 6)
+    local lastFallTime  = 0
+    local wasGrounded   = true
+    local FALL_WINDOW   = 4.0
+    local FALL_DEBOUNCE = 0.5
     local GRACE_DURATION = 30.0
     local COOLDOWN_MIN  = 20.0
     local COOLDOWN_MAX  = 40.0
 
     local function resetCounter()
-        hitCounter    = 0
-        nextThreshold = math.random(6, 10)
+        fallCounter   = 0
+        nextThreshold = math.random(4, 6)
     end
 
     while true do
-        task.wait(0.05)
+        task.wait(0.06)
         if not getgenv().smartAntiFlingEnabled then
-            resetCounter() ; graceUntil = 0 ; cooldownUntil = 0 ; lastSpeed = 0
+            resetCounter() ; graceUntil = 0 ; cooldownUntil = 0 ; wasGrounded = true
             continue
         end
         local char = localPlayer.Character
@@ -182,28 +455,37 @@ task.spawn(function()
         local hum = char:FindFirstChildOfClass("Humanoid")
         if not (hrp and hum) then continue end
 
-        local now      = tick()
-        local linVel   = hrp.AssemblyLinearVelocity
-        local angVel   = hrp.AssemblyAngularVelocity
-        local speed    = linVel.Magnitude
-        local horizSpd = Vector3.new(linVel.X, 0, linVel.Z).Magnitude
-        local state    = hum:GetState()
-
-        local spike = (speed - lastSpeed) > SPIKE_MIN
-        lastSpeed   = speed
-        local isFreshHit = spike and (now - lastHitTime) > HIT_DEBOUNCE
-
-        if isFreshHit then lastHitTime = now ; hitCounter = hitCounter + 1 end
-
-        local inGrace    = now < graceUntil
-        local inCooldown = now < cooldownUntil
+        local now   = tick()
+        local state = hum:GetState()
 
         local isKnocked = hum.PlatformStand or hum.Sit
             or state == Enum.HumanoidStateType.FallingDown
             or state == Enum.HumanoidStateType.Ragdoll
             or state == Enum.HumanoidStateType.GettingUp
-            or horizSpd > 90 or angVel.Magnitude > 40
 
+        -- Raycast down to detect ground contact
+        local rp = RaycastParams.new()
+        rp.FilterDescendantsInstances = {char}
+        rp.FilterType = Enum.RaycastFilterType.Exclude
+        local floorHit = workspace:Raycast(hrp.Position, Vector3.new(0, -3.5, 0), rp)
+        local grounded = (floorHit ~= nil) or (hum.FloorMaterial ~= Enum.Material.Air)
+
+        -- Fall registered: was knocked, now on the ground, outside debounce
+        local justLanded = grounded and (not wasGrounded)
+        local freshFall  = isKnocked and justLanded and (now - lastFallTime) > FALL_DEBOUNCE
+                          or (isKnocked and grounded and (now - lastFallTime) > FALL_DEBOUNCE)
+
+        if freshFall then
+            lastFallTime = now
+            fallCounter  = fallCounter + 1
+        end
+
+        wasGrounded = grounded
+
+        local inGrace    = now < graceUntil
+        local inCooldown = now < cooldownUntil
+
+        -- During grace: recover
         if inGrace and isKnocked then
             pcall(function()
                 hrp.AssemblyLinearVelocity  = Vector3.zero
@@ -215,139 +497,205 @@ task.spawn(function()
             end)
         end
 
-        if hitCounter >= nextThreshold and not inGrace and not inCooldown then
-            if math.random() < 0.35 then
+        -- Threshold reached
+        if fallCounter >= nextThreshold and not inGrace and not inCooldown then
+            if math.random() < 0.5 then
                 cooldownUntil = now + math.random(COOLDOWN_MIN, COOLDOWN_MAX)
                 resetCounter()
             else
-                graceUntil = now + GRACE_DURATION
-                hitCounter = 0
-                nextThreshold = math.random(6, 10)
+                graceUntil    = now + GRACE_DURATION
+                fallCounter   = 0
+                nextThreshold = math.random(4, 6)
             end
         end
 
+        -- Grace expired → cooldown
         if not inGrace and not inCooldown and graceUntil > 0 and now >= graceUntil then
             cooldownUntil = now + math.random(COOLDOWN_MIN, COOLDOWN_MAX)
             graceUntil    = 0
             resetCounter()
         end
 
-        if hitCounter > 0 and (now - lastHitTime) > HIT_WINDOW then resetCounter() end
+        -- Stale counter reset if no falls for a while
+        if fallCounter > 0 and (now - lastFallTime) > FALL_WINDOW then
+            resetCounter()
+        end
     end
 end)
 
--- === UI ===
-if CoreGui:FindFirstChild("HitbloxUI") then CoreGui.HitbloxUI:Destroy() end
+uiLibrary:AddToggle("Smart Anti-Fling (Ground-Count)", function(enabled)
+    getgenv().smartAntiFlingEnabled = enabled
+    playSound("rbxassetid://12221976")
+end, false)
 
-local gui = Instance.new("ScreenGui")
-gui.Name = "HitbloxUI"
-gui.ResetOnSpawn = false
-gui.IgnoreGuiInset = true
-pcall(function() gui.Parent = CoreGui end)
-if not gui.Parent then gui.Parent = localPlayer:WaitForChild("PlayerGui") end
+-- GOD Kill-Aura
+local godAuraRange   = 50
+local godAuraRangeSq = godAuraRange * godAuraRange
 
--- Small toggle button (28x28)
-local btn = Instance.new("TextButton")
-btn.Name = "Toggle"
-btn.Size = UDim2.new(0, 28, 0, 28)
-btn.Position = UDim2.new(0, 20, 0.4, 0)
-btn.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
-btn.BackgroundTransparency = 0.25
-btn.BorderSizePixel = 0
-btn.Text = "⚡"
-btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-btn.TextSize = 15
-btn.Font = Enum.Font.SourceSansBold
-btn.AutoButtonColor = false
-btn.Active = true
-btn.Draggable = true
-btn.Parent = gui
+uiLibrary:AddToggle("GOD Kill-Aura (No-Lag)", function(enabled)
+    getgenv().godAuraEnabled = enabled
+    playSound("rbxassetid://12221976")
+    if enabled then
+        if not getgenv().godAuraConnection then
+            getgenv().godAuraConnection = RunService.PreRender:Connect(function()
+                if not getgenv().godAuraEnabled then return end
+                local char = localPlayer.Character
+                if not char then return end
+                local myRoot = char:FindFirstChild("HumanoidRootPart")
+                local humanoid = char:FindFirstChildOfClass("Humanoid")
+                if not (myRoot and humanoid and humanoid.Health > 0) then return end
+                local tool = char:FindFirstChildOfClass("Tool")
+                if not tool then
+                    local bp = localPlayer:FindFirstChild("Backpack")
+                    if bp then
+                        local found = bp:FindFirstChildOfClass("Tool")
+                        if found then humanoid:EquipTool(found) end
+                    end
+                    return
+                end
+                local handle = tool:FindFirstChild("Handle") or tool:FindFirstChildWhichIsA("BasePart")
+                if not handle then return end
+                tool:Activate()
+                local myPos = myRoot.Position
+                for _, player in ipairs(Players:GetPlayers()) do
+                    if isEnemy(player) and player.Character then
+                        local eChar = player.Character
+                        local eHum  = eChar:FindFirstChildOfClass("Humanoid")
+                        local eRoot = eChar:FindFirstChild("HumanoidRootPart") or eChar:FindFirstChild("UpperTorso")
+                        if eRoot and eHum and eHum.Health > 0 then
+                            local d = myPos - eRoot.Position
+                            if d.X*d.X + d.Y*d.Y + d.Z*d.Z <= godAuraRangeSq then
+                                for _, part in ipairs({eRoot, eChar:FindFirstChild("Head"), eChar:FindFirstChild("UpperTorso"), eChar:FindFirstChild("LowerTorso")}) do
+                                    if part and firetouchinterest then
+                                        firetouchinterest(handle, part, 0)
+                                        firetouchinterest(handle, part, 1)
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end)
+        end
+    else
+        if getgenv().godAuraConnection then
+            getgenv().godAuraConnection:Disconnect()
+            getgenv().godAuraConnection = nil
+        end
+    end
+end, false)
 
-local btnCorner = Instance.new("UICorner")
-btnCorner.CornerRadius = UDim.new(1, 0)
-btnCorner.Parent = btn
+-- Global Autohit
+local globalReachRange = 15000
+local globalRangeSq    = globalReachRange * globalReachRange
 
-local btnStroke = Instance.new("UIStroke")
-btnStroke.Color = Color3.fromRGB(255, 255, 255)
-btnStroke.Transparency = 0.5
-btnStroke.Thickness = 1
-btnStroke.Parent = btn
+uiLibrary:AddToggle("Global Autohit / Fling (Cross-map)", function(enabled)
+    getgenv().globalAuraEnabled = enabled
+    playSound("rbxassetid://12221976")
+    if enabled then
+        if not getgenv().globalAuraConnection then
+            getgenv().globalAuraConnection = RunService.Heartbeat:Connect(function()
+                if not getgenv().globalAuraEnabled then return end
+                local char = localPlayer.Character
+                if not char then return end
+                local myRoot  = char:FindFirstChild("HumanoidRootPart")
+                local humanoid = char:FindFirstChildOfClass("Humanoid")
+                if not (myRoot and humanoid and humanoid.Health > 0) then return end
+                local originalCFrame = myRoot.CFrame
+                local tool   = char:FindFirstChildOfClass("Tool")
+                local handle = tool and (tool:FindFirstChild("Handle") or tool:FindFirstChildWhichIsA("BasePart"))
+                for _, player in ipairs(Players:GetPlayers()) do
+                    if isEnemy(player) and player.Character then
+                        local eChar = player.Character
+                        local eHum  = eChar:FindFirstChildOfClass("Humanoid")
+                        local eRoot = eChar:FindFirstChild("HumanoidRootPart") or eChar:FindFirstChild("UpperTorso")
+                        if eRoot and eHum and eHum.Health > 0 then
+                            local d = originalCFrame.Position - eRoot.Position
+                            if d.X*d.X + d.Y*d.Y + d.Z*d.Z <= globalRangeSq then
+                                local snapBack = originalCFrame
+                                task.spawn(function()
+                                    myRoot.CFrame = eRoot.CFrame * CFrame.new(0, 0, 1)
+                                    myRoot.AssemblyLinearVelocity  = Vector3.zero
+                                    myRoot.AssemblyAngularVelocity = Vector3.new(100000, 100000, 100000)
+                                    if tool and handle then
+                                        tool:Activate()
+                                        if firetouchinterest then
+                                            firetouchinterest(handle, eRoot, 0)
+                                            firetouchinterest(handle, eRoot, 1)
+                                        end
+                                    end
+                                    task.wait(0.01)
+                                    myRoot.AssemblyAngularVelocity = Vector3.zero
+                                    myRoot.AssemblyLinearVelocity  = Vector3.zero
+                                    myRoot.CFrame = snapBack
+                                end)
+                            end
+                        end
+                    end
+                end
+            end)
+        end
+    else
+        if getgenv().globalAuraConnection then
+            getgenv().globalAuraConnection:Disconnect()
+            getgenv().globalAuraConnection = nil
+        end
+    end
+end, false)
 
--- Popup panel that appears next to button
-local panel = Instance.new("Frame")
-panel.Name = "Panel"
-panel.Size = UDim2.new(0, 140, 0, 84)
-panel.Position = UDim2.new(0, 56, 0.4, 0)
-panel.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-panel.BackgroundTransparency = 0.1
-panel.BorderSizePixel = 0
-panel.Visible = false
-panel.Parent = gui
-
-local pCorner = Instance.new("UICorner")
-pCorner.CornerRadius = UDim.new(0, 6)
-pCorner.Parent = panel
-
-local pStroke = Instance.new("UIStroke")
-pStroke.Color = Color3.fromRGB(255, 255, 255)
-pStroke.Transparency = 0.75
-pStroke.Thickness = 1
-pStroke.Parent = panel
-
-local title = Instance.new("TextLabel")
-title.Size = UDim2.new(1, 0, 0, 18)
-title.BackgroundTransparency = 1
-title.Text = "Hitblox"
-title.TextColor3 = Color3.fromRGB(255, 255, 255)
-title.TextSize = 11
-title.Font = Enum.Font.SourceSansBold
-title.Parent = panel
-
--- Toggle row helper
-local function makeToggle(labelText, yOffset, onClick)
-    local row = Instance.new("TextButton")
-    row.Size = UDim2.new(1, -12, 0, 26)
-    row.Position = UDim2.new(0, 6, 0, yOffset)
-    row.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
-    row.BackgroundTransparency = 0.2
-    row.BorderSizePixel = 0
-    row.Text = labelText .. "  [ OFF ]"
-    row.TextColor3 = Color3.fromRGB(200, 200, 200)
-    row.TextSize = 11
-    row.Font = Enum.Font.SourceSans
-    row.AutoButtonColor = false
-    row.Parent = panel
-
-    local rCorner = Instance.new("UICorner")
-    rCorner.CornerRadius = UDim.new(0, 4)
-    rCorner.Parent = row
-
-    local state = false
-    row.MouseButton1Click:Connect(function()
-        state = not state
-        row.Text = labelText .. (state and "  [ ON ]" or "  [ OFF ]")
-        row.TextColor3 = state and Color3.fromRGB(120, 255, 120) or Color3.fromRGB(200, 200, 200)
-        onClick(state)
-    end)
-    return row
+-- Toggle button
+if CoreGui:FindFirstChild("HitbloxToggleGui") then
+    CoreGui.HitbloxToggleGui:Destroy()
 end
 
-makeToggle("Hitbox", 22, function(on)
-    playSound("rbxassetid://12221976")
-    toggleHitboxes(on)
-end)
+local toggleGui = Instance.new("ScreenGui")
+toggleGui.Name = "HitbloxToggleGui"
+toggleGui.ResetOnSpawn = false
+pcall(function() toggleGui.Parent = CoreGui end)
+if not toggleGui.Parent then
+    toggleGui.Parent = localPlayer:WaitForChild("PlayerGui")
+end
 
-makeToggle("Anti-Fling", 52, function(on)
-    getgenv().smartAntiFlingEnabled = on
-    playSound("rbxassetid://12221976")
-end)
+local toggleBtn = Instance.new("TextButton")
+toggleBtn.Name = "OpenButton"
+toggleBtn.Size = UDim2.new(0, 32, 0, 32)
+toggleBtn.Position = UDim2.new(0.02, 0, 0.45, 0)
+toggleBtn.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+toggleBtn.BackgroundTransparency = 0.5
+toggleBtn.BorderSizePixel = 0
+toggleBtn.Text = "⚡"
+toggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+toggleBtn.TextTransparency = 0.2
+toggleBtn.TextSize = 15
+toggleBtn.Font = Enum.Font.SourceSansBold
+toggleBtn.Active = true
+toggleBtn.Draggable = true
+toggleBtn.Parent = toggleGui
 
--- Button click: show/hide panel, position panel next to button
-local panelOpen = false
-btn.MouseButton1Click:Connect(function()
-    panelOpen = not panelOpen
-    panel.Visible = panelOpen
-    -- Position panel right next to wherever the button currently is
-    panel.Position = UDim2.new(0, btn.AbsolutePosition.X + btn.AbsoluteSize.X + 8, 0, btn.AbsolutePosition.Y)
+local corner = Instance.new("UICorner")
+corner.CornerRadius = UDim.new(1, 0)
+corner.Parent = toggleBtn
+
+local stroke = Instance.new("UIStroke")
+stroke.Color = Color3.fromRGB(255, 255, 255)
+stroke.Transparency = 0.4
+stroke.Thickness = 1
+stroke.Parent = toggleBtn
+
+local isMenuOpen = true
+toggleBtn.MouseButton1Click:Connect(function()
+    isMenuOpen = not isMenuOpen
     playSound("rbxassetid://12221976")
+    local function setVisible(guiRoot)
+        for _, gui in ipairs(guiRoot:GetChildren()) do
+            if gui ~= toggleGui and gui:IsA("ScreenGui") then
+                for _, child in ipairs(gui:GetChildren()) do
+                    if child:IsA("Frame") then child.Visible = isMenuOpen end
+                end
+            end
+        end
+    end
+    setVisible(CoreGui)
+    local pg = localPlayer:FindFirstChild("PlayerGui")
+    if pg then setVisible(pg) end
 end)
