@@ -1,14 +1,13 @@
--- ═══════════ UNODOCALL'S HUB — FINAL v12 ═══════════
--- Arena: (406, 80, 2068)
+-- ═══════════ UNODOCALL'S HUB — FINAL v14 ═══════════
+-- Arena: (-760, 11.5, 2040) from spy data
 -- OP God Spawn: forced teleport + auto kill aura + mount strip
--- Fly V3: TP-walk joystick + BodyGyro + Up/Down hold
--- Regular Kill Aura separate
--- All bugs fixed
+-- Regular Kill Aura: separate, independent
+-- Fly V3: TP-walk + BodyGyro + Up/Down hold
+-- Removed: ESP, FullBright, Camera Fly, Camera Speed, Ghost Mode, Instant Recovery
 
 local StarterGui = game:GetService("StarterGui")
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local Lighting = game:GetService("Lighting")
 local TweenService = game:GetService("TweenService")
 local CoreGui = game:GetService("CoreGui")
 local UserInputService = game:GetService("UserInputService")
@@ -17,9 +16,11 @@ local lp = Players.LocalPlayer
 while not lp do task.wait() lp = Players.LocalPlayer end
 
 -- ═══════════ ARENA CONFIG ═══════════
-local ARENA_POS = Vector3.new(406, 80, 2068)
-local ARENA_TELEPORT = Vector3.new(406, 80, 2068)
-local LOBBY_MAX_Y = 30
+-- From spy: arena cluster at (-760, 11.5, 2040)
+-- Lobby is Z < 100, arena is Z > 1500 (separate map zones)
+local ARENA_POS      = Vector3.new(-760, 11.5, 2040)
+local ARENA_TELEPORT = Vector3.new(-760, 14, 2040)
+local LOBBY_MAX_Z    = 100
 
 local function isEnemy(player)
     if player == lp then return false end
@@ -97,15 +98,12 @@ end)
 local hitboxSize = 10
 local hitboxTransparency = 0.9
 local hitboxEnabled = false
-local espEnabled = false
-local espGuis = {}
 local killAuraOn = false
 local opGodSpawnOn = false
 local targetLockOn = false
 local target = nil
-local flying = false
-local flySpeed = 50
 local auraRange = 40
+local opAuraRange = 80
 local auraDelay = 0.75
 local lastAuraHit = 0
 local lastOpAuraHit = 0
@@ -113,11 +111,8 @@ local spawningDebounce = false
 
 getgenv().superPowerEnabled = false
 getgenv().infiniteJumpEnabled = false
-getgenv().noclipEnabled = false
-getgenv().instantRecoveryEnabled = false
-getgenv().recoveryDelay = 0.6
 
--- ═══════════ HUMANOMID STATE HELPERS ═══════════
+-- ═══════════ HUMANOID STATE HELPERS ═══════════
 local function disableAllHumanoidStates(hum)
     if not hum then return end
     local states = {
@@ -166,7 +161,7 @@ local function enableAllHumanoidStates(hum)
     end
 end
 
--- ═══════════ FLY V3 — TP-WALK ═══════════
+-- ═══════════ FLY V3 ═══════════
 local flyV3Active = false
 local flyV3Speed = 1
 local flyV3UpHeld = false
@@ -270,80 +265,6 @@ local function stopFlyV3()
             char.Animate.Disabled = false
         end
     end)
-end
-
--- ═══════════ FLY CAMERA (ALT) ═══════════
-local flyConnection = nil
-local flyBodyVel = nil
-local flyBodyGyro = nil
-
-local function startFly()
-    local char = lp.Character
-    if not char then return end
-    local root = char:FindFirstChild("HumanoidRootPart")
-    local hum = char:FindFirstChildOfClass("Humanoid")
-    if not root or not hum then return end
-
-    if flyBodyVel then flyBodyVel:Destroy() flyBodyVel = nil end
-    if flyBodyGyro then flyBodyGyro:Destroy() flyBodyGyro = nil end
-
-    flyBodyGyro = Instance.new("BodyGyro")
-    flyBodyGyro.MaxTorque = Vector3.new(1e6, 1e6, 1e6)
-    flyBodyGyro.P = 3000
-    flyBodyGyro.D = 500
-    flyBodyGyro.CFrame = root.CFrame
-    flyBodyGyro.Parent = root
-
-    flyBodyVel = Instance.new("BodyVelocity")
-    flyBodyVel.MaxForce = Vector3.new(1e9, 1e9, 1e9)
-    flyBodyVel.Velocity = Vector3.zero
-    flyBodyVel.Parent = root
-
-    flyConnection = RunService.RenderStepped:Connect(function()
-        if not flying then return end
-        if not flyBodyVel or not flyBodyVel.Parent then return end
-        local character = lp.Character
-        if not character then return end
-        local r = character:FindFirstChild("HumanoidRootPart")
-        if not r then return end
-        local camera = workspace.CurrentCamera
-        if not camera then return end
-
-        local camLook = camera.CFrame.LookVector
-        local camRight = camera.CFrame.RightVector
-        local camUp = camera.CFrame.UpVector
-        local flatLook = Vector3.new(camLook.X, 0, camLook.Z)
-        if flatLook.Magnitude > 0.001 then flatLook = flatLook.Unit end
-        local flatRight = Vector3.new(camRight.X, 0, camRight.Z)
-        if flatRight.Magnitude > 0.001 then flatRight = flatRight.Unit end
-
-        local moveDir = Vector3.zero
-        local humMove = hum.MoveDirection
-        if humMove.Magnitude > 0.01 then
-            local fwd = humMove:Dot(flatLook)
-            local right = humMove:Dot(flatRight)
-            moveDir = moveDir + (camLook * fwd) + (camRight * right)
-        end
-        if UserInputService:IsKeyDown(Enum.KeyCode.W) then moveDir = moveDir + camLook end
-        if UserInputService:IsKeyDown(Enum.KeyCode.S) then moveDir = moveDir - camLook end
-        if UserInputService:IsKeyDown(Enum.KeyCode.A) then moveDir = moveDir - camRight end
-        if UserInputService:IsKeyDown(Enum.KeyCode.D) then moveDir = moveDir + camRight end
-        if hum.Jump or UserInputService:IsKeyDown(Enum.KeyCode.Space) then moveDir = moveDir + camUp end
-        if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then moveDir = moveDir - camUp end
-
-        if moveDir.Magnitude > 0.01 then
-            flyBodyVel.Velocity = moveDir.Unit * flySpeed
-        else
-            flyBodyVel.Velocity = Vector3.zero
-        end
-        flyBodyGyro.CFrame = CFrame.new(r.Position, r.Position + flatLook)
-    end)
-end
-
-local function stopFly()
-    if flyConnection then flyConnection:Disconnect() flyConnection = nil end
-    if flyBodyVel then flyBodyVel:Destroy() flyBodyVel = nil end
-    if flyBodyGyro then flyBodyGyro:Destroy() flyBodyGyro = nil end
 end
 
 -- ═══════════ HITBOX ═══════════
@@ -460,47 +381,6 @@ local function toggleHitboxes(enabled)
     if enabled then applyHitboxesToAllPlayers() else resetHitboxesOnAllPlayers() end
 end
 
--- ═══════════ ESP ═══════════
-local function createESP(player)
-    if espGuis[player] then espGuis[player]:Destroy() espGuis[player] = nil end
-    if not player or not player.Character or player == lp then return end
-    if isEnemy(player) then
-        local head = player.Character:FindFirstChild("Head")
-        local rootPart = player.Character:FindFirstChild("HumanoidRootPart") or player.Character:FindFirstChild("UpperTorso")
-        local targetPart = head or rootPart
-        if not targetPart then return end
-        local espGui = Instance.new("BillboardGui")
-        espGui.Name = "ESP"
-        espGui.Adornee = targetPart
-        espGui.Size = UDim2.new(0, 100, 0, 50)
-        espGui.StudsOffset = Vector3.new(0, 2, 0)
-        espGui.AlwaysOnTop = true
-        local espLabel = Instance.new("TextLabel", espGui)
-        espLabel.Size = UDim2.new(1, 0, 1, 0)
-        espLabel.BackgroundTransparency = 1
-        espLabel.TextColor3 = Color3.new(1, 0, 0)
-        espLabel.TextStrokeTransparency = 0
-        espLabel.Text = player.Name
-        espLabel.TextScaled = true
-        espLabel.Font = Enum.Font.SourceSansBold
-        espGuis[player] = espGui
-        espGui.Parent = targetPart
-    end
-end
-
-local function toggleESP(enabled)
-    espEnabled = enabled
-    playSound("rbxassetid://12221976")
-    if enabled then
-        for _, player in ipairs(Players:GetPlayers()) do
-            if isEnemy(player) then createESP(player) end
-        end
-    else
-        for _, gui in pairs(espGuis) do if gui then gui:Destroy() end end
-        espGuis = {}
-    end
-end
-
 local function trackPlayer(player)
     if not player then return end
     if isEnemy(player) then
@@ -514,7 +394,6 @@ local function trackPlayer(player)
             end
             updateHitboxState()
             humanoid.HealthChanged:Connect(updateHitboxState)
-            if espEnabled then createESP(player) end
         end)
         if player.Character then
             local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
@@ -522,7 +401,6 @@ local function trackPlayer(player)
                 if hitboxEnabled then
                     if humanoid.Health > 0 then applyHitbox(player.Character) else resetHitbox(player.Character) end
                 end
-                if espEnabled then createESP(player) end
             end
         end
     end
@@ -530,9 +408,6 @@ end
 
 for _, player in ipairs(Players:GetPlayers()) do trackPlayer(player) end
 Players.PlayerAdded:Connect(trackPlayer)
-Players.PlayerRemoving:Connect(function(player)
-    if espGuis[player] then espGuis[player]:Destroy() espGuis[player] = nil end
-end)
 
 -- ═══════════ SMART SEARCH ═══════════
 local function smartFind(input)
@@ -595,9 +470,9 @@ local function teleportToArena(force)
     if hum.Health <= 0 then return false, "dead" end
 
     if not force then
-        local myY = hrp.Position.Y
-        if myY < LOBBY_MAX_Y then
-            return false, "IN LOBBY (Y=" .. math.floor(myY) .. ")"
+        local myZ = hrp.Position.Z
+        if myZ < LOBBY_MAX_Z then
+            return false, "IN LOBBY (Z=" .. math.floor(myZ) .. ") — use Force to override"
         end
     end
 
@@ -961,7 +836,7 @@ end
 
 -- ═══════════ BUILD PAGES ═══════════
 
--- KEY PAGE
+-- KEY
 local keyPage = addPage("Key")
 addSection(keyPage, "Key")
 
@@ -1031,7 +906,7 @@ keyInput.FocusLost:Connect(function(enterPressed)
     end
 end)
 
--- MAIN PAGE
+-- MAIN
 local mainPage = addPage("Main")
 addSection(mainPage, "Hitbox")
 addValueRow(mainPage, "Hitbox", 10, 1, 50, 5, function(val)
@@ -1040,16 +915,11 @@ addValueRow(mainPage, "Hitbox", 10, 1, 50, 5, function(val)
 end)
 addToggleRow(mainPage, "Enable Hitbox", function(enabled) toggleHitboxes(enabled) end)
 
-addSection(mainPage, "Camera")
-addValueRow(mainPage, "FOV", 70, 30, 120, 5, function(val)
-    workspace.CurrentCamera.FieldOfView = val
-end)
-
--- COMBAT PAGE
+-- COMBAT
 local combatPage = addPage("Combat")
 
 addSection(combatPage, "★ OP GOD SPAWN ★")
-addSection(combatPage, "Arena: 406, 80, 2068")
+addSection(combatPage, "Arena: -760, 11.5, 2040")
 
 local opStatusL = Instance.new("TextLabel")
 opStatusL.Size = UDim2.new(1, 0, 0, 28)
@@ -1062,7 +932,7 @@ opStatusL.TextWrapped = true
 opStatusL.Parent = combatPage
 local opc = Instance.new("UICorner"); opc.CornerRadius = UDim.new(0, 6); opc.Parent = opStatusL
 
-local opGodSpawnToggle = addToggleRow(combatPage, "OP God Spawn", function(enabled)
+local opGodSpawnToggle = addToggleRow(combatPage, "OP God Spawn (Teleport + Auto Aura)", function(enabled)
     if enabled and not keyVerified then
         keyStatusL.Text = "Enter key on Key page"
         keyStatusL.TextColor3 = COL.yellow
@@ -1105,7 +975,7 @@ addButtonRow(combatPage, "→ Force Teleport to Arena", function()
     end
 end)
 
-addSection(combatPage, "Kill Aura (Standard)")
+addSection(combatPage, "Kill Aura (Standalone)")
 
 local killAuraToggle = addToggleRow(combatPage, "Kill Aura", function(enabled)
     if enabled and not keyVerified then
@@ -1218,26 +1088,6 @@ searchBox.FocusLost:Connect(function(enterPressed)
     end
 end)
 
--- VISUALS
-local visPage = addPage("Visuals")
-addToggleRow(visPage, "Player ESP", function(enabled) toggleESP(enabled) end)
-addButtonRow(visPage, "FullBright", function()
-    Lighting.Brightness = 2
-    Lighting.OutdoorAmbient = Color3.fromRGB(255, 255, 255)
-    Lighting.Ambient = Color3.fromRGB(255, 255, 255)
-    Lighting.TimeOfDay = "14:00:00"
-    Lighting.FogStart = 0
-    Lighting.FogEnd = 100000
-    getgenv().BrightnessConnection = RunService.Heartbeat:Connect(function()
-        Lighting.Brightness = 2
-        Lighting.OutdoorAmbient = Color3.fromRGB(255, 255, 255)
-        Lighting.Ambient = Color3.fromRGB(255, 255, 255)
-        Lighting.TimeOfDay = "14:00:00"
-        Lighting.FogStart = 0
-        Lighting.FogEnd = 100000
-    end)
-end)
-
 -- MOVEMENT
 local movePage = addPage("Movement")
 
@@ -1256,7 +1106,6 @@ addValueRow(movePage, "Speed", 1, 1, 10, 1, function(val)
     end
 end)
 
--- Up / Down hold row
 local upDownRow = Instance.new("Frame")
 upDownRow.Size = UDim2.new(1, 0, 0, 40)
 upDownRow.BackgroundColor3 = COL.card
@@ -1305,15 +1154,6 @@ UserInputService.InputEnded:Connect(function(input)
     end
 end)
 
-addSection(movePage, "Fly (Camera) · Alt")
-
-addToggleRow(movePage, "Fly (Camera)", function(enabled)
-    flying = enabled
-    if enabled then startFly() else stopFly() end
-end)
-
-addValueRow(movePage, "Camera Speed", 50, 10, 300, 10, function(val) flySpeed = val end)
-
 addSection(movePage, "Player")
 
 addToggleRow(movePage, "Super Power", function(enabled)
@@ -1325,9 +1165,6 @@ addToggleRow(movePage, "Super Power", function(enabled)
     end
 end)
 addToggleRow(movePage, "Infinite Jump", function(enabled) getgenv().infiniteJumpEnabled = enabled end)
-addToggleRow(movePage, "Ghost Mode", function(enabled) getgenv().noclipEnabled = enabled end)
-addToggleRow(movePage, "Instant Recovery", function(enabled) getgenv().instantRecoveryEnabled = enabled end)
-addValueRow(movePage, "R.Delay", 0.6, 0, 5, 0.1, function(val) getgenv().recoveryDelay = val end)
 
 -- MISC
 local miscPage = addPage("Misc")
@@ -1345,7 +1182,7 @@ sideBtns["Main"].btn.Font = Enum.Font.GothamBold
 
 -- ═══════════ LOOPS ═══════════
 
--- Standard Kill Aura
+-- Standard Kill Aura (independent — runs whether OP is on or not)
 RunService.Heartbeat:Connect(function()
     if not killAuraOn then return end
     if not keyVerified then return end
@@ -1375,7 +1212,7 @@ RunService.Heartbeat:Connect(function()
     if nearest then pcall(function() FlingRE:FireServer(nearest) end) end
 end)
 
--- OP God Spawn loop
+-- OP God Spawn loop — auto kill aura + strip + recall
 RunService.Heartbeat:Connect(function()
     if not opGodSpawnOn then return end
     if not keyVerified then return end
@@ -1393,8 +1230,9 @@ RunService.Heartbeat:Connect(function()
     end
     stripMount(char)
 
+    -- Recall if drifted >150 studs from arena center
     local distFromArena = (hrp.Position - ARENA_POS).Magnitude
-    if distFromArena > 300 then
+    if distFromArena > 150 then
         pcall(function()
             hum.Sit = false
             hum.SeatPart = nil
@@ -1407,11 +1245,12 @@ RunService.Heartbeat:Connect(function()
         end)
     end
 
+    -- Auto kill aura (independent cooldown from standard Kill Aura)
     local now = tick()
     if now - lastOpAuraHit < auraDelay then return end
     lastOpAuraHit = now
 
-    local nearest, nearestDist = nil, 60
+    local nearest, nearestDist = nil, opAuraRange
     for _, p in ipairs(Players:GetPlayers()) do
         if p ~= lp and p.Character then
             local root = p.Character:FindFirstChild("HumanoidRootPart")
@@ -1468,7 +1307,6 @@ lp.CharacterAdded:Connect(function(char)
         end
     end)
     flyV3Active = false
-    flying = false
     flyV3UpHeld = false
     flyV3DownHeld = false
 
@@ -1477,7 +1315,7 @@ lp.CharacterAdded:Connect(function(char)
         task.spawn(function()
             task.wait(0.5)
             local root = char:FindFirstChild("HumanoidRootPart")
-            if root and root.Position.Y < LOBBY_MAX_Y then
+            if root and root.Position.Z < LOBBY_MAX_Z then
                 pcall(function()
                     if not SpawnerRE then findRemotes() end
                     if SpawnerRE then SpawnerRE:FireServer() end
@@ -1505,51 +1343,10 @@ RunService.Heartbeat:Connect(function()
     local char = lp.Character
     if not char then return end
     local hum = char:FindFirstChildOfClass("Humanoid")
-    local hrp = char:FindFirstChild("HumanoidRootPart")
     if hum and getgenv().superPowerEnabled then
         hum.WalkSpeed = 120
         hum.JumpPower = 150
         hum.UseJumpPower = true
-    end
-    if getgenv().noclipEnabled then
-        for _, part in ipairs(char:GetDescendants()) do
-            if part:IsA("BasePart") and part.CanCollide then part.CanCollide = false end
-        end
-    end
-    if hum and hrp and getgenv().instantRecoveryEnabled then
-        local state = hum:GetState()
-        local isKnocked = (hum.PlatformStand or hum.Sit or
-            state == Enum.HumanoidStateType.FallingDown or
-            state == Enum.HumanoidStateType.Ragdoll or
-            state == Enum.HumanoidStateType.GettingUp)
-        if isKnocked then
-            local rp = RaycastParams.new()
-            rp.FilterDescendantsInstances = {char}
-            rp.FilterType = Enum.RaycastFilterType.Exclude
-            local floorHit = workspace:Raycast(hrp.Position, Vector3.new(0, -4.5, 0), rp)
-            if floorHit or hum.FloorMaterial ~= Enum.Material.Air then
-                hrp.AssemblyAngularVelocity = Vector3.zero
-                if not getgenv().isRecovering then
-                    getgenv().isRecovering = true
-                    task.spawn(function()
-                        local dt = getgenv().recoveryDelay or 0.6
-                        if dt > 0 then task.wait(dt) end
-                        if char and hum and hrp and hum.Health > 0 then
-                            hum.PlatformStand = false
-                            hum.Sit = false
-                            hum:ChangeState(Enum.HumanoidStateType.Running)
-                            hrp.AssemblyAngularVelocity = Vector3.zero
-                            local _, ry, _ = hrp.CFrame:ToOrientation()
-                            hrp.CFrame = CFrame.new(hrp.Position + Vector3.new(0, 1.5, 0)) * CFrame.Angles(0, ry, 0)
-                        end
-                        task.wait(0.2)
-                        getgenv().isRecovering = false
-                    end)
-                end
-            end
-        else
-            getgenv().isRecovering = false
-        end
     end
 end)
 
@@ -1685,6 +1482,6 @@ lp.CharacterAdded:Connect(function(char)
     end
 end)
 
-print("Undocall's Hub v12 loaded")
-print("Arena: 406, 80, 2068")
+print("Undocall's Hub v14 loaded")
+print("Arena: -760, 11.5, 2040")
 print("Key: " .. (keyVerified and "VERIFIED (saved)" or "NOT VERIFIED"))
