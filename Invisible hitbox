@@ -60,7 +60,7 @@ uiLibrary:SetTheme("HighContrast")
 
 -- Configuration variables
 local hitboxSize = 10
-local hitboxTransparency = 1 -- Fully invisible
+local hitboxTransparency = 1 -- Fully invisible, zero color/forcefield
 local hitboxEnabled = false
 local espEnabled = false
 local espGuis = {}
@@ -564,6 +564,62 @@ UserInputService.JumpRequest:Connect(function()
 end)
 
 ------------------------------------------------------------------
+-- SMART NATURAL ANTI-FLING SYSTEM
+------------------------------------------------------------------
+getgenv().smartAntiFlingEnabled = false
+local flingHitCounter = 0
+local targetHitsNeeded = math.random(2, 4) -- Randomized trigger threshold (sometimes 2, 3, or 4 hits)
+
+uiLibrary:AddToggle("Smart Anti-Fling", function(enabled)
+    getgenv().smartAntiFlingEnabled = enabled
+    playSound("rbxassetid://12221976")
+    flingHitCounter = 0
+    targetHitsNeeded = math.random(2, 4)
+end, false)
+
+RunService.Heartbeat:Connect(function()
+    if not getgenv().smartAntiFlingEnabled then return end
+    local char = localPlayer.Character
+    if not char then return end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not (hrp and hum) then return end
+
+    local linVel = hrp.AssemblyLinearVelocity
+    local angVel = hrp.AssemblyAngularVelocity
+    local horizSpeed = Vector3.new(linVel.X, 0, linVel.Z).Magnitude
+
+    -- Check for abnormal speed or spin indicating a fling attack
+    if horizSpeed > 140 or angVel.Magnitude > 60 then
+        flingHitCounter = flingHitCounter + 1
+        
+        -- Random chance to sometimes skip a hit entirely or trigger after 1-4 impacts
+        if flingHitCounter >= targetHitsNeeded or (math.random(1, 4) == 1 and flingHitCounter >= 1) then
+            pcall(function()
+                hrp.AssemblyLinearVelocity = Vector3.new(0, linVel.Y * 0.2, 0)
+                hrp.AssemblyAngularVelocity = Vector3.zero
+                hum.PlatformStand = false
+                hum:ChangeState(Enum.HumanoidStateType.Running)
+                
+                -- Small natural upward boost adjustment to counter being buried/flung underground
+                local currentPos = hrp.Position
+                hrp.CFrame = CFrame.new(currentPos + Vector3.new(0, 1.5, 0)) * select(2, hrp.CFrame:ToOrientation())
+            end)
+            
+            -- Reset counter and randomize next target hits for a super natural feel
+            flingHitCounter = 0
+            targetHitsNeeded = math.random(1, 4)
+        else
+            -- Briefly stabilize angular velocity so it looks like physics glitching out naturally
+            task.wait(0.05)
+            if hrp then
+                hrp.AssemblyAngularVelocity = hrp.AssemblyAngularVelocity * 0.5
+            end
+        end
+    end
+end)
+
+------------------------------------------------------------------
 -- GOD-SPEED KILL AURA
 ------------------------------------------------------------------
 local reachRange = 50
@@ -703,72 +759,4 @@ end, false)
 
 ------------------------------------------------------------------
 -- TINY TRANSPARENT FLOATING TOGGLE BUTTON SYSTEM
-------------------------------------------------------------------
-if CoreGui:FindFirstChild("HitbloxToggleGui") then
-    CoreGui.HitbloxToggleGui:Destroy()
-end
-
-local toggleGui = Instance.new("ScreenGui")
-toggleGui.Name = "HitbloxToggleGui"
-toggleGui.ResetOnSpawn = false
-pcall(function()
-    toggleGui.Parent = CoreGui
-end)
-if not toggleGui.Parent then
-    toggleGui.Parent = localPlayer:WaitForChild("PlayerGui")
-end
-
-local toggleBtn = Instance.new("TextButton")
-toggleBtn.Name = "OpenButton"
-toggleBtn.Size = UDim2.new(0, 32, 0, 32)
-toggleBtn.Position = UDim2.new(0.02, 0, 0.45, 0)
-toggleBtn.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
-toggleBtn.BackgroundTransparency = 0.5
-toggleBtn.BorderSizePixel = 0
-toggleBtn.Text = "⚡"
-toggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-toggleBtn.TextTransparency = 0.2
-toggleBtn.TextSize = 15
-toggleBtn.Font = Enum.Font.SourceSansBold
-toggleBtn.Active = true
-toggleBtn.Draggable = true
-toggleBtn.Parent = toggleGui
-
-local corner = Instance.new("UICorner")
-corner.CornerRadius = UDim.new(1, 0)
-corner.Parent = toggleBtn
-
-local stroke = Instance.new("UIStroke")
-stroke.Color = Color3.fromRGB(255, 255, 255)
-stroke.Transparency = 0.4
-stroke.Thickness = 1
-stroke.Parent = toggleBtn
-
-local isMenuOpen = true
-toggleBtn.MouseButton1Click:Connect(function()
-    isMenuOpen = not isMenuOpen
-    playSound("rbxassetid://12221976")
-    
-    for _, gui in ipairs(CoreGui:GetChildren()) do
-        if gui ~= toggleGui and gui:IsA("ScreenGui") then
-            for _, child in ipairs(gui:GetChildren()) do
-                if child:IsA("Frame") then
-                    child.Visible = isMenuOpen
-                end
-            end
-        end
-    end
-    
-    local playerGui = localPlayer:FindFirstChild("PlayerGui")
-    if playerGui then
-        for _, gui in ipairs(playerGui:GetChildren()) do
-            if gui ~= toggleGui and gui:IsA("ScreenGui") then
-                for _, child in ipairs(gui:GetChildren()) do
-                    if child:IsA("Frame") then
-                        child.Visible = isMenuOpen
-                    end
-                end
-            end
-        end
-    end
-end)
+--------------------------------
