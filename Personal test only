@@ -1,9 +1,9 @@
--- ═══════════ UNODOCALL'S HUB — FINAL v15 ═══════════
+-- ═══════════ UNODOCALL'S HUB — FINAL v16 ═══════════
 -- Arena: (-760, 11.5, 2040)
 -- OP features gated by key (Discord)
 -- Clean GUI: logo + feature names only
--- Open/close animation via UIScale
--- Fly V3 + anti-fling + hitbox + OP spawn + kill aura + target lock
+-- Reopen button follows panel position
+-- Center pop open/close animation
 
 local StarterGui = game:GetService("StarterGui")
 local Players = game:GetService("Players")
@@ -76,14 +76,10 @@ if not FlingRE or not SpawnerRE then
     end)
 end
 
--- ═══════════ KEY SYSTEM (Discord-gated) ═══════════
--- OP features (Kill Aura, OP Spawn, Target Lock) require a valid key.
--- Get keys from Discord: replace KEY_LINK below with your invite.
-local KEY_LINK = "https://discord.gg/YOUR_SERVER"
+-- ═══════════ KEY SYSTEM ═══════════
+local KEY_LINK = "https://discord.gg/AUqu8YvHRw"
 local VALID_KEYS = {
-    "FREE-KEY-2024",
-    "BETA-TESTER-001",
-    "VIP-MEMBER-XXX",
+    "UNDC-7KPX-9M2Q",
 }
 local KEY_FILE = "undocalls_key.txt"
 local keyVerified = false
@@ -507,6 +503,7 @@ end
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "UndocallsHub"
 ScreenGui.ResetOnSpawn = false
+ScreenGui.IgnoreGuiInset = true
 
 local parentGui
 pcall(function() parentGui = gethui() end)
@@ -544,7 +541,7 @@ local panelScale = Instance.new("UIScale")
 panelScale.Scale = 1
 panelScale.Parent = mainPanel
 
--- Header (logo only)
+-- Header (logo)
 local header = Instance.new("Frame")
 header.Size = UDim2.new(1, 0, 0, 50)
 header.BackgroundColor3 = COL.sidebar
@@ -575,10 +572,10 @@ closeBtn.TextSize = 12
 closeBtn.Parent = header
 local cbC = Instance.new("UICorner"); cbC.CornerRadius = UDim.new(0, 6); cbC.Parent = closeBtn
 
--- Reopen button
+-- Reopen button (follows panel position)
 local reopenBtn = Instance.new("TextButton")
 reopenBtn.Size = UDim2.new(0, 40, 0, 40)
-reopenBtn.Position = UDim2.new(0, 20, 0.4, 0)
+reopenBtn.Position = UDim2.new(0.5, -20, 0.5, -20)
 reopenBtn.BackgroundColor3 = COL.accent
 reopenBtn.BackgroundTransparency = 0.15
 reopenBtn.Text = "◇"
@@ -593,9 +590,37 @@ local reopenScale = Instance.new("UIScale")
 reopenScale.Scale = 1
 reopenScale.Parent = reopenBtn
 
--- Open / Close animations
+local hasBeenClosed = false
+
+local function syncReopenToPanel()
+    local px = mainPanel.Position
+    local psz = mainPanel.Size
+    local rsz = reopenBtn.Size
+    reopenBtn.Position = UDim2.new(
+        px.X.Scale,
+        px.X.Offset + (psz.X.Offset - rsz.X.Offset) / 2,
+        px.Y.Scale,
+        px.Y.Offset + (psz.Y.Offset - rsz.Y.Offset) / 2
+    )
+end
+
+local function syncPanelToReopen()
+    local rx = reopenBtn.Position
+    local rsz = reopenBtn.Size
+    local psz = mainPanel.Size
+    mainPanel.Position = UDim2.new(
+        rx.X.Scale,
+        rx.X.Offset - (psz.X.Offset - rsz.X.Offset) / 2,
+        rx.Y.Scale,
+        rx.Y.Offset - (psz.Y.Offset - rsz.Y.Offset) / 2
+    )
+end
+
 local function openPanel()
     reopenBtn.Visible = false
+    if hasBeenClosed then
+        syncPanelToReopen()
+    end
     mainPanel.Visible = true
     panelScale.Scale = 0.85
     TweenService:Create(panelScale, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
@@ -609,8 +634,10 @@ local function closePanel()
     }):Play()
     task.wait(0.2)
     mainPanel.Visible = false
+    syncReopenToPanel()
+    hasBeenClosed = true
     reopenBtn.Visible = true
-    reopenScale.Scale = 0.5
+    reopenScale.Scale = 0.4
     TweenService:Create(reopenScale, TweenInfo.new(0.25, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
         Scale = 1,
     }):Play()
@@ -952,7 +979,7 @@ local killAuraToggle = addToggleRow(combatPage, "Kill Aura", function(enabled)
     end
 end)
 
--- Target Lock — clean, only placeholder
+-- Target Lock
 local searchBox = Instance.new("TextBox")
 searchBox.Size = UDim2.new(1, 0, 0, 36)
 searchBox.BackgroundColor3 = COL.card
@@ -1093,10 +1120,15 @@ sideBtns["Main"].btn.BackgroundColor3 = COL.accent
 sideBtns["Main"].btn.TextColor3 = COL.text
 sideBtns["Main"].btn.Font = Enum.Font.GothamBold
 
--- Open panel on load with animation
+-- Open panel on load with first-open animation
 task.defer(function()
     task.wait(0.2)
-    openPanel()
+    reopenBtn.Visible = false
+    mainPanel.Visible = true
+    panelScale.Scale = 0.7
+    TweenService:Create(panelScale, TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+        Scale = 1,
+    }):Play()
 end)
 
 -- Drag
@@ -1120,7 +1152,7 @@ end)
 
 -- ═══════════ LOOPS ═══════════
 
--- Standard Kill Aura (independent)
+-- Standard Kill Aura
 RunService.Heartbeat:Connect(function()
     if not killAuraOn then return end
     if not keyVerified then return end
@@ -1396,5 +1428,6 @@ lp.CharacterAdded:Connect(function(char)
     end
 end)
 
-print("Undocall's Hub v15 loaded")
-print("Key: " .. (keyVerified and "VERIFIED (saved)" or "NOT VERIFIED"))
+print("Undocall's Hub v16 loaded")
+print("Discord: " .. KEY_LINK)
+print("Key: " .. (keyVerified and "VERIFIED (saved)" or "NOT VERIFIED — enter key in Key tab"))
