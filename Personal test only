@@ -1,9 +1,9 @@
--- ═══════════ UNODOCALL'S HUB — FINAL v14 ═══════════
--- Arena: (-760, 11.5, 2040) from spy data
--- OP God Spawn: forced teleport + auto kill aura + mount strip
--- Regular Kill Aura: separate, independent
--- Fly V3: TP-walk + BodyGyro + Up/Down hold
--- Removed: ESP, FullBright, Camera Fly, Camera Speed, Ghost Mode, Instant Recovery
+-- ═══════════ UNODOCALL'S HUB — FINAL v15 ═══════════
+-- Arena: (-760, 11.5, 2040)
+-- OP features gated by key (Discord)
+-- Clean GUI: logo + feature names only
+-- Open/close animation via UIScale
+-- Fly V3 + anti-fling + hitbox + OP spawn + kill aura + target lock
 
 local StarterGui = game:GetService("StarterGui")
 local Players = game:GetService("Players")
@@ -16,8 +16,6 @@ local lp = Players.LocalPlayer
 while not lp do task.wait() lp = Players.LocalPlayer end
 
 -- ═══════════ ARENA CONFIG ═══════════
--- From spy: arena cluster at (-760, 11.5, 2040)
--- Lobby is Z < 100, arena is Z > 1500 (separate map zones)
 local ARENA_POS      = Vector3.new(-760, 11.5, 2040)
 local ARENA_TELEPORT = Vector3.new(-760, 14, 2040)
 local LOBBY_MAX_Z    = 100
@@ -38,6 +36,16 @@ local function playSound(soundId)
     sound.Parent = workspace
     pcall(function() sound:Play() end)
     sound.Ended:Connect(function() sound:Destroy() end)
+end
+
+local function notify(title, text, duration)
+    pcall(function()
+        StarterGui:SetCore("SendNotification", {
+            Title = title or "Hub",
+            Text = text or "",
+            Duration = duration or 3,
+        })
+    end)
 end
 
 -- Find remotes
@@ -68,7 +76,9 @@ if not FlingRE or not SpawnerRE then
     end)
 end
 
--- ═══════════ KEY SYSTEM ═══════════
+-- ═══════════ KEY SYSTEM (Discord-gated) ═══════════
+-- OP features (Kill Aura, OP Spawn, Target Lock) require a valid key.
+-- Get keys from Discord: replace KEY_LINK below with your invite.
 local KEY_LINK = "https://discord.gg/YOUR_SERVER"
 local VALID_KEYS = {
     "FREE-KEY-2024",
@@ -113,50 +123,34 @@ getgenv().superPowerEnabled = false
 getgenv().infiniteJumpEnabled = false
 
 -- ═══════════ HUMANOID STATE HELPERS ═══════════
+local ALL_STATES = {
+    Enum.HumanoidStateType.Climbing,
+    Enum.HumanoidStateType.FallingDown,
+    Enum.HumanoidStateType.Flying,
+    Enum.HumanoidStateType.Freefall,
+    Enum.HumanoidStateType.GettingUp,
+    Enum.HumanoidStateType.Jumping,
+    Enum.HumanoidStateType.Landed,
+    Enum.HumanoidStateType.Physics,
+    Enum.HumanoidStateType.PlatformStanding,
+    Enum.HumanoidStateType.Ragdoll,
+    Enum.HumanoidStateType.Running,
+    Enum.HumanoidStateType.RunningNoPhysics,
+    Enum.HumanoidStateType.Seated,
+    Enum.HumanoidStateType.StrafingNoPhysics,
+    Enum.HumanoidStateType.Swimming,
+}
+
 local function disableAllHumanoidStates(hum)
     if not hum then return end
-    local states = {
-        Enum.HumanoidStateType.Climbing,
-        Enum.HumanoidStateType.FallingDown,
-        Enum.HumanoidStateType.Flying,
-        Enum.HumanoidStateType.Freefall,
-        Enum.HumanoidStateType.GettingUp,
-        Enum.HumanoidStateType.Jumping,
-        Enum.HumanoidStateType.Landed,
-        Enum.HumanoidStateType.Physics,
-        Enum.HumanoidStateType.PlatformStanding,
-        Enum.HumanoidStateType.Ragdoll,
-        Enum.HumanoidStateType.Running,
-        Enum.HumanoidStateType.RunningNoPhysics,
-        Enum.HumanoidStateType.Seated,
-        Enum.HumanoidStateType.StrafingNoPhysics,
-        Enum.HumanoidStateType.Swimming,
-    }
-    for _, s in ipairs(states) do
+    for _, s in ipairs(ALL_STATES) do
         pcall(function() hum:SetStateEnabled(s, false) end)
     end
 end
 
 local function enableAllHumanoidStates(hum)
     if not hum then return end
-    local states = {
-        Enum.HumanoidStateType.Climbing,
-        Enum.HumanoidStateType.FallingDown,
-        Enum.HumanoidStateType.Flying,
-        Enum.HumanoidStateType.Freefall,
-        Enum.HumanoidStateType.GettingUp,
-        Enum.HumanoidStateType.Jumping,
-        Enum.HumanoidStateType.Landed,
-        Enum.HumanoidStateType.Physics,
-        Enum.HumanoidStateType.PlatformStanding,
-        Enum.HumanoidStateType.Ragdoll,
-        Enum.HumanoidStateType.Running,
-        Enum.HumanoidStateType.RunningNoPhysics,
-        Enum.HumanoidStateType.Seated,
-        Enum.HumanoidStateType.StrafingNoPhysics,
-        Enum.HumanoidStateType.Swimming,
-    }
-    for _, s in ipairs(states) do
+    for _, s in ipairs(ALL_STATES) do
         pcall(function() hum:SetStateEnabled(s, true) end)
     end
 end
@@ -466,13 +460,13 @@ local function teleportToArena(force)
     if not char then return false, "no character" end
     local hrp = char:FindFirstChild("HumanoidRootPart")
     local hum = char:FindFirstChildOfClass("Humanoid")
-    if not hrp or not hum then return false, "no root/humanoid" end
+    if not hrp or not hum then return false, "no root" end
     if hum.Health <= 0 then return false, "dead" end
 
     if not force then
         local myZ = hrp.Position.Z
         if myZ < LOBBY_MAX_Z then
-            return false, "IN LOBBY (Z=" .. math.floor(myZ) .. ") — use Force to override"
+            return false, "in lobby (Z=" .. math.floor(myZ) .. ")"
         end
     end
 
@@ -506,7 +500,7 @@ local function teleportToArena(force)
         end
     end)
 
-    return true, "teleported to arena"
+    return true, "ok"
 end
 
 -- ═══════════ GUI ═══════════
@@ -522,7 +516,6 @@ ScreenGui.Parent = parentGui
 
 local COL = {
     bg = Color3.fromRGB(15, 12, 22),
-    panel = Color3.fromRGB(22, 18, 32),
     card = Color3.fromRGB(30, 25, 44),
     accent = Color3.fromRGB(123, 47, 190),
     accentLight = Color3.fromRGB(167, 93, 255),
@@ -534,7 +527,6 @@ local COL = {
     sidebarItem = Color3.fromRGB(35, 28, 50),
     red = Color3.fromRGB(255, 75, 75),
     green = Color3.fromRGB(75, 255, 75),
-    yellow = Color3.fromRGB(255, 200, 0),
 }
 
 local mainPanel = Instance.new("Frame")
@@ -543,10 +535,16 @@ mainPanel.Position = UDim2.new(0.5, -240, 0.5, -190)
 mainPanel.BackgroundColor3 = COL.bg
 mainPanel.BorderSizePixel = 0
 mainPanel.ClipsDescendants = true
+mainPanel.Visible = false
 mainPanel.Parent = ScreenGui
 local mpC = Instance.new("UICorner"); mpC.CornerRadius = UDim.new(0, 12); mpC.Parent = mainPanel
 local mpS = Instance.new("UIStroke"); mpS.Color = COL.border; mpS.Thickness = 1; mpS.Parent = mainPanel
 
+local panelScale = Instance.new("UIScale")
+panelScale.Scale = 1
+panelScale.Parent = mainPanel
+
+-- Header (logo only)
 local header = Instance.new("Frame")
 header.Size = UDim2.new(1, 0, 0, 50)
 header.BackgroundColor3 = COL.sidebar
@@ -556,8 +554,8 @@ local hC = Instance.new("UICorner"); hC.CornerRadius = UDim.new(0, 12); hC.Paren
 local hF = Instance.new("Frame"); hF.Size = UDim2.new(1, 0, 0, 12); hF.Position = UDim2.new(0, 0, 1, -12); hF.BackgroundColor3 = COL.sidebar; hF.BorderSizePixel = 0; hF.Parent = header
 
 local hTitle = Instance.new("TextLabel")
-hTitle.Size = UDim2.new(0, 200, 0, 24)
-hTitle.Position = UDim2.new(0, 14, 0, 4)
+hTitle.Size = UDim2.new(0, 300, 1, 0)
+hTitle.Position = UDim2.new(0, 14, 0, 0)
 hTitle.BackgroundTransparency = 1
 hTitle.Text = "Undocall's Hub"
 hTitle.TextColor3 = COL.text
@@ -565,17 +563,6 @@ hTitle.Font = Enum.Font.GothamBold
 hTitle.TextSize = 16
 hTitle.TextXAlignment = Enum.TextXAlignment.Left
 hTitle.Parent = header
-
-local hTag = Instance.new("TextLabel")
-hTag.Size = UDim2.new(0, 220, 0, 14)
-hTag.Position = UDim2.new(0, 14, 0, 28)
-hTag.BackgroundTransparency = 1
-hTag.Text = "Play Smarter · Stay Ahead"
-hTag.TextColor3 = COL.textDim
-hTag.Font = Enum.Font.Gotham
-hTag.TextSize = 10
-hTag.TextXAlignment = Enum.TextXAlignment.Left
-hTag.Parent = header
 
 local closeBtn = Instance.new("TextButton")
 closeBtn.Size = UDim2.new(0, 28, 0, 28)
@@ -588,23 +575,51 @@ closeBtn.TextSize = 12
 closeBtn.Parent = header
 local cbC = Instance.new("UICorner"); cbC.CornerRadius = UDim.new(0, 6); cbC.Parent = closeBtn
 
+-- Reopen button
 local reopenBtn = Instance.new("TextButton")
 reopenBtn.Size = UDim2.new(0, 40, 0, 40)
-reopenBtn.Position = UDim2.new(0.5, -20, 0.5, -20)
+reopenBtn.Position = UDim2.new(0, 20, 0.4, 0)
 reopenBtn.BackgroundColor3 = COL.accent
-reopenBtn.BackgroundTransparency = 0.85
+reopenBtn.BackgroundTransparency = 0.15
 reopenBtn.Text = "◇"
 reopenBtn.TextColor3 = Color3.fromRGB(200, 180, 255)
 reopenBtn.Font = Enum.Font.Gotham
 reopenBtn.TextSize = 18
 reopenBtn.AutoButtonColor = false
-reopenBtn.Visible = false
+reopenBtn.Visible = true
 reopenBtn.Parent = ScreenGui
 local rbC = Instance.new("UICorner"); rbC.CornerRadius = UDim.new(1, 0); rbC.Parent = reopenBtn
+local reopenScale = Instance.new("UIScale")
+reopenScale.Scale = 1
+reopenScale.Parent = reopenBtn
 
-closeBtn.MouseButton1Click:Connect(function() mainPanel.Visible = false; reopenBtn.Visible = true end)
-reopenBtn.MouseButton1Click:Connect(function() mainPanel.Visible = true; reopenBtn.Visible = false end)
+-- Open / Close animations
+local function openPanel()
+    reopenBtn.Visible = false
+    mainPanel.Visible = true
+    panelScale.Scale = 0.85
+    TweenService:Create(panelScale, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+        Scale = 1,
+    }):Play()
+end
 
+local function closePanel()
+    TweenService:Create(panelScale, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+        Scale = 0.85,
+    }):Play()
+    task.wait(0.2)
+    mainPanel.Visible = false
+    reopenBtn.Visible = true
+    reopenScale.Scale = 0.5
+    TweenService:Create(reopenScale, TweenInfo.new(0.25, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+        Scale = 1,
+    }):Play()
+end
+
+closeBtn.MouseButton1Click:Connect(closePanel)
+reopenBtn.MouseButton1Click:Connect(openPanel)
+
+-- Sidebar
 local sidebar = Instance.new("Frame")
 sidebar.Size = UDim2.new(0, 110, 1, -50)
 sidebar.Position = UDim2.new(0, 0, 0, 50)
@@ -669,19 +684,6 @@ local function addPage(name)
         end
     end)
     return page
-end
-
-local function addSection(page, text)
-    local s = Instance.new("TextLabel")
-    s.Size = UDim2.new(1, 0, 0, 18)
-    s.BackgroundTransparency = 1
-    s.Text = text
-    s.TextColor3 = COL.accentLight
-    s.Font = Enum.Font.GothamBold
-    s.TextSize = 9
-    s.TextXAlignment = Enum.TextXAlignment.Left
-    s.Parent = page
-    return s
 end
 
 local function addToggleRow(page, name, callback)
@@ -836,54 +838,43 @@ end
 
 -- ═══════════ BUILD PAGES ═══════════
 
--- KEY
+-- KEY PAGE
 local keyPage = addPage("Key")
-addSection(keyPage, "Key")
-
-local keyStatusL = Instance.new("TextLabel")
-keyStatusL.Size = UDim2.new(1, 0, 0, 16)
-keyStatusL.BackgroundTransparency = 1
-keyStatusL.Text = keyVerified and "Verified" or "Enter key to unlock"
-keyStatusL.TextColor3 = keyVerified and COL.green or COL.textDim
-keyStatusL.Font = Enum.Font.Gotham
-keyStatusL.TextSize = 9
-keyStatusL.TextXAlignment = Enum.TextXAlignment.Left
-keyStatusL.Parent = keyPage
 
 local keyInput = Instance.new("TextBox")
-keyInput.Size = UDim2.new(1, 0, 0, 30)
+keyInput.Size = UDim2.new(1, 0, 0, 40)
 keyInput.BackgroundColor3 = COL.card
 keyInput.BorderSizePixel = 0
 keyInput.Text = ""
-keyInput.PlaceholderText = "Enter key..."
+keyInput.PlaceholderText = "Key"
 keyInput.TextColor3 = COL.text
 keyInput.PlaceholderColor3 = COL.textDim
 keyInput.Font = Enum.Font.GothamMedium
-keyInput.TextSize = 11
+keyInput.TextSize = 12
 keyInput.ClearTextOnFocus = false
 keyInput.Visible = not keyVerified
 keyInput.Parent = keyPage
-local kiC = Instance.new("UICorner"); kiC.CornerRadius = UDim.new(0, 6); kiC.Parent = keyInput
+local kiC = Instance.new("UICorner"); kiC.CornerRadius = UDim.new(0, 8); kiC.Parent = keyInput
 local kiS = Instance.new("UIStroke"); kiS.Color = COL.border; kiS.Thickness = 1; kiS.Parent = keyInput
 
 local getKeyBtn = Instance.new("TextButton")
-getKeyBtn.Size = UDim2.new(1, 0, 0, 26)
+getKeyBtn.Size = UDim2.new(1, 0, 0, 36)
 getKeyBtn.BackgroundColor3 = COL.btnBg
 getKeyBtn.BorderSizePixel = 0
-getKeyBtn.Text = "Get Key (Discord)"
+getKeyBtn.Text = "Get Key"
 getKeyBtn.TextColor3 = Color3.fromRGB(114, 137, 218)
-getKeyBtn.Font = Enum.Font.GothamMedium
-getKeyBtn.TextSize = 10
+getKeyBtn.Font = Enum.Font.GothamBold
+getKeyBtn.TextSize = 12
 getKeyBtn.AutoButtonColor = false
 getKeyBtn.Visible = not keyVerified
 getKeyBtn.Parent = keyPage
-local gkC = Instance.new("UICorner"); gkC.CornerRadius = UDim.new(0, 6); gkC.Parent = getKeyBtn
+local gkC = Instance.new("UICorner"); gkC.CornerRadius = UDim.new(0, 8); gkC.Parent = getKeyBtn
+local gkS = Instance.new("UIStroke"); gkS.Color = COL.border; gkS.Thickness = 1; gkS.Transparency = 0.5; gkS.Parent = getKeyBtn
 
 getKeyBtn.MouseButton1Click:Connect(function()
     pcall(function() setclipboard(KEY_LINK) end)
-    getKeyBtn.Text = "Link copied!"
-    task.wait(2)
-    getKeyBtn.Text = "Get Key (Discord)"
+    playSound("rbxassetid://12221976")
+    notify("Discord", "Link copied to clipboard", 3)
 end)
 
 keyInput.FocusLost:Connect(function(enterPressed)
@@ -891,96 +882,66 @@ keyInput.FocusLost:Connect(function(enterPressed)
         if checkKey(keyInput.Text) then
             keyVerified = true
             pcall(function() writefile(KEY_FILE, keyInput.Text) end)
-            keyStatusL.Text = "Verified"
-            keyStatusL.TextColor3 = COL.green
             keyInput.Text = ""
             keyInput.Visible = false
             getKeyBtn.Visible = false
+            playSound("rbxassetid://12221976")
+            notify("Unlocked", "OP features active", 3)
         else
-            keyStatusL.Text = "Invalid key"
-            keyStatusL.TextColor3 = COL.red
-            task.wait(2)
-            keyStatusL.Text = "Enter key to unlock"
-            keyStatusL.TextColor3 = COL.textDim
+            keyInput.Text = ""
+            playSound("rbxassetid://12221976")
+            notify("Invalid key", "Get key from Discord", 3)
         end
     end
 end)
 
--- MAIN
+-- MAIN PAGE
 local mainPage = addPage("Main")
-addSection(mainPage, "Hitbox")
 addValueRow(mainPage, "Hitbox", 10, 1, 50, 5, function(val)
     hitboxSize = val
     if hitboxEnabled then applyHitboxesToAllPlayers() end
 end)
 addToggleRow(mainPage, "Enable Hitbox", function(enabled) toggleHitboxes(enabled) end)
 
--- COMBAT
+-- COMBAT PAGE
 local combatPage = addPage("Combat")
 
-addSection(combatPage, "★ OP GOD SPAWN ★")
-addSection(combatPage, "Arena: -760, 11.5, 2040")
-
-local opStatusL = Instance.new("TextLabel")
-opStatusL.Size = UDim2.new(1, 0, 0, 28)
-opStatusL.BackgroundColor3 = COL.card
-opStatusL.Text = "Status: OFF"
-opStatusL.TextColor3 = COL.textDim
-opStatusL.Font = Enum.Font.GothamMedium
-opStatusL.TextSize = 10
-opStatusL.TextWrapped = true
-opStatusL.Parent = combatPage
-local opc = Instance.new("UICorner"); opc.CornerRadius = UDim.new(0, 6); opc.Parent = opStatusL
-
-local opGodSpawnToggle = addToggleRow(combatPage, "OP God Spawn (Teleport + Auto Aura)", function(enabled)
+local opGodSpawnToggle = addToggleRow(combatPage, "OP God Spawn", function(enabled)
     if enabled and not keyVerified then
-        keyStatusL.Text = "Enter key on Key page"
-        keyStatusL.TextColor3 = COL.yellow
+        notify("Locked", "Enter key first", 3)
         opGodSpawnToggle.set(false)
         return
     end
 
     if enabled then
         opGodSpawnOn = true
-        opStatusL.Text = "ON · forcing teleport..."
-        opStatusL.TextColor3 = COL.green
-
         local ok, msg = teleportToArena(true)
         if not ok then
-            opStatusL.Text = "FAIL: " .. msg
-            opStatusL.TextColor3 = COL.red
+            notify("Teleport failed", msg, 3)
         else
-            opStatusL.Text = "ON · at arena, auto aura running"
+            notify("OP Spawn", "At arena, auto aura running", 3)
         end
     else
         opGodSpawnOn = false
-        opStatusL.Text = "Status: OFF"
-        opStatusL.TextColor3 = COL.textDim
     end
 end)
 
-addButtonRow(combatPage, "→ Force Teleport to Arena", function()
+addButtonRow(combatPage, "Force Teleport to Arena", function()
     if not keyVerified then
-        opStatusL.Text = "Enter key first"
-        opStatusL.TextColor3 = COL.yellow
+        notify("Locked", "Enter key first", 3)
         return
     end
     local ok, msg = teleportToArena(true)
     if ok then
-        opStatusL.Text = "FORCED TELEPORT ✓"
-        opStatusL.TextColor3 = COL.green
+        notify("Teleported", "At arena", 2)
     else
-        opStatusL.Text = "FAIL: " .. msg
-        opStatusL.TextColor3 = COL.red
+        notify("Failed", msg, 3)
     end
 end)
 
-addSection(combatPage, "Kill Aura (Standalone)")
-
 local killAuraToggle = addToggleRow(combatPage, "Kill Aura", function(enabled)
     if enabled and not keyVerified then
-        keyStatusL.Text = "Enter key on Key page"
-        keyStatusL.TextColor3 = COL.yellow
+        notify("Locked", "Enter key first", 3)
         killAuraToggle.set(false)
         return
     end
@@ -991,107 +952,61 @@ local killAuraToggle = addToggleRow(combatPage, "Kill Aura", function(enabled)
     end
 end)
 
-addSection(combatPage, "Target Lock")
-
-local avatarFrame = Instance.new("Frame")
-avatarFrame.Size = UDim2.new(0, 50, 0, 50)
-avatarFrame.BackgroundColor3 = COL.card
-avatarFrame.BorderSizePixel = 0
-avatarFrame.Visible = false
-avatarFrame.Parent = combatPage
-local avC = Instance.new("UICorner"); avC.CornerRadius = UDim.new(0, 8); avC.Parent = avatarFrame
-local avS = Instance.new("UIStroke"); avS.Color = COL.accent; avS.Thickness = 2; avS.Parent = avatarFrame
-
-local avatarImage = Instance.new("ImageLabel")
-avatarImage.Size = UDim2.new(1, -6, 1, -6)
-avatarImage.Position = UDim2.new(0, 3, 0, 3)
-avatarImage.BackgroundTransparency = 1
-avatarImage.Parent = avatarFrame
-
-local targetInfoFrame = Instance.new("Frame")
-targetInfoFrame.Size = UDim2.new(1, -62, 0, 50)
-targetInfoFrame.BackgroundColor3 = COL.card
-targetInfoFrame.BorderSizePixel = 0
-targetInfoFrame.Visible = false
-targetInfoFrame.Parent = combatPage
-local tiC = Instance.new("UICorner"); tiC.CornerRadius = UDim.new(0, 8); tiC.Parent = targetInfoFrame
-
-local targetNameL = Instance.new("TextLabel")
-targetNameL.Size = UDim2.new(1, -10, 0, 22)
-targetNameL.Position = UDim2.new(0, 8, 0, 4)
-targetNameL.BackgroundTransparency = 1
-targetNameL.TextColor3 = COL.text
-targetNameL.Font = Enum.Font.GothamBold
-targetNameL.TextSize = 12
-targetNameL.TextXAlignment = Enum.TextXAlignment.Left
-targetNameL.TextTruncate = Enum.TextTruncate.AtEnd
-targetNameL.Parent = targetInfoFrame
-
-local targetStatusL = Instance.new("TextLabel")
-targetStatusL.Size = UDim2.new(1, -10, 0, 18)
-targetStatusL.Position = UDim2.new(0, 8, 0, 26)
-targetStatusL.BackgroundTransparency = 1
-targetStatusL.TextColor3 = COL.textDim
-targetStatusL.Font = Enum.Font.Gotham
-targetStatusL.TextSize = 9
-targetStatusL.TextXAlignment = Enum.TextXAlignment.Left
-targetStatusL.Parent = targetInfoFrame
-
+-- Target Lock — clean, only placeholder
 local searchBox = Instance.new("TextBox")
-searchBox.Size = UDim2.new(1, 0, 0, 30)
+searchBox.Size = UDim2.new(1, 0, 0, 36)
 searchBox.BackgroundColor3 = COL.card
 searchBox.BorderSizePixel = 0
 searchBox.PlaceholderText = "@playername"
+searchBox.Text = ""
 searchBox.TextColor3 = COL.text
 searchBox.PlaceholderColor3 = COL.textDim
 searchBox.Font = Enum.Font.GothamMedium
-searchBox.TextSize = 11
+searchBox.TextSize = 12
 searchBox.ClearTextOnFocus = false
 searchBox.Parent = combatPage
-local sbC = Instance.new("UICorner"); sbC.CornerRadius = UDim.new(0, 6); sbC.Parent = searchBox
-local sbS = Instance.new("UIStroke"); sbS.Color = COL.border; sbS.Thickness = 1; sbS.Parent = searchBox
-
-local targetLockToggle = addToggleRow(combatPage, "Target Lock", function(enabled)
-    if enabled and not target then
-        targetStatusL.Text = "Type a name first (@name)"
-        return
-    end
-    targetLockOn = enabled
-    if enabled then
-        targetStatusL.Text = "Following " .. (target and target.Name or "?")
-    else
-        targetStatusL.Text = ""
-    end
-end)
+local sbC = Instance.new("UICorner"); sbC.CornerRadius = UDim.new(0, 8); sbC.Parent = searchBox
+local sbS = Instance.new("UIStroke"); sbS.Color = COL.border; sbS.Thickness = 1; sbS.Transparency = 0.5; sbS.Parent = searchBox
 
 searchBox.FocusLost:Connect(function(enterPressed)
     if enterPressed then
         local text = searchBox.Text
         if #text < 2 then
-            targetStatusL.Text = "Type at least 2 letters"
+            searchBox.Text = ""
             return
         end
         local found = smartFind(text)
         if found then
             target = found
             searchBox.Text = "@" .. found.Name
-            targetNameL.Text = found.Name
-            targetInfoFrame.Visible = true
-            avatarFrame.Visible = true
-            task.spawn(function()
-                avatarImage.Image = "https://www.roblox.com/headshot-thumbnail/image?userId=" .. found.UserId .. "&width=150&height=150&format=png"
-            end)
-            targetStatusL.Text = "Target set — toggle Lock ON"
+            notify("Target set", found.Name, 2)
         else
-            targetStatusL.Text = "No match: " .. text
+            searchBox.Text = ""
+            notify("No match", text, 2)
         end
     end
 end)
 
--- MOVEMENT
-local movePage = addPage("Movement")
+local targetLockToggle = addToggleRow(combatPage, "Target Lock", function(enabled)
+    if enabled and not keyVerified then
+        notify("Locked", "Enter key first", 3)
+        targetLockToggle.set(false)
+        return
+    end
+    if enabled and not target then
+        notify("No target", "Type @name first", 2)
+        targetLockToggle.set(false)
+        return
+    end
+    targetLockOn = enabled
+    if not enabled then
+        target = nil
+        searchBox.Text = ""
+    end
+end)
 
-addSection(movePage, "Fly V3 (TP-Walk · Mobile)")
+-- MOVEMENT PAGE
+local movePage = addPage("Movement")
 
 addToggleRow(movePage, "Fly V3", function(enabled)
     if enabled then startFlyV3() else stopFlyV3() end
@@ -1118,10 +1033,10 @@ local upBtn = Instance.new("TextButton")
 upBtn.Size = UDim2.new(0, 100, 0, 30)
 upBtn.Position = UDim2.new(0, 10, 0.5, -15)
 upBtn.BackgroundColor3 = Color3.fromRGB(79, 200, 120)
-upBtn.Text = "↑  UP"
+upBtn.Text = "↑"
 upBtn.TextColor3 = Color3.fromRGB(0, 0, 0)
 upBtn.Font = Enum.Font.GothamBold
-upBtn.TextSize = 13
+upBtn.TextSize = 18
 upBtn.AutoButtonColor = false
 upBtn.Parent = upDownRow
 local upC = Instance.new("UICorner"); upC.CornerRadius = UDim.new(0, 6); upC.Parent = upBtn
@@ -1130,10 +1045,10 @@ local downBtn = Instance.new("TextButton")
 downBtn.Size = UDim2.new(0, 100, 0, 30)
 downBtn.Position = UDim2.new(1, -110, 0.5, -15)
 downBtn.BackgroundColor3 = Color3.fromRGB(215, 200, 121)
-downBtn.Text = "↓  DOWN"
+downBtn.Text = "↓"
 downBtn.TextColor3 = Color3.fromRGB(0, 0, 0)
 downBtn.Font = Enum.Font.GothamBold
-downBtn.TextSize = 13
+downBtn.TextSize = 18
 downBtn.AutoButtonColor = false
 downBtn.Parent = upDownRow
 local dnC = Instance.new("UICorner"); dnC.CornerRadius = UDim.new(0, 6); dnC.Parent = downBtn
@@ -1154,8 +1069,6 @@ UserInputService.InputEnded:Connect(function(input)
     end
 end)
 
-addSection(movePage, "Player")
-
 addToggleRow(movePage, "Super Power", function(enabled)
     getgenv().superPowerEnabled = enabled
     if not enabled then
@@ -1166,7 +1079,7 @@ addToggleRow(movePage, "Super Power", function(enabled)
 end)
 addToggleRow(movePage, "Infinite Jump", function(enabled) getgenv().infiniteJumpEnabled = enabled end)
 
--- MISC
+-- MISC PAGE
 local miscPage = addPage("Misc")
 addButtonRow(miscPage, "AntiLag", function()
     loadstring(game:HttpGet("https://raw.githubusercontent.com/OBFhm5650lol/Al/refs/heads/main/AntiLag", true))()
@@ -1180,9 +1093,34 @@ sideBtns["Main"].btn.BackgroundColor3 = COL.accent
 sideBtns["Main"].btn.TextColor3 = COL.text
 sideBtns["Main"].btn.Font = Enum.Font.GothamBold
 
+-- Open panel on load with animation
+task.defer(function()
+    task.wait(0.2)
+    openPanel()
+end)
+
+-- Drag
+local dragging, dragStart, startPos
+header.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = true; dragStart = input.Position; startPos = mainPanel.Position
+    end
+end)
+header.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = false
+    end
+end)
+UserInputService.InputChanged:Connect(function(input)
+    if dragging and (input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseMovement) then
+        local delta = input.Position - dragStart
+        mainPanel.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+end)
+
 -- ═══════════ LOOPS ═══════════
 
--- Standard Kill Aura (independent — runs whether OP is on or not)
+-- Standard Kill Aura (independent)
 RunService.Heartbeat:Connect(function()
     if not killAuraOn then return end
     if not keyVerified then return end
@@ -1212,7 +1150,7 @@ RunService.Heartbeat:Connect(function()
     if nearest then pcall(function() FlingRE:FireServer(nearest) end) end
 end)
 
--- OP God Spawn loop — auto kill aura + strip + recall
+-- OP God Spawn loop
 RunService.Heartbeat:Connect(function()
     if not opGodSpawnOn then return end
     if not keyVerified then return end
@@ -1230,7 +1168,6 @@ RunService.Heartbeat:Connect(function()
     end
     stripMount(char)
 
-    -- Recall if drifted >150 studs from arena center
     local distFromArena = (hrp.Position - ARENA_POS).Magnitude
     if distFromArena > 150 then
         pcall(function()
@@ -1245,7 +1182,6 @@ RunService.Heartbeat:Connect(function()
         end)
     end
 
-    -- Auto kill aura (independent cooldown from standard Kill Aura)
     local now = tick()
     if now - lastOpAuraHit < auraDelay then return end
     lastOpAuraHit = now
@@ -1276,21 +1212,18 @@ RunService.Heartbeat:Connect(function()
         local storedName = target and target.Name
         if storedName then
             local refound = smartFind(storedName)
-            if refound then target = refound; targetNameL.Text = refound.Name
-            else targetStatusL.Text = "Waiting for " .. storedName .. "..." end
+            if refound then target = refound end
         end
         return
     end
     local tChar = target.Character
-    if not tChar then targetStatusL.Text = target.Name .. " respawning..." return end
+    if not tChar then return end
     local tRoot = tChar:FindFirstChild("HumanoidRootPart")
     if not tRoot then return end
-    local tHum = tChar:FindFirstChildOfClass("Humanoid")
     local myChar = lp.Character
     local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
     if not myRoot then return end
     myRoot.CFrame = tRoot.CFrame * CFrame.new(0, 2, 3)
-    if tHum then targetStatusL.Text = "Following (" .. math.floor(tHum.Health) .. " HP)" end
 end)
 
 -- Respawn handling
@@ -1356,25 +1289,6 @@ UserInputService.JumpRequest:Connect(function()
         local char = lp.Character
         local hum = char and char:FindFirstChildOfClass("Humanoid")
         if hum then hum:ChangeState(Enum.HumanoidStateType.Jumping) end
-    end
-end)
-
--- Drag
-local dragging, dragStart, startPos
-header.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
-        dragging = true; dragStart = input.Position; startPos = mainPanel.Position
-    end
-end)
-header.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
-        dragging = false
-    end
-end)
-UserInputService.InputChanged:Connect(function(input)
-    if dragging and (input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseMovement) then
-        local delta = input.Position - dragStart
-        mainPanel.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
     end
 end)
 
@@ -1482,6 +1396,5 @@ lp.CharacterAdded:Connect(function(char)
     end
 end)
 
-print("Undocall's Hub v14 loaded")
-print("Arena: -760, 11.5, 2040")
+print("Undocall's Hub v15 loaded")
 print("Key: " .. (keyVerified and "VERIFIED (saved)" or "NOT VERIFIED"))
