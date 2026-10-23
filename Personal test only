@@ -1,6 +1,6 @@
--- ═══════════ UNODOCALL'S HUB — FINAL v27 ═══════════
+-- ═══════════ UNODOCALL'S HUB — FINAL v28 ═══════════
 -- Arena: (-760, 11.5, 2040)
--- Polished Non-Draggable Invisible Button + Full v26 Architecture
+-- Modern Standalone Toggles + Full v27 Architecture
 
 local StarterGui = game:GetService("StarterGui")
 local Players = game:GetService("Players")
@@ -551,7 +551,7 @@ local hC = Instance.new("UICorner"); hC.CornerRadius = UDim.new(0, 12); hC.Paren
 
 local hTitle = Instance.new("TextLabel")
 hTitle.Size = UDim2.new(0, 300, 1, 0); hTitle.Position = UDim2.new(0, 14, 0, 0)
-hTitle.BackgroundTransparency = 1; hTitle.Text = "Undocall's Hub (v27)"
+hTitle.BackgroundTransparency = 1; hTitle.Text = "Undocall's Hub (v28)"
 hTitle.TextColor3 = COL.text; hTitle.Font = Enum.Font.GothamBold; hTitle.TextSize = 16; hTitle.TextXAlignment = Enum.TextXAlignment.Left; hTitle.Parent = header
 
 local closeBtn = Instance.new("TextButton")
@@ -886,40 +886,132 @@ sideBtns["Main"].btn.BackgroundTransparency = 0.1
 sideBtns["Main"].btn.TextColor3 = COL.text
 sideBtns["Main"].btn.Font = Enum.Font.GothamBold
 
--- ═══════════ POLISHED NON-DRAGGABLE INVISIBLE BUTTON ═══════════
-local invisScreenGui = Instance.new("ScreenGui")
-invisScreenGui.Name = "StandaloneGhost"
-invisScreenGui.ResetOnSpawn = false
-pcall(function() invisScreenGui.Parent = CoreGui end)
-if not invisScreenGui.Parent then invisScreenGui.Parent = lp:WaitForChild("PlayerGui") end
+-- ═══════════ MODERN STANDALONE TOGGLES ═══════════
+local StandaloneGui = Instance.new("ScreenGui")
+StandaloneGui.Name = "Standalone_Toggles"
+StandaloneGui.ResetOnSpawn = false
+StandaloneGui.DisplayOrder = 999
+pcall(function() StandaloneGui.Parent = CoreGui end)
+if not StandaloneGui.Parent then StandaloneGui.Parent = lp:WaitForChild("PlayerGui") end
 
-local invisBtn = Instance.new("TextButton")
-invisBtn.Size = UDim2.new(0, 100, 0, 30)
-invisBtn.Position = UDim2.new(0.5, -50, 0, 45) -- Directly below Anti-Fling
-invisBtn.BackgroundColor3 = Color3.fromRGB(22, 18, 32)
-invisBtn.BackgroundTransparency = 0.2
-invisBtn.BorderSizePixel = 0
-invisBtn.Text = "👻 INVIS  OFF"
-invisBtn.TextColor3 = COL.red
-invisBtn.Font = Enum.Font.GothamBold
-invisBtn.TextSize = 12
-invisBtn.AutoButtonColor = false
-invisBtn.Parent = invisScreenGui
-local ibC = Instance.new("UICorner"); ibC.CornerRadius = UDim.new(0, 6); ibC.Parent = invisBtn
-local ibS = Instance.new("UIStroke"); ibS.Color = COL.red; ibS.Thickness = 1; ibS.Parent = invisBtn
+-- Pill Button Creator
+local function createPill(name, icon, pos)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0, 130, 0, 40)
+    btn.Position = pos
+    btn.BackgroundColor3 = Color3.fromRGB(20, 15, 25)
+    btn.BackgroundTransparency = 0.25
+    btn.BorderSizePixel = 0
+    btn.Text = ""
+    btn.AutoButtonColor = false
+    btn.Active = true
+    btn.Parent = StandaloneGui
+    
+    local corner = Instance.new("UICorner"); corner.CornerRadius = UDim.new(1, 0); corner.Parent = btn
+    local stroke = Instance.new("UIStroke"); stroke.Color = COL.red; stroke.Thickness = 2; stroke.Parent = btn
+    
+    local iconLbl = Instance.new("TextLabel")
+    iconLbl.Text = icon
+    iconLbl.Size = UDim2.new(0, 30, 1, 0)
+    iconLbl.Position = UDim2.new(0, 6, 0, 0)
+    iconLbl.BackgroundTransparency = 1
+    iconLbl.TextColor3 = Color3.fromRGB(255, 255, 255)
+    iconLbl.TextSize = 18
+    iconLbl.Parent = btn
+    
+    local textLbl = Instance.new("TextLabel")
+    textLbl.Text = name
+    textLbl.Size = UDim2.new(1, -50, 1, 0)
+    textLbl.Position = UDim2.new(0, 35, 0, 0)
+    textLbl.BackgroundTransparency = 1
+    textLbl.TextColor3 = COL.red
+    textLbl.Font = Enum.Font.GothamBold
+    textLbl.TextSize = 12
+    textLbl.TextXAlignment = Enum.TextXAlignment.Left
+    textLbl.Parent = btn
+    
+    local dot = Instance.new("Frame")
+    dot.Size = UDim2.new(0, 8, 0, 8)
+    dot.Position = UDim2.new(1, -15, 0.5, -4)
+    dot.BackgroundColor3 = COL.red
+    dot.Parent = btn
+    local dotCorner = Instance.new("UICorner"); dotCorner.CornerRadius = UDim.new(1, 0); dotCorner.Parent = dot
+
+    return btn, stroke, textLbl, dot
+end
+
+-- A-Fling Setup
+local aFlingBtn, aFlingStroke, aFlingText, aFlingDot = createPill("A-Fling", "🛡️", UDim2.new(0, 20, 0.5, -25))
+local noFallEnabled = false
+local noFallConnection
+
+local function executeACR(char, hum, hrp)
+    if not (char and hum and hrp) then return end
+    pcall(function()
+        hrp.Anchored = true; hrp.AssemblyLinearVelocity = Vector3.zero; hrp.AssemblyAngularVelocity = Vector3.zero
+        hum.PlatformStand = false; hum.Sit = false
+        local currentPos = hrp.Position; local lookVector = hrp.CFrame.LookVector
+        local flatLook = Vector3.new(lookVector.X, 0, lookVector.Z).Unit
+        if flatLook.Magnitude < 0.1 then flatLook = Vector3.new(0, 0, -1) end
+        local newPos = currentPos + Vector3.new(0, 2.5, 0)
+        hrp.CFrame = CFrame.new(newPos, newPos + flatLook)
+        hum:ChangeState(Enum.HumanoidStateType.Freefall)
+        task.wait(0.05); hrp.Anchored = false; hum.Jump = true
+    end)
+end
+
+local function toggleAntiFling(enabled)
+    noFallEnabled = enabled
+    local char = lp.Character; local hum = char and char:FindFirstChildOfClass("Humanoid"); local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    if enabled then
+        TweenService:Create(aFlingText, TweenInfo.new(0.2), {TextColor3 = COL.green}):Play()
+        TweenService:Create(aFlingDot, TweenInfo.new(0.2), {BackgroundColor3 = COL.green}):Play()
+        TweenService:Create(aFlingStroke, TweenInfo.new(0.2), {Color = COL.green}):Play()
+        
+        executeACR(char, hum, hrp)
+        pcall(function() hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false); hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false) end)
+        if not noFallConnection then
+            noFallConnection = RunService.Heartbeat:Connect(function()
+                pcall(function()
+                    local c = lp.Character; if not c then return end
+                    local r = c:FindFirstChild("HumanoidRootPart"); local h = c:FindFirstChildOfClass("Humanoid")
+                    if r and h then
+                        local lv = r.AssemblyLinearVelocity; local av = r.AssemblyAngularVelocity
+                        local hs = Vector3.new(lv.X, 0, lv.Z).Magnitude
+                        if hs > 150 or av.Magnitude > 75 then executeACR(c, h, r) end
+                        if h.PlatformStand then h.PlatformStand = false; h.Jump = true end
+                    end
+                end)
+            end)
+        end
+    else
+        TweenService:Create(aFlingText, TweenInfo.new(0.2), {TextColor3 = COL.red}):Play()
+        TweenService:Create(aFlingDot, TweenInfo.new(0.2), {BackgroundColor3 = COL.red}):Play()
+        TweenService:Create(aFlingStroke, TweenInfo.new(0.2), {Color = COL.red}):Play()
+        
+        if noFallConnection then noFallConnection:Disconnect(); noFallConnection = nil end
+        pcall(function() hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, true); hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, true) end)
+        executeACR(char, hum, hrp)
+    end
+end
+
+aFlingBtn.MouseButton1Click:Connect(function() toggleAntiFling(not noFallEnabled) end)
+
+-- Invis Setup
+local invisBtn, invisStroke, invisText, invisDot = createPill("Invisible", "👻", UDim2.new(0, 20, 0.5, 25))
 
 invisBtn.MouseButton1Click:Connect(function()
     if invisibleEnabled then
         stopInvisible()
-        TweenService:Create(invisBtn, TweenInfo.new(0.2), {TextColor3 = COL.red}):Play()
-        TweenService:Create(ibS, TweenInfo.new(0.2), {Color = COL.red}):Play()
-        invisBtn.Text = "👻 INVIS  OFF"
+        TweenService:Create(invisText, TweenInfo.new(0.2), {TextColor3 = COL.red}):Play()
+        TweenService:Create(invisDot, TweenInfo.new(0.2), {BackgroundColor3 = COL.red}):Play()
+        TweenService:Create(invisStroke, TweenInfo.new(0.2), {Color = COL.red}):Play()
         notify("Invisible", "OFF", 2)
     else
         startInvisible()
-        TweenService:Create(invisBtn, TweenInfo.new(0.2), {TextColor3 = COL.green}):Play()
-        TweenService:Create(ibS, TweenInfo.new(0.2), {Color = COL.green}):Play()
-        invisBtn.Text = "👻 INVIS  ON"
+        TweenService:Create(invisText, TweenInfo.new(0.2), {TextColor3 = COL.green}):Play()
+        TweenService:Create(invisDot, TweenInfo.new(0.2), {BackgroundColor3 = COL.green}):Play()
+        TweenService:Create(invisStroke, TweenInfo.new(0.2), {Color = COL.green}):Play()
         notify("Invisible", "ON", 2)
     end
 end)
@@ -1047,7 +1139,9 @@ lp.CharacterAdded:Connect(function(char)
     if invisibleEnabled then
         invisibleEnabled = false; invisibleParts = {}
         if invisibleConnection then invisibleConnection:Disconnect(); invisibleConnection = nil end
-        invisBtn.Text = "👻 INVIS  OFF"; invisBtn.TextColor3 = COL.red; ibS.Color = COL.red
+        TweenService:Create(invisText, TweenInfo.new(0.2), {TextColor3 = COL.red}):Play()
+        TweenService:Create(invisDot, TweenInfo.new(0.2), {BackgroundColor3 = COL.red}):Play()
+        TweenService:Create(invisStroke, TweenInfo.new(0.2), {Color = COL.red}):Play()
     end
 
     if killAuraOn and keyVerified and not spawningDebounce then
@@ -1101,78 +1195,5 @@ UserInputService.JumpRequest:Connect(function()
     end
 end)
 
--- ═══════════ ANTI-FLING ═══════════
-if CoreGui:FindFirstChild("AntiFlingStandaloneGui") then CoreGui.AntiFlingStandaloneGui:Destroy() end
-local flingGui = Instance.new("ScreenGui")
-flingGui.Name = "AntiFlingStandaloneGui"
-flingGui.ResetOnSpawn = false
-flingGui.DisplayOrder = 999
-pcall(function() flingGui.Parent = CoreGui end)
-if not flingGui.Parent then flingGui.Parent = lp:WaitForChild("PlayerGui") end
-
-local flingBtn = Instance.new("TextButton")
-flingBtn.Size = UDim2.new(0, 100, 0, 30)
-flingBtn.Position = UDim2.new(0.5, -50, 0, 8)
-flingBtn.BackgroundColor3 = Color3.fromRGB(22, 18, 32)
-flingBtn.BackgroundTransparency = 0.2
-flingBtn.BorderSizePixel = 0
-flingBtn.Text = "A-Fling  OFF"
-flingBtn.TextColor3 = COL.red
-flingBtn.TextSize = 12
-flingBtn.Font = Enum.Font.GothamBold
-flingBtn.AutoButtonColor = false
-flingBtn.Parent = flingGui
-local fbC = Instance.new("UICorner"); fbC.CornerRadius = UDim.new(0, 6); fbC.Parent = flingBtn
-local fbS = Instance.new("UIStroke"); fbS.Color = COL.red; fbS.Thickness = 1; fbS.Parent = flingBtn
-
-local noFallEnabled = false
-local noFallConnection
-
-local function executeACR(char, hum, hrp)
-    if not (char and hum and hrp) then return end
-    pcall(function()
-        hrp.Anchored = true; hrp.AssemblyLinearVelocity = Vector3.zero; hrp.AssemblyAngularVelocity = Vector3.zero
-        hum.PlatformStand = false; hum.Sit = false
-        local currentPos = hrp.Position; local lookVector = hrp.CFrame.LookVector
-        local flatLook = Vector3.new(lookVector.X, 0, lookVector.Z).Unit
-        if flatLook.Magnitude < 0.1 then flatLook = Vector3.new(0, 0, -1) end
-        local newPos = currentPos + Vector3.new(0, 2.5, 0)
-        hrp.CFrame = CFrame.new(newPos, newPos + flatLook)
-        hum:ChangeState(Enum.HumanoidStateType.Freefall)
-        task.wait(0.05); hrp.Anchored = false; hum.Jump = true
-    end)
-end
-
-local function toggleAntiFling(enabled)
-    noFallEnabled = enabled
-    local char = lp.Character; local hum = char and char:FindFirstChildOfClass("Humanoid"); local hrp = char and char:FindFirstChild("HumanoidRootPart")
-    if enabled then
-        flingBtn.Text = "A-Fling  ON"; flingBtn.TextColor3 = COL.green; fbS.Color = COL.green
-        executeACR(char, hum, hrp)
-        pcall(function() hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false); hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false) end)
-        if not noFallConnection then
-            noFallConnection = RunService.Heartbeat:Connect(function()
-                pcall(function()
-                    local c = lp.Character; if not c then return end
-                    local r = c:FindFirstChild("HumanoidRootPart"); local h = c:FindFirstChildOfClass("Humanoid")
-                    if r and h then
-                        local lv = r.AssemblyLinearVelocity; local av = r.AssemblyAngularVelocity
-                        local hs = Vector3.new(lv.X, 0, lv.Z).Magnitude
-                        if hs > 150 or av.Magnitude > 75 then executeACR(c, h, r) end
-                        if h.PlatformStand then h.PlatformStand = false; h.Jump = true end
-                    end
-                end)
-            end)
-        end
-    else
-        flingBtn.Text = "A-Fling  OFF"; flingBtn.TextColor3 = COL.red; fbS.Color = COL.red
-        if noFallConnection then noFallConnection:Disconnect(); noFallConnection = nil end
-        pcall(function() hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, true); hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, true) end)
-        executeACR(char, hum, hrp)
-    end
-end
-
-flingBtn.MouseButton1Click:Connect(function() toggleAntiFling(not noFallEnabled) end)
-
-print("Undocall's Hub v27 loaded fully.")
+print("Undocall's Hub v28 loaded fully.")
 print("Discord: " .. KEY_LINK)
