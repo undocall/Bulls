@@ -1,6 +1,6 @@
--- ═══════════ UNODOCALL'S HUB — FINAL v32 (HIGH CONTRAST) ═══════════
+-- ═══════════ UNODOCALL'S HUB — FINAL v33 ═══════════
 -- Arena: (-760, 11.5, 2040)
--- Fixed Text Visibility (Pure White Text) + Full v31 Features
+-- Moved Standalone buttons up + smaller size
 
 local StarterGui = game:GetService("StarterGui")
 local Players = game:GetService("Players")
@@ -503,14 +503,13 @@ ScreenGui.IgnoreGuiInset = true
 pcall(function() ScreenGui.Parent = CoreGui end)
 if not ScreenGui.Parent then ScreenGui.Parent = lp:WaitForChild("PlayerGui") end
 
--- High Contrast Colors
 local COL = {
     bg = Color3.fromRGB(30, 25, 40), 
     card = Color3.fromRGB(50, 45, 65), 
     accent = Color3.fromRGB(123, 47, 190), 
     accentLight = Color3.fromRGB(180, 120, 255),
     text = Color3.fromRGB(255, 255, 255), 
-    textDim = Color3.fromRGB(240, 240, 250), -- Brighter dim text
+    textDim = Color3.fromRGB(240, 240, 250),
     border = Color3.fromRGB(100, 85, 130), 
     btnBg = Color3.fromRGB(60, 50, 80), 
     sidebar = Color3.fromRGB(35, 30, 45), 
@@ -552,7 +551,7 @@ local hC = Instance.new("UICorner"); hC.CornerRadius = UDim.new(0, 12); hC.Paren
 
 local hTitle = Instance.new("TextLabel")
 hTitle.Size = UDim2.new(0, 300, 1, 0); hTitle.Position = UDim2.new(0, 14, 0, 0)
-hTitle.BackgroundTransparency = 1; hTitle.Text = "Undocall's Hub (v32)"
+hTitle.BackgroundTransparency = 1; hTitle.Text = "Undocall's Hub (v33)"
 hTitle.TextColor3 = COL.text; hTitle.Font = Enum.Font.GothamBold; hTitle.TextSize = 16; hTitle.TextXAlignment = Enum.TextXAlignment.Left; hTitle.Parent = header
 
 local closeBtn = Instance.new("TextButton")
@@ -597,7 +596,7 @@ end
 closeBtn.MouseButton1Click:Connect(closePanel)
 reopenBtn.MouseButton1Click:Connect(openPanel)
 
--- Sidebar (Brighter)
+-- Sidebar
 local sidebar = Instance.new("Frame")
 sidebar.Size = UDim2.new(0, 110, 1, -50); sidebar.Position = UDim2.new(0, 0, 0, 50)
 sidebar.BackgroundColor3 = COL.sidebar; sidebar.BackgroundTransparency = 0.2; sidebar.BorderSizePixel = 0; sidebar.Parent = mainPanel
@@ -937,7 +936,7 @@ if not StandaloneGui.Parent then StandaloneGui.Parent = lp:WaitForChild("PlayerG
 
 local function createPill(name, icon, pos)
     local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(0, 130, 0, 40)
+    btn.Size = UDim2.new(0, 110, 0, 34) -- Smaller size
     btn.Position = pos
     btn.BackgroundColor3 = Color3.fromRGB(25, 20, 35)
     btn.BackgroundTransparency = 0.15
@@ -960,40 +959,40 @@ local function createPill(name, icon, pos)
     
     local iconLbl = Instance.new("TextLabel")
     iconLbl.Text = icon
-    iconLbl.Size = UDim2.new(0, 30, 1, 0)
+    iconLbl.Size = UDim2.new(0, 26, 1, 0) -- Smaller icon
     iconLbl.Position = UDim2.new(0, 6, 0, 0)
     iconLbl.BackgroundTransparency = 1
     iconLbl.TextColor3 = Color3.fromRGB(255, 255, 255)
-    iconLbl.TextSize = 18
+    iconLbl.TextSize = 16
     iconLbl.Parent = btn
     
     local textLbl = Instance.new("TextLabel")
     textLbl.Text = name
-    textLbl.Size = UDim2.new(1, -50, 1, 0)
-    textLbl.Position = UDim2.new(0, 35, 0, 0)
+    textLbl.Size = UDim2.new(1, -40, 1, 0)
+    textLbl.Position = UDim2.new(0, 30, 0, 0)
     textLbl.BackgroundTransparency = 1
     textLbl.TextColor3 = COL.red
     textLbl.Font = Enum.Font.GothamBold
-    textLbl.TextSize = 13
+    textLbl.TextSize = 12
     textLbl.TextXAlignment = Enum.TextXAlignment.Left
     textLbl.Parent = btn
     
     local dot = Instance.new("Frame")
-    dot.Size = UDim2.new(0, 8, 0, 8)
-    dot.Position = UDim2.new(1, -15, 0.5, -4)
+    dot.Size = UDim2.new(0, 6, 0, 6)
+    dot.Position = UDim2.new(1, -12, 0.5, -3)
     dot.BackgroundColor3 = COL.red
     dot.Parent = btn
     local dotCorner = Instance.new("UICorner"); dotCorner.CornerRadius = UDim.new(1, 0); dotCorner.Parent = dot
 
-    btn.MouseButton1Down:Connect(function() TweenService:Create(btn, TweenInfo.new(0.1), {Size = UDim2.new(0, 125, 0, 38)}):Play() end)
-    btn.MouseButton1Up:Connect(function() TweenService:Create(btn, TweenInfo.new(0.1, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Size = UDim2.new(0, 130, 0, 40)}):Play() end)
-    btn.MouseLeave:Connect(function() TweenService:Create(btn, TweenInfo.new(0.1, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Size = UDim2.new(0, 130, 0, 40)}):Play() end)
+    btn.MouseButton1Down:Connect(function() TweenService:Create(btn, TweenInfo.new(0.1), {Size = UDim2.new(0, 105, 0, 32)}):Play() end)
+    btn.MouseButton1Up:Connect(function() TweenService:Create(btn, TweenInfo.new(0.1, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Size = UDim2.new(0, 110, 0, 34)}):Play() end)
+    btn.MouseLeave:Connect(function() TweenService:Create(btn, TweenInfo.new(0.1, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Size = UDim2.new(0, 110, 0, 34)}):Play() end)
 
     return btn, stroke, textLbl, dot
 end
 
--- MOVED X FROM 20 TO 80
-local aFlingBtn, aFlingStroke, aFlingText, aFlingDot = createPill("A-Fling", "🛡️", UDim2.new(0, 80, 0.5, -25))
+-- LIFTED UP (0.4 instead of 0.5)
+local aFlingBtn, aFlingStroke, aFlingText, aFlingDot = createPill("A-Fling", "🛡️", UDim2.new(0, 80, 0.4, -20))
 local noFallEnabled = false
 local noFallConnection
 
@@ -1049,8 +1048,8 @@ end
 
 aFlingBtn.MouseButton1Click:Connect(function() toggleAntiFling(not noFallEnabled) end)
 
--- MOVED X FROM 20 TO 80
-local invisBtn, invisStroke, invisText, invisDot = createPill("Invisible", "👻", UDim2.new(0, 80, 0.5, 25))
+-- LIFTED UP (0.4 instead of 0.5)
+local invisBtn, invisStroke, invisText, invisDot = createPill("Invisible", "👻", UDim2.new(0, 80, 0.4, 20))
 
 invisBtn.MouseButton1Click:Connect(function()
     if invisibleEnabled then
@@ -1247,5 +1246,5 @@ UserInputService.JumpRequest:Connect(function()
     end
 end)
 
-print("Undocall's Hub v32 loaded. High Contrast applied.")
+print("Undocall's Hub v33 loaded. Standalone buttons moved up & sized down.")
 print("Discord: " .. KEY_LINK)
