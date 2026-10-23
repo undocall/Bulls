@@ -1,6 +1,6 @@
--- ═══════════ UNODOCALL'S HUB — FINAL v29 (PREMIUM UI) ═══════════
+-- ═══════════ UNODOCALL'S HUB — FINAL v31 (SAFE SPACING) ═══════════
 -- Arena: (-760, 11.5, 2040)
--- Premium Glassmorphism + Neon Glow + Click Animations
+-- Moved Toggles away from Roblox UI + Full v30 Features
 
 local StarterGui = game:GetService("StarterGui")
 local Players = game:GetService("Players")
@@ -510,16 +510,16 @@ pcall(function() ScreenGui.Parent = CoreGui end)
 if not ScreenGui.Parent then ScreenGui.Parent = lp:WaitForChild("PlayerGui") end
 
 local COL = {
-    bg = Color3.fromRGB(15, 12, 22), 
-    card = Color3.fromRGB(30, 25, 44), 
+    bg = Color3.fromRGB(20, 15, 30), 
+    card = Color3.fromRGB(40, 35, 55), 
     accent = Color3.fromRGB(123, 47, 190), 
-    accentLight = Color3.fromRGB(167, 93, 255),
-    text = Color3.fromRGB(230, 230, 240), 
-    textDim = Color3.fromRGB(140, 130, 160), 
-    border = Color3.fromRGB(60, 48, 85), 
-    btnBg = Color3.fromRGB(40, 33, 58), 
-    sidebar = Color3.fromRGB(26, 21, 37), 
-    sidebarItem = Color3.fromRGB(35, 28, 50),
+    accentLight = Color3.fromRGB(180, 120, 255),
+    text = Color3.fromRGB(255, 255, 255), 
+    textDim = Color3.fromRGB(180, 170, 200), 
+    border = Color3.fromRGB(90, 75, 120), 
+    btnBg = Color3.fromRGB(55, 45, 75), 
+    sidebar = Color3.fromRGB(25, 20, 35), 
+    sidebarItem = Color3.fromRGB(45, 35, 60),
     red = Color3.fromRGB(255, 75, 75), 
     green = Color3.fromRGB(75, 255, 75)
 }
@@ -528,25 +528,23 @@ local mainPanel = Instance.new("Frame")
 mainPanel.Size = UDim2.new(0, 480, 0, 380)
 mainPanel.Position = UDim2.new(0.5, -240, 0.5, -190)
 mainPanel.BackgroundColor3 = COL.bg
-mainPanel.BackgroundTransparency = 0.25
+mainPanel.BackgroundTransparency = 0.35
 mainPanel.BorderSizePixel = 0
 mainPanel.ClipsDescendants = true
 mainPanel.Visible = false
 mainPanel.Active = true
 mainPanel.Parent = ScreenGui
 
--- Premium Shadow / Glow Stroke
 local mpS = Instance.new("UIStroke")
 mpS.Color = COL.border
 mpS.Thickness = 2
-mpS.Transparency = 0.4
+mpS.Transparency = 0.3
 mpS.Parent = mainPanel
 
--- Premium Glass Gradient
 local mpGradient = Instance.new("UIGradient")
 mpGradient.Color = ColorSequence.new({
-    ColorSequenceKeypoint.new(0.00, Color3.fromRGB(35, 25, 50)),
-    ColorSequenceKeypoint.new(1.00, Color3.fromRGB(10, 5, 15))
+    ColorSequenceKeypoint.new(0.00, Color3.fromRGB(45, 35, 65)),
+    ColorSequenceKeypoint.new(1.00, Color3.fromRGB(20, 15, 30))
 })
 mpGradient.Rotation = 45
 mpGradient.Parent = mainPanel
@@ -558,21 +556,21 @@ local panelScale = Instance.new("UIScale"); panelScale.Scale = 1; panelScale.Par
 local header = Instance.new("Frame")
 header.Size = UDim2.new(1, 0, 0, 50)
 header.BackgroundColor3 = COL.sidebar
-header.BackgroundTransparency = 0.5
+header.BackgroundTransparency = 0.4
 header.BorderSizePixel = 0
 header.Active = true
 header.Parent = mainPanel
 local hGradient = Instance.new("UIGradient")
 hGradient.Color = ColorSequence.new({
-    ColorSequenceKeypoint.new(0.00, Color3.fromRGB(60, 40, 80)),
-    ColorSequenceKeypoint.new(1.00, Color3.fromRGB(20, 15, 30))
+    ColorSequenceKeypoint.new(0.00, Color3.fromRGB(70, 50, 95)),
+    ColorSequenceKeypoint.new(1.00, Color3.fromRGB(30, 20, 45))
 })
 hGradient.Parent = header
 local hC = Instance.new("UICorner"); hC.CornerRadius = UDim.new(0, 12); hC.Parent = header
 
 local hTitle = Instance.new("TextLabel")
 hTitle.Size = UDim2.new(0, 300, 1, 0); hTitle.Position = UDim2.new(0, 14, 0, 0)
-hTitle.BackgroundTransparency = 1; hTitle.Text = "Undocall's Hub (v29)"
+hTitle.BackgroundTransparency = 1; hTitle.Text = "Undocall's Hub (v31)"
 hTitle.TextColor3 = COL.text; hTitle.Font = Enum.Font.GothamBold; hTitle.TextSize = 16; hTitle.TextXAlignment = Enum.TextXAlignment.Left; hTitle.Parent = header
 
 local closeBtn = Instance.new("TextButton")
@@ -642,12 +640,12 @@ local function addPage(name)
 
     local sb = Instance.new("TextButton")
     sb.Size = UDim2.new(1, 0, 0, 34); sb.BackgroundColor3 = COL.sidebarItem; sb.BackgroundTransparency = 0.3
-    sb.Text = name; sb.TextColor3 = COL.textDim; sb.Font = Enum.Font.GothamMedium; sb.TextSize = 11; sb.AutoButtonColor = false; sb.Parent = sidebar
+    sb.Text = name; sb.TextColor3 = COL.textDim; sb.Font = Enum.Font.GothamBold; sb.TextSize = 12; sb.AutoButtonColor = false; sb.Parent = sidebar
     
     local sbGrad = Instance.new("UIGradient")
     sbGrad.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0.00, Color3.fromRGB(45, 35, 60)),
-        ColorSequenceKeypoint.new(1.00, Color3.fromRGB(25, 20, 35))
+        ColorSequenceKeypoint.new(0.00, Color3.fromRGB(60, 45, 80)),
+        ColorSequenceKeypoint.new(1.00, Color3.fromRGB(35, 25, 50))
     })
     sbGrad.Parent = sb
     
@@ -662,7 +660,7 @@ local function addPage(name)
                 bd.btn.BackgroundColor3 = COL.accent; bd.btn.BackgroundTransparency = 0.1; bd.btn.TextColor3 = COL.text; bd.btn.Font = Enum.Font.GothamBold
                 bd.stroke.Color = COL.accentLight; bd.stroke.Transparency = 0
             else
-                bd.btn.BackgroundColor3 = COL.sidebarItem; bd.btn.BackgroundTransparency = 0.3; bd.btn.TextColor3 = COL.textDim; bd.btn.Font = Enum.Font.GothamMedium
+                bd.btn.BackgroundColor3 = COL.sidebarItem; bd.btn.BackgroundTransparency = 0.3; bd.btn.TextColor3 = COL.textDim; bd.btn.Font = Enum.Font.GothamBold
                 bd.stroke.Color = COL.border; bd.stroke.Transparency = 0.5
             end
         end
@@ -679,7 +677,7 @@ local function addToggleRow(page, name, callback)
 
     local label = Instance.new("TextLabel")
     label.Size = UDim2.new(1, -58, 1, 0); label.Position = UDim2.new(0, 10, 0, 0)
-    label.BackgroundTransparency = 1; label.Text = name; label.TextColor3 = COL.text; label.Font = Enum.Font.GothamMedium; label.TextSize = 11; label.TextXAlignment = Enum.TextXAlignment.Left; label.Parent = row
+    label.BackgroundTransparency = 1; label.Text = name; label.TextColor3 = COL.text; label.Font = Enum.Font.GothamMedium; label.TextSize = 12; label.TextXAlignment = Enum.TextXAlignment.Left; label.Parent = row
     
     local switchBg = Instance.new("Frame")
     switchBg.Size = UDim2.new(0, 36, 0, 19); switchBg.Position = UDim2.new(1, -46, 0.5, -9); switchBg.BackgroundColor3 = Color3.fromRGB(50, 40, 70); switchBg.BorderSizePixel = 0; switchBg.Parent = row
@@ -703,7 +701,6 @@ local function addToggleRow(page, name, callback)
     
     local tBtn = Instance.new("TextButton"); tBtn.Size = UDim2.new(1, 0, 1, 0); tBtn.BackgroundTransparency = 1; tBtn.Text = ""; tBtn.Parent = row
     
-    -- Click Animation
     tBtn.MouseButton1Down:Connect(function() TweenService:Create(row, TweenInfo.new(0.1), {Size = UDim2.new(0.98, 0, 0, 38)}):Play() end)
     tBtn.MouseButton1Up:Connect(function() TweenService:Create(row, TweenInfo.new(0.1, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Size = UDim2.new(1, 0, 0, 40)}):Play() end)
     tBtn.MouseLeave:Connect(function() TweenService:Create(row, TweenInfo.new(0.1, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Size = UDim2.new(1, 0, 0, 40)}):Play() end)
@@ -723,7 +720,7 @@ local function addValueRow(page, name, initialVal, minVal, maxVal, step, onChang
     
     local label = Instance.new("TextLabel")
     label.Size = UDim2.new(0, 70, 1, 0); label.Position = UDim2.new(0, 10, 0, 0)
-    label.BackgroundTransparency = 1; label.Text = name; label.TextColor3 = COL.text; label.Font = Enum.Font.GothamMedium; label.TextSize = 11; label.TextXAlignment = Enum.TextXAlignment.Left; label.Parent = row
+    label.BackgroundTransparency = 1; label.Text = name; label.TextColor3 = COL.text; label.Font = Enum.Font.GothamMedium; label.TextSize = 12; label.TextXAlignment = Enum.TextXAlignment.Left; label.Parent = row
     
     local valueText = Instance.new("TextLabel")
     valueText.Size = UDim2.new(0, 50, 1, 0); valueText.Position = UDim2.new(0.5, -25, 0, 0)
@@ -748,11 +745,10 @@ end
 local function addButtonRow(page, name, callback)
     local btn = Instance.new("TextButton")
     btn.Size = UDim2.new(1, 0, 0, 36); btn.BackgroundColor3 = COL.btnBg; btn.BackgroundTransparency = 0.2; btn.BorderSizePixel = 0
-    btn.Text = name; btn.TextColor3 = COL.text; btn.Font = Enum.Font.GothamMedium; btn.TextSize = 11; btn.AutoButtonColor = false; btn.Parent = page
+    btn.Text = name; btn.TextColor3 = COL.text; btn.Font = Enum.Font.GothamMedium; btn.TextSize = 12; btn.AutoButtonColor = false; btn.Parent = page
     local bc = Instance.new("UICorner"); bc.CornerRadius = UDim.new(0, 8); bc.Parent = btn
     local bs = Instance.new("UIStroke"); bs.Color = COL.border; bs.Thickness = 1; bs.Transparency = 0.5; bs.Parent = btn
     
-    -- Click Animation
     btn.MouseButton1Down:Connect(function() TweenService:Create(btn, TweenInfo.new(0.1), {Size = UDim2.new(0.98, 0, 0, 34)}):Play() end)
     btn.MouseButton1Up:Connect(function() TweenService:Create(btn, TweenInfo.new(0.1, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Size = UDim2.new(1, 0, 0, 36)}):Play() end)
     btn.MouseLeave:Connect(function() TweenService:Create(btn, TweenInfo.new(0.1, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Size = UDim2.new(1, 0, 0, 36)}):Play() end)
@@ -956,7 +952,7 @@ sideBtns["Main"].btn.Font = Enum.Font.GothamBold
 sideBtns["Main"].stroke.Color = COL.accentLight
 sideBtns["Main"].stroke.Transparency = 0
 
--- ═══════════ PREMIUM STANDALONE TOGGLES ═══════════
+-- ═══════════ PREMIUM STANDALONE TOGGLES (MOVED AWAY FROM UI) ═══════════
 local StandaloneGui = Instance.new("ScreenGui")
 StandaloneGui.Name = "Standalone_Toggles"
 StandaloneGui.ResetOnSpawn = false
@@ -968,7 +964,7 @@ local function createPill(name, icon, pos)
     local btn = Instance.new("TextButton")
     btn.Size = UDim2.new(0, 130, 0, 40)
     btn.Position = pos
-    btn.BackgroundColor3 = Color3.fromRGB(20, 15, 25)
+    btn.BackgroundColor3 = Color3.fromRGB(25, 20, 35)
     btn.BackgroundTransparency = 0.15
     btn.BorderSizePixel = 0
     btn.Text = ""
@@ -978,8 +974,8 @@ local function createPill(name, icon, pos)
     
     local grad = Instance.new("UIGradient")
     grad.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0.00, Color3.fromRGB(40, 30, 55)),
-        ColorSequenceKeypoint.new(1.00, Color3.fromRGB(15, 10, 20))
+        ColorSequenceKeypoint.new(0.00, Color3.fromRGB(50, 40, 65)),
+        ColorSequenceKeypoint.new(1.00, Color3.fromRGB(25, 20, 35))
     })
     grad.Rotation = 45
     grad.Parent = btn
@@ -1021,8 +1017,8 @@ local function createPill(name, icon, pos)
     return btn, stroke, textLbl, dot
 end
 
--- A-Fling Setup
-local aFlingBtn, aFlingStroke, aFlingText, aFlingDot = createPill("A-Fling", "🛡️", UDim2.new(0, 20, 0.5, -25))
+-- MOVED X FROM 20 TO 80
+local aFlingBtn, aFlingStroke, aFlingText, aFlingDot = createPill("A-Fling", "🛡️", UDim2.new(0, 80, 0.5, -25))
 local noFallEnabled = false
 local noFallConnection
 
@@ -1078,8 +1074,8 @@ end
 
 aFlingBtn.MouseButton1Click:Connect(function() toggleAntiFling(not noFallEnabled) end)
 
--- Invis Setup
-local invisBtn, invisStroke, invisText, invisDot = createPill("Invisible", "👻", UDim2.new(0, 20, 0.5, 25))
+-- MOVED X FROM 20 TO 80
+local invisBtn, invisStroke, invisText, invisDot = createPill("Invisible", "👻", UDim2.new(0, 80, 0.5, 25))
 
 invisBtn.MouseButton1Click:Connect(function()
     if invisibleEnabled then
@@ -1276,5 +1272,5 @@ UserInputService.JumpRequest:Connect(function()
     end
 end)
 
-print("Undocall's Hub v29 loaded. Premium UI applied.")
+print("Undocall's Hub v31 loaded. Safe Spacing applied.")
 print("Discord: " .. KEY_LINK)
