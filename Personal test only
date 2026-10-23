@@ -1,6 +1,6 @@
--- ═══════════ UNODOCALL'S HUB — FINAL v34 ═══════════
+-- ═══════════ UNODOCALL'S HUB — FINAL v35 (CUSTOM POSITIONS) ═══════════
 -- Arena: (-760, 11.5, 2040)
--- Adjusted Standalone buttons (Smaller + Perfect placement)
+-- Exact Pixel Positions applied to Standalone Buttons
 
 local StarterGui = game:GetService("StarterGui")
 local Players = game:GetService("Players")
@@ -551,7 +551,7 @@ local hC = Instance.new("UICorner"); hC.CornerRadius = UDim.new(0, 12); hC.Paren
 
 local hTitle = Instance.new("TextLabel")
 hTitle.Size = UDim2.new(0, 300, 1, 0); hTitle.Position = UDim2.new(0, 14, 0, 0)
-hTitle.BackgroundTransparency = 1; hTitle.Text = "Undocall's Hub (v34)"
+hTitle.BackgroundTransparency = 1; hTitle.Text = "Undocall's Hub (v35)"
 hTitle.TextColor3 = COL.text; hTitle.Font = Enum.Font.GothamBold; hTitle.TextSize = 16; hTitle.TextXAlignment = Enum.TextXAlignment.Left; hTitle.Parent = header
 
 local closeBtn = Instance.new("TextButton")
@@ -936,7 +936,7 @@ if not StandaloneGui.Parent then StandaloneGui.Parent = lp:WaitForChild("PlayerG
 
 local function createPill(name, icon, pos)
     local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(0, 95, 0, 32) -- Even smaller size
+    btn.Size = UDim2.new(0, 95, 0, 32)
     btn.Position = pos
     btn.BackgroundColor3 = Color3.fromRGB(25, 20, 35)
     btn.BackgroundTransparency = 0.15
@@ -991,8 +991,8 @@ local function createPill(name, icon, pos)
     return btn, stroke, textLbl, dot
 end
 
--- POSITIONED AT X=15, Y=0.55 (Between Skins/Ranks and Joystick)
-local aFlingBtn, aFlingStroke, aFlingText, aFlingDot = createPill("A-Fling", "🛡️", UDim2.new(0, 15, 0.55, 0))
+-- EXACT POSITIONS APPLIED HERE
+local aFlingBtn, aFlingStroke, aFlingText, aFlingDot = createPill("A-Fling", "🛡️", UDim2.new(0, 65, 0, 203))
 local noFallEnabled = false
 local noFallConnection
 
@@ -1048,8 +1048,8 @@ end
 
 aFlingBtn.MouseButton1Click:Connect(function() toggleAntiFling(not noFallEnabled) end)
 
--- POSITIONED AT X=15, Y=0.55 + 36px offset (Directly below A-Fling)
-local invisBtn, invisStroke, invisText, invisDot = createPill("Invisible", "👻", UDim2.new(0, 15, 0.55, 36))
+-- EXACT POSITIONS APPLIED HERE
+local invisBtn, invisStroke, invisText, invisDot = createPill("Invisible", "👻", UDim2.new(0, 64, 0, 253))
 
 invisBtn.MouseButton1Click:Connect(function()
     if invisibleEnabled then
@@ -1246,5 +1246,5 @@ UserInputService.JumpRequest:Connect(function()
     end
 end)
 
-print("Undocall's Hub v34 loaded. Buttons adjusted to not block UI.")
+print("Undocall's Hub v35 loaded. Exact coordinates applied.")
 print("Discord: " .. KEY_LINK)
