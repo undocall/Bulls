@@ -1,4 +1,4 @@
--- ═══════════ UNODOCALL'S HUB — FINAL v25 ═══════════
+-- ═══════════ UNODOCALL'S HUB — FINAL v25 (FIXED) ═══════════
 -- Arena: (-760, 11.5, 2040)
 -- Features: Target Player UI, Fixed Drag, Rectangle Invisible, Full v18 Architecture
 
@@ -509,7 +509,21 @@ ScreenGui.IgnoreGuiInset = true
 pcall(function() ScreenGui.Parent = CoreGui end)
 if not ScreenGui.Parent then ScreenGui.Parent = lp:WaitForChild("PlayerGui") end
 
-local COL = {bg = Color3.fromRGB(15, 12, 22), card = Color3.fromRGB(30, 25, 44), accent = Color3.fromRGB(123, 47, 190), text = Color3.fromRGB(230, 230, 240), textDim = Color3.fromRGB(140, 130, 160), border = Color3.fromRGB(60, 48, 85), btnBg = Color3.fromRGB(40, 33, 58), sidebar = Color3.fromRGB(26, 21, 37), red = Color3.fromRGB(255, 75, 75), green = Color3.fromRGB(75, 255, 75)}
+-- FIXED: Added sidebarItem and accentLight back to the palette
+local COL = {
+    bg = Color3.fromRGB(15, 12, 22), 
+    card = Color3.fromRGB(30, 25, 44), 
+    accent = Color3.fromRGB(123, 47, 190), 
+    accentLight = Color3.fromRGB(167, 93, 255),
+    text = Color3.fromRGB(230, 230, 240), 
+    textDim = Color3.fromRGB(140, 130, 160), 
+    border = Color3.fromRGB(60, 48, 85), 
+    btnBg = Color3.fromRGB(40, 33, 58), 
+    sidebar = Color3.fromRGB(26, 21, 37), 
+    sidebarItem = Color3.fromRGB(35, 28, 50),
+    red = Color3.fromRGB(255, 75, 75), 
+    green = Color3.fromRGB(75, 255, 75)
+}
 
 local mainPanel = Instance.new("Frame")
 mainPanel.Size = UDim2.new(0, 480, 0, 380)
