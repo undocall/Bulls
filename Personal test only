@@ -1,6 +1,6 @@
--- ═══════════ UNODOCALL'S HUB — FINAL v25 (FIXED) ═══════════
+-- ═══════════ UNODOCALL'S HUB — FINAL v26 ═══════════
 -- Arena: (-760, 11.5, 2040)
--- Features: Target Player UI, Fixed Drag, Rectangle Invisible, Full v18 Architecture
+-- Fixed Target Lock Focus Bug + Name stays in box + Full v18 Architecture
 
 local StarterGui = game:GetService("StarterGui")
 local Players = game:GetService("Players")
@@ -509,7 +509,6 @@ ScreenGui.IgnoreGuiInset = true
 pcall(function() ScreenGui.Parent = CoreGui end)
 if not ScreenGui.Parent then ScreenGui.Parent = lp:WaitForChild("PlayerGui") end
 
--- FIXED: Added sidebarItem and accentLight back to the palette
 local COL = {
     bg = Color3.fromRGB(15, 12, 22), 
     card = Color3.fromRGB(30, 25, 44), 
@@ -552,7 +551,7 @@ local hC = Instance.new("UICorner"); hC.CornerRadius = UDim.new(0, 12); hC.Paren
 
 local hTitle = Instance.new("TextLabel")
 hTitle.Size = UDim2.new(0, 300, 1, 0); hTitle.Position = UDim2.new(0, 14, 0, 0)
-hTitle.BackgroundTransparency = 1; hTitle.Text = "Undocall's Hub (v25)"
+hTitle.BackgroundTransparency = 1; hTitle.Text = "Undocall's Hub (v26)"
 hTitle.TextColor3 = COL.text; hTitle.Font = Enum.Font.GothamBold; hTitle.TextSize = 16; hTitle.TextXAlignment = Enum.TextXAlignment.Left; hTitle.Parent = header
 
 local closeBtn = Instance.new("TextButton")
@@ -822,19 +821,17 @@ searchBox.FocusLost:Connect(function(enterPressed)
     if enterPressed then
         local text = searchBox.Text
         if #text < 2 then
-            searchBox.Text = ""; targetName = ""; if targetLockToggle then targetLockToggle.set(false) end
-            targetUsername.Text = "@playername"; targetDisplayName.Text = "Display Name"; targetAvatar.Image = "rbxthumb://type=AvatarHeadShot&id=1&w=150&h=150"
             notify("Error", "Name too short.", 2); return
         end
         local found = smartFind(text)
         if found then
-            target = found; targetName = found.Name; searchBox.Text = ""
+            target = found; targetName = found.Name
+            searchBox.Text = "@" .. found.Name -- Keep name in box
             targetUsername.Text = "@" .. found.Name
             targetDisplayName.Text = found.DisplayName
             targetAvatar.Image = "rbxthumb://type=AvatarHeadShot&id=" .. found.UserId .. "&w=150&h=150"
             notify("Target Found", found.Name, 2)
         else
-            searchBox.Text = ""; targetName = ""; if targetLockToggle then targetLockToggle.set(false) end
             notify("Not Found", "No player exists with that name.", 3)
         end
     end
@@ -842,7 +839,7 @@ end)
 
 targetLockToggle = addToggleRow(combatPage, "Enable Target Lock", function(enabled)
     if enabled and not keyVerified then notify("Locked", "Enter key first", 3); targetLockToggle.set(false); return end
-    if enabled and targetName == "" then notify("Error", "Type a name first!", 2); targetLockToggle.set(false); return end
+    if enabled and (targetName == "" or not targetName) then notify("Error", "Type a name first!", 2); targetLockToggle.set(false); return end
     targetLockOn = enabled
     if not enabled then
         local char = lp.Character
@@ -898,7 +895,6 @@ if not invisScreenGui.Parent then invisScreenGui.Parent = lp:WaitForChild("Playe
 
 local invisBtn = Instance.new("TextButton")
 invisBtn.Size = UDim2.new(0, 100, 0, 30)
--- Positioned right below Anti-Fling (which is at 0.5, -50, 0, 8)
 invisBtn.Position = UDim2.new(0.5, -50, 0, 42) 
 invisBtn.BackgroundColor3 = COL.bg
 invisBtn.BackgroundTransparency = 0.2
@@ -1190,5 +1186,5 @@ end
 
 flingBtn.MouseButton1Click:Connect(function() toggleAntiFling(not noFallEnabled) end)
 
-print("Undocall's Hub v25 loaded fully.")
+print("Undocall's Hub v26 loaded fully.")
 print("Discord: " .. KEY_LINK)
