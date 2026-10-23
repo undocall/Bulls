@@ -1,6 +1,6 @@
--- ═══════════ UNODOCALL'S HUB — FINAL v35 (CUSTOM POSITIONS) ═══════════
+-- ═══════════ UNODOCALL'S HUB — FINAL v36 (PERFECT POSITIONS) ═══════════
 -- Arena: (-760, 11.5, 2040)
--- Exact Pixel Positions applied to Standalone Buttons
+-- Fixed 36px Inset bug so buttons match the Positioner Tool exactly.
 
 local StarterGui = game:GetService("StarterGui")
 local Players = game:GetService("Players")
@@ -551,7 +551,7 @@ local hC = Instance.new("UICorner"); hC.CornerRadius = UDim.new(0, 12); hC.Paren
 
 local hTitle = Instance.new("TextLabel")
 hTitle.Size = UDim2.new(0, 300, 1, 0); hTitle.Position = UDim2.new(0, 14, 0, 0)
-hTitle.BackgroundTransparency = 1; hTitle.Text = "Undocall's Hub (v35)"
+hTitle.BackgroundTransparency = 1; hTitle.Text = "Undocall's Hub (v36)"
 hTitle.TextColor3 = COL.text; hTitle.Font = Enum.Font.GothamBold; hTitle.TextSize = 16; hTitle.TextXAlignment = Enum.TextXAlignment.Left; hTitle.Parent = header
 
 local closeBtn = Instance.new("TextButton")
@@ -931,6 +931,7 @@ local StandaloneGui = Instance.new("ScreenGui")
 StandaloneGui.Name = "Standalone_Toggles"
 StandaloneGui.ResetOnSpawn = false
 StandaloneGui.DisplayOrder = 999
+StandaloneGui.IgnoreGuiInset = true -- FIXED: PREVENTS 36px SHIFT
 pcall(function() StandaloneGui.Parent = CoreGui end)
 if not StandaloneGui.Parent then StandaloneGui.Parent = lp:WaitForChild("PlayerGui") end
 
@@ -1246,5 +1247,5 @@ UserInputService.JumpRequest:Connect(function()
     end
 end)
 
-print("Undocall's Hub v35 loaded. Exact coordinates applied.")
+print("Undocall's Hub v36 loaded. Exact coordinates applied and Inset fixed.")
 print("Discord: " .. KEY_LINK)
