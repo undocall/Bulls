@@ -1,6 +1,6 @@
--- ═══════════ UNODOCALL'S HUB — FINAL v26 ═══════════
+-- ═══════════ UNODOCALL'S HUB — FINAL v27 ═══════════
 -- Arena: (-760, 11.5, 2040)
--- Fixed Target Lock Focus Bug + Name stays in box + Full v18 Architecture
+-- Polished Non-Draggable Invisible Button + Full v26 Architecture
 
 local StarterGui = game:GetService("StarterGui")
 local Players = game:GetService("Players")
@@ -551,7 +551,7 @@ local hC = Instance.new("UICorner"); hC.CornerRadius = UDim.new(0, 12); hC.Paren
 
 local hTitle = Instance.new("TextLabel")
 hTitle.Size = UDim2.new(0, 300, 1, 0); hTitle.Position = UDim2.new(0, 14, 0, 0)
-hTitle.BackgroundTransparency = 1; hTitle.Text = "Undocall's Hub (v26)"
+hTitle.BackgroundTransparency = 1; hTitle.Text = "Undocall's Hub (v27)"
 hTitle.TextColor3 = COL.text; hTitle.Font = Enum.Font.GothamBold; hTitle.TextSize = 16; hTitle.TextXAlignment = Enum.TextXAlignment.Left; hTitle.Parent = header
 
 local closeBtn = Instance.new("TextButton")
@@ -826,7 +826,7 @@ searchBox.FocusLost:Connect(function(enterPressed)
         local found = smartFind(text)
         if found then
             target = found; targetName = found.Name
-            searchBox.Text = "@" .. found.Name -- Keep name in box
+            searchBox.Text = "@" .. found.Name
             targetUsername.Text = "@" .. found.Name
             targetDisplayName.Text = found.DisplayName
             targetAvatar.Image = "rbxthumb://type=AvatarHeadShot&id=" .. found.UserId .. "&w=150&h=150"
@@ -886,7 +886,7 @@ sideBtns["Main"].btn.BackgroundTransparency = 0.1
 sideBtns["Main"].btn.TextColor3 = COL.text
 sideBtns["Main"].btn.Font = Enum.Font.GothamBold
 
--- ═══════════ STANDALONE INVISIBLE BUTTON (RECTANGLE) ═══════════
+-- ═══════════ POLISHED NON-DRAGGABLE INVISIBLE BUTTON ═══════════
 local invisScreenGui = Instance.new("ScreenGui")
 invisScreenGui.Name = "StandaloneGhost"
 invisScreenGui.ResetOnSpawn = false
@@ -895,44 +895,31 @@ if not invisScreenGui.Parent then invisScreenGui.Parent = lp:WaitForChild("Playe
 
 local invisBtn = Instance.new("TextButton")
 invisBtn.Size = UDim2.new(0, 100, 0, 30)
-invisBtn.Position = UDim2.new(0.5, -50, 0, 42) 
-invisBtn.BackgroundColor3 = COL.bg
+invisBtn.Position = UDim2.new(0.5, -50, 0, 45) -- Directly below Anti-Fling
+invisBtn.BackgroundColor3 = Color3.fromRGB(22, 18, 32)
 invisBtn.BackgroundTransparency = 0.2
-invisBtn.Text = "INVIS  OFF"
+invisBtn.BorderSizePixel = 0
+invisBtn.Text = "👻 INVIS  OFF"
 invisBtn.TextColor3 = COL.red
 invisBtn.Font = Enum.Font.GothamBold
 invisBtn.TextSize = 12
 invisBtn.AutoButtonColor = false
-invisBtn.Active = true
 invisBtn.Parent = invisScreenGui
 local ibC = Instance.new("UICorner"); ibC.CornerRadius = UDim.new(0, 6); ibC.Parent = invisBtn
 local ibS = Instance.new("UIStroke"); ibS.Color = COL.red; ibS.Thickness = 1; ibS.Parent = invisBtn
 
--- Dragging logic for Invis Button
-local iDragging, iDragStart, iStartPos
-invisBtn.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        iDragging = true; iDragStart = input.Position; iStartPos = invisBtn.Position
-    end
-end)
-invisBtn.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then iDragging = false end
-end)
-UserInputService.InputChanged:Connect(function(input)
-    if iDragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-        local delta = input.Position - iDragStart
-        invisBtn.Position = UDim2.new(iStartPos.X.Scale, iStartPos.X.Offset + delta.X, iStartPos.Y.Scale, iStartPos.Y.Offset + delta.Y)
-    end
-end)
-
 invisBtn.MouseButton1Click:Connect(function()
     if invisibleEnabled then
         stopInvisible()
-        invisBtn.Text = "INVIS  OFF"; invisBtn.TextColor3 = COL.red; ibS.Color = COL.red
+        TweenService:Create(invisBtn, TweenInfo.new(0.2), {TextColor3 = COL.red}):Play()
+        TweenService:Create(ibS, TweenInfo.new(0.2), {Color = COL.red}):Play()
+        invisBtn.Text = "👻 INVIS  OFF"
         notify("Invisible", "OFF", 2)
     else
         startInvisible()
-        invisBtn.Text = "INVIS  ON"; invisBtn.TextColor3 = COL.green; ibS.Color = COL.green
+        TweenService:Create(invisBtn, TweenInfo.new(0.2), {TextColor3 = COL.green}):Play()
+        TweenService:Create(ibS, TweenInfo.new(0.2), {Color = COL.green}):Play()
+        invisBtn.Text = "👻 INVIS  ON"
         notify("Invisible", "ON", 2)
     end
 end)
@@ -1060,7 +1047,7 @@ lp.CharacterAdded:Connect(function(char)
     if invisibleEnabled then
         invisibleEnabled = false; invisibleParts = {}
         if invisibleConnection then invisibleConnection:Disconnect(); invisibleConnection = nil end
-        invisBtn.Text = "INVIS  OFF"; invisBtn.TextColor3 = COL.red; ibS.Color = COL.red
+        invisBtn.Text = "👻 INVIS  OFF"; invisBtn.TextColor3 = COL.red; ibS.Color = COL.red
     end
 
     if killAuraOn and keyVerified and not spawningDebounce then
@@ -1136,6 +1123,7 @@ flingBtn.Font = Enum.Font.GothamBold
 flingBtn.AutoButtonColor = false
 flingBtn.Parent = flingGui
 local fbC = Instance.new("UICorner"); fbC.CornerRadius = UDim.new(0, 6); fbC.Parent = flingBtn
+local fbS = Instance.new("UIStroke"); fbS.Color = COL.red; fbS.Thickness = 1; fbS.Parent = flingBtn
 
 local noFallEnabled = false
 local noFallConnection
@@ -1159,7 +1147,7 @@ local function toggleAntiFling(enabled)
     noFallEnabled = enabled
     local char = lp.Character; local hum = char and char:FindFirstChildOfClass("Humanoid"); local hrp = char and char:FindFirstChild("HumanoidRootPart")
     if enabled then
-        flingBtn.Text = "A-Fling  ON"; flingBtn.TextColor3 = COL.green
+        flingBtn.Text = "A-Fling  ON"; flingBtn.TextColor3 = COL.green; fbS.Color = COL.green
         executeACR(char, hum, hrp)
         pcall(function() hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false); hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false) end)
         if not noFallConnection then
@@ -1177,7 +1165,7 @@ local function toggleAntiFling(enabled)
             end)
         end
     else
-        flingBtn.Text = "A-Fling  OFF"; flingBtn.TextColor3 = COL.red
+        flingBtn.Text = "A-Fling  OFF"; flingBtn.TextColor3 = COL.red; fbS.Color = COL.red
         if noFallConnection then noFallConnection:Disconnect(); noFallConnection = nil end
         pcall(function() hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, true); hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, true) end)
         executeACR(char, hum, hrp)
@@ -1186,5 +1174,5 @@ end
 
 flingBtn.MouseButton1Click:Connect(function() toggleAntiFling(not noFallEnabled) end)
 
-print("Undocall's Hub v26 loaded fully.")
+print("Undocall's Hub v27 loaded fully.")
 print("Discord: " .. KEY_LINK)
