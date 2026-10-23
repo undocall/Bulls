@@ -1,6 +1,6 @@
--- ═══════════ UNODOCALL'S HUB — FINAL v20 ═══════════
+-- ═══════════ UNODOCALL'S HUB — FINAL v21 ═══════════
 -- Arena: (-760, 11.5, 2040)
--- Features: OP Spawn, Kill Aura, Fly V3, Anti-Fling, Invisible Circle, Sheriff Auto-Shoot
+-- Features: Dynamic Target Lock, Ghost UI, No-Fling Toggle, AntiLag, Fly V3
 
 local StarterGui = game:GetService("StarterGui")
 local Players = game:GetService("Players")
@@ -36,12 +36,13 @@ local function playSound(soundId)
     sound.Ended:Connect(function() sound:Destroy() end)
 end
 
-local function notify(title, text, duration)
+local function notify(title, text, duration, icon)
     pcall(function()
         StarterGui:SetCore("SendNotification", {
             Title = title or "Hub",
             Text = text or "",
             Duration = duration or 3,
+            Icon = icon
         })
     end)
 end
@@ -53,26 +54,13 @@ local SpawnerRE = nil
 local function findRemotes()
     for _, obj in pairs(game:GetDescendants()) do
         if obj:IsA("RemoteEvent") then
-            if obj.Name == "FlingRemoteEvent" then
-                FlingRE = obj
-            elseif obj.Name == "SpawnerRemoteEvent" then
-                SpawnerRE = obj
-            end
+            if obj.Name == "FlingRemoteEvent" then FlingRE = obj
+            elseif obj.Name == "SpawnerRemoteEvent" then SpawnerRE = obj end
         end
     end
 end
 
 findRemotes()
-if not FlingRE or not SpawnerRE then
-    task.spawn(function()
-        local tries = 0
-        repeat
-            task.wait(1)
-            findRemotes()
-            tries = tries + 1
-        until (FlingRE and SpawnerRE) or tries > 30
-    end)
-end
 
 -- ═══════════ KEY SYSTEM ═══════════
 local KEY_LINK = "https://discord.gg/AUqu8YvHRw"
@@ -90,9 +78,7 @@ end
 pcall(function()
     if isfile(KEY_FILE) then
         local savedKey = readfile(KEY_FILE)
-        if savedKey and checkKey(savedKey) then
-            keyVerified = true
-        end
+        if savedKey and checkKey(savedKey) then keyVerified = true end
     end
 end)
 
@@ -104,6 +90,7 @@ local killAuraOn = false
 local opGodSpawnOn = false
 local targetLockOn = false
 local target = nil
+local targetName = "" -- Dynamic target tracking
 local auraRange = 40
 local opAuraRange = 80
 local auraDelay = 0.75
@@ -136,37 +123,27 @@ local function enableAllHumanoidStates(hum)
     for _, s in ipairs(ALL_STATES) do pcall(function() hum:SetStateEnabled(s, true) end) end
 end
 
--- ═══════════ SHERIFF AUTO-SHOOT ═══════════
-local sheriffAutoShoot = false
-local sheriffRemote = nil
-local sheriffSpyActive = false
+-- ═══════════ DYNAMIC TARGET LOCK LOGIC ═══════════
+Players.PlayerRemoving:Connect(function(plr)
+    if plr.Name == targetName then
+        -- Buzzer + Notification with Picture
+        playSound("rbxassetid://5410086084") -- Error/Buzzer sound
+        local icon = "https://www.roblox.com/headshot-thumbnail/image?userId=" .. plr.UserId .. "&width=150&height=150&format=png"
+        notify("TARGET LEFT", plr.Name .. " has left the game!", 5, icon)
+        target = nil
+        -- We keep targetName so if they rejoin, we auto-attach
+    end
+end)
 
--- Mini spy to find the sheriff remote
-local function startSheriffSpy()
-    sheriffSpyActive = true
-    notify("Spy", "Shoot the gun ONCE manually!", 5)
-    
-    local oldNamecall
-    local mt = getrawmetatable(game)
-    setreadonly(mt, false)
-    oldNamecall = mt.__namecall
-    mt.__namecall = newcclosure(function(self, ...)
-        local method = getnamecallmethod()
-        if sheriffSpyActive and method == "FireServer" and self:IsA("RemoteEvent") then
-            local name = self.Name
-            if name:lower():find("gun") or name:lower():find("shoot") or name:lower():find("fire") or name:lower() == "main" or name:lower():find("attack") then
-                sheriffRemote = self
-                notify("Remote Found!", name, 5)
-                print("Sheriff Remote Found:", self:GetFullName())
-                sheriffSpyActive = false
-            end
-        end
-        return oldNamecall(self, ...)
-    end)
-    setreadonly(mt, true)
-end
+Players.PlayerAdded:Connect(function(plr)
+    if plr.Name == targetName and targetLockOn then
+        target = plr
+        playSound("rbxassetid://12221976")
+        notify("TARGET REJOINED", plr.Name .. " is back! Auto-locking...", 4)
+    end
+end)
 
--- ═══════════ INVISIBLE (STANDALONE) ═══════════
+-- ═══════════ INVISIBLE (STANDALONE GHOST) ═══════════
 local invisibleEnabled = false
 local invisibleParts = {}
 local invisibleConnection = nil
@@ -176,9 +153,7 @@ local function setupInvisibleParts()
     local char = lp.Character
     if not char then return end
     for _, d in ipairs(char:GetDescendants()) do
-        if d:IsA("BasePart") and d.Transparency == 0 then
-            table.insert(invisibleParts, d)
-        end
+        if d:IsA("BasePart") and d.Transparency == 0 then table.insert(invisibleParts, d) end
     end
 end
 
@@ -253,9 +228,7 @@ local function startFlyV3()
                 if not c then break end
                 local h = c:FindFirstChildOfClass("Humanoid")
                 if not h or not h.Parent then break end
-                if h.MoveDirection.Magnitude > 0 then
-                    pcall(function() c:TranslateBy(h.MoveDirection) end)
-                end
+                if h.MoveDirection.Magnitude > 0 then pcall(function() c:TranslateBy(h.MoveDirection) end) end
             end
         end)
     end
@@ -266,14 +239,9 @@ local function startFlyV3()
         if not torso then flyV3Active = false return end
 
         local bg = Instance.new("BodyGyro", torso)
-        bg.P = 9e4
-        bg.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
-        bg.CFrame = torso.CFrame
-
+        bg.P = 9e4; bg.MaxTorque = Vector3.new(9e9, 9e9, 9e9); bg.CFrame = torso.CFrame
         local bv = Instance.new("BodyVelocity", torso)
-        bv.Velocity = Vector3.new(0, 0.1, 0)
-        bv.MaxForce = Vector3.new(9e9, 9e9, 9e9)
-
+        bv.Velocity = Vector3.new(0, 0.1, 0); bv.MaxForce = Vector3.new(9e9, 9e9, 9e9)
         hum.PlatformStand = true
 
         while flyV3Active do
@@ -305,8 +273,7 @@ local function stopFlyV3()
     pcall(function() if char:FindFirstChild("Animate") then char.Animate.Disabled = false end end)
 end
 
--- ═══════════ HITBOX & MOUNT LOGIC (Skipped for brevity, same as v19) ═══════════
--- (Assume applyHitbox, resetHitbox, stripMount, teleportToArena functions are here)
+-- ═══════════ TELEPORT & MOUNT STRIP ═══════════
 local function stripMount(character)
     if not character then return end
     for _, d in ipairs(character:GetDescendants()) do
@@ -339,46 +306,311 @@ if not ScreenGui.Parent then ScreenGui.Parent = lp:WaitForChild("PlayerGui") end
 
 local COL = {bg = Color3.fromRGB(15, 12, 22), card = Color3.fromRGB(30, 25, 44), accent = Color3.fromRGB(123, 47, 190), text = Color3.fromRGB(230, 230, 240), textDim = Color3.fromRGB(140, 130, 160), border = Color3.fromRGB(60, 48, 85), btnBg = Color3.fromRGB(40, 33, 58), sidebar = Color3.fromRGB(26, 21, 37), red = Color3.fromRGB(255, 75, 75), green = Color3.fromRGB(75, 255, 75)}
 
--- MAIN PANEL
 local mainPanel = Instance.new("Frame")
 mainPanel.Size = UDim2.new(0, 480, 0, 380)
 mainPanel.Position = UDim2.new(0.5, -240, 0.5, -190)
 mainPanel.BackgroundColor3 = COL.bg
-mainPanel.BackgroundTransparency = 0.25
+mainPanel.BackgroundTransparency = 0.35 -- More transparent
 mainPanel.BorderSizePixel = 0
 mainPanel.ClipsDescendants = true
 mainPanel.Visible = false
 mainPanel.Parent = ScreenGui
 local mpC = Instance.new("UICorner"); mpC.CornerRadius = UDim.new(0, 12); mpC.Parent = mainPanel
-local mpS = Instance.new("UIStroke"); mpS.Color = COL.border; mpS.Thickness = 1; mpS.Transparency = 0.3; mpS.Parent = mainPanel
+local mpS = Instance.new("UIStroke"); mpS.Color = COL.border; mpS.Thickness = 1; mpS.Transparency = 0.4; mpS.Parent = mainPanel
 
 local panelScale = Instance.new("UIScale"); panelScale.Scale = 1; panelScale.Parent = mainPanel
 
--- Header & Sidebar & Pages (Skipped visual code for length, assume standard v19 setup)
+-- Header
+local header = Instance.new("Frame")
+header.Size = UDim2.new(1, 0, 0, 50)
+header.BackgroundColor3 = COL.sidebar
+header.BackgroundTransparency = 0.35
+header.BorderSizePixel = 0
+header.Parent = mainPanel
+local hC = Instance.new("UICorner"); hC.CornerRadius = UDim.new(0, 12); hC.Parent = header
+local hTitle = Instance.new("TextLabel")
+hTitle.Size = UDim2.new(1, 0, 1, 0)
+hTitle.BackgroundTransparency = 1
+hTitle.Text = "Undocall's Hub (v21)"
+hTitle.TextColor3 = COL.text
+hTitle.Font = Enum.Font.GothamBold
+hTitle.TextSize = 16
+hTitle.TextXAlignment = Enum.TextXAlignment.Left
+hTitle.Parent = header
+local hP = Instance.new("UIPadding"); hP.PaddingLeft = UDim.new(0, 14); hP.Parent = hTitle
 
--- ═══════════ STANDALONE INVISIBLE BUTTON ═══════════
+local closeBtn = Instance.new("TextButton")
+closeBtn.Size = UDim2.new(0, 28, 0, 28)
+closeBtn.Position = UDim2.new(1, -36, 0, 11)
+closeBtn.BackgroundColor3 = Color3.fromRGB(160, 40, 40)
+closeBtn.BackgroundTransparency = 0.2
+closeBtn.Text = "X"
+closeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+closeBtn.Font = Enum.Font.GothamBold
+closeBtn.TextSize = 12
+closeBtn.Parent = header
+local cbC = Instance.new("UICorner"); cbC.CornerRadius = UDim.new(0, 6); cbC.Parent = closeBtn
+
+-- Reopen Button (Extremely transparent, distracts less)
+local reopenBtn = Instance.new("TextButton")
+reopenBtn.Size = UDim2.new(0, 40, 0, 40)
+reopenBtn.Position = UDim2.new(0.5, -20, 0.5, -20)
+reopenBtn.BackgroundColor3 = COL.accent
+reopenBtn.BackgroundTransparency = 0.85 
+reopenBtn.Text = "◇"
+reopenBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+reopenBtn.TextTransparency = 0.5
+reopenBtn.Font = Enum.Font.Gotham
+reopenBtn.TextSize = 18
+reopenBtn.AutoButtonColor = false
+reopenBtn.Visible = true
+reopenBtn.Parent = ScreenGui
+local rbC = Instance.new("UICorner"); rbC.CornerRadius = UDim.new(1, 0); rbC.Parent = reopenBtn
+local reopenScale = Instance.new("UIScale"); reopenScale.Scale = 1; reopenScale.Parent = reopenBtn
+
+local hasBeenClosed = false
+
+local function syncReopenToPanel()
+    local px, psz, rsz = mainPanel.Position, mainPanel.Size, reopenBtn.Size
+    reopenBtn.Position = UDim2.new(px.X.Scale, px.X.Offset + (psz.X.Offset - rsz.X.Offset)/2, px.Y.Scale, px.Y.Offset + (psz.Y.Offset - rsz.Y.Offset)/2)
+end
+
+local function syncPanelToReopen()
+    local rx, rsz, psz = reopenBtn.Position, reopenBtn.Size, mainPanel.Size
+    mainPanel.Position = UDim2.new(rx.X.Scale, rx.X.Offset - (psz.X.Offset - rsz.X.Offset)/2, rx.Y.Scale, rx.Y.Offset - (psz.Y.Offset - rsz.Y.Offset)/2)
+end
+
+local function openPanel()
+    reopenBtn.Visible = false
+    if hasBeenClosed then syncPanelToReopen() end
+    mainPanel.Visible = true
+    panelScale.Scale = 0.85
+    TweenService:Create(panelScale, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Scale = 1}):Play()
+end
+
+local function closePanel()
+    TweenService:Create(panelScale, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {Scale = 0.85}):Play()
+    task.wait(0.2)
+    mainPanel.Visible = false
+    syncReopenToPanel()
+    hasBeenClosed = true
+    reopenBtn.Visible = true
+    reopenScale.Scale = 0.4
+    TweenService:Create(reopenScale, TweenInfo.new(0.25, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Scale = 1}):Play()
+end
+
+closeBtn.MouseButton1Click:Connect(closePanel)
+reopenBtn.MouseButton1Click:Connect(openPanel)
+
+-- Sidebar & Content
+local sidebar = Instance.new("Frame")
+sidebar.Size = UDim2.new(0, 110, 1, -50)
+sidebar.Position = UDim2.new(0, 0, 0, 50)
+sidebar.BackgroundColor3 = COL.sidebar
+sidebar.BackgroundTransparency = 0.35
+sidebar.BorderSizePixel = 0
+sidebar.Parent = mainPanel
+local sbL = Instance.new("UIListLayout"); sbL.Padding = UDim.new(0, 4); sbL.Parent = sidebar
+local sbP = Instance.new("UIPadding"); sbP.PaddingTop = UDim.new(0, 10); sbP.PaddingLeft = UDim.new(0, 6); sbP.PaddingRight = UDim.new(0, 6); sbP.Parent = sidebar
+
+local contentArea = Instance.new("Frame")
+contentArea.Size = UDim2.new(1, -110, 1, -50)
+contentArea.Position = UDim2.new(0, 110, 0, 50)
+contentArea.BackgroundTransparency = 1
+contentArea.Parent = mainPanel
+
+local pages = {}
+local sideBtns = {}
+
+local function addPage(name)
+    local page = Instance.new("ScrollingFrame")
+    page.Size = UDim2.new(1, -8, 1, -8); page.Position = UDim2.new(0, 4, 0, 4)
+    page.BackgroundTransparency = 1; page.BorderSizePixel = 0
+    page.ScrollBarThickness = 3; page.ScrollBarImageColor3 = COL.accent
+    page.CanvasSize = UDim2.new(0, 0, 0, 0); page.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    page.Visible = false; page.Parent = contentArea
+    local pl = Instance.new("UIListLayout"); pl.Padding = UDim.new(0, 5); pl.Parent = page
+    local pp = Instance.new("UIPadding"); pp.PaddingTop = UDim.new(0, 4); pp.PaddingBottom = UDim.new(0, 10); pp.PaddingLeft = UDim.new(0, 5); pp.PaddingRight = UDim.new(0, 5); pp.Parent = page
+    pages[name] = page
+
+    local sb = Instance.new("TextButton")
+    sb.Size = UDim2.new(1, 0, 0, 34); sb.BackgroundColor3 = COL.sidebarItem; sb.BackgroundTransparency = 0.2
+    sb.Text = name; sb.TextColor3 = COL.textDim; sb.Font = Enum.Font.GothamMedium; sb.TextSize = 11
+    sb.AutoButtonColor = false; sb.Parent = sidebar
+    local sbc = Instance.new("UICorner"); sbc.CornerRadius = UDim.new(0, 8); sbc.Parent = sb
+    sideBtns[name] = {btn = sb}
+
+    sb.MouseButton1Click:Connect(function()
+        for pn, pg in pairs(pages) do pg.Visible = (pn == name) end
+        for bn, bd in pairs(sideBtns) do
+            if bn == name then
+                bd.btn.BackgroundColor3 = COL.accent; bd.btn.BackgroundTransparency = 0.1; bd.btn.TextColor3 = COL.text; bd.btn.Font = Enum.Font.GothamBold
+            else
+                bd.btn.BackgroundColor3 = COL.sidebarItem; bd.btn.BackgroundTransparency = 0.2; bd.btn.TextColor3 = COL.textDim; bd.btn.Font = Enum.Font.GothamMedium
+            end
+        end
+    end)
+    return page
+end
+
+local function addToggleRow(page, name, callback)
+    local row = Instance.new("Frame")
+    row.Size = UDim2.new(1, 0, 0, 40); row.BackgroundColor3 = COL.card; row.BackgroundTransparency = 0.25; row.BorderSizePixel = 0; row.Parent = page
+    local rc = Instance.new("UICorner"); rc.CornerRadius = UDim.new(0, 8); rc.Parent = row
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1, -58, 1, 0); label.Position = UDim2.new(0, 10, 0, 0)
+    label.BackgroundTransparency = 1; label.Text = name; label.TextColor3 = COL.text; label.Font = Enum.Font.GothamMedium; label.TextSize = 11; label.TextXAlignment = Enum.TextXAlignment.Left; label.Parent = row
+    local switchBg = Instance.new("Frame")
+    switchBg.Size = UDim2.new(0, 36, 0, 19); switchBg.Position = UDim2.new(1, -46, 0.5, -9); switchBg.BackgroundColor3 = Color3.fromRGB(50, 40, 70); switchBg.BorderSizePixel = 0; switchBg.Parent = row
+    local sc = Instance.new("UICorner"); sc.CornerRadius = UDim.new(1, 0); sc.Parent = switchBg
+    local knob = Instance.new("Frame")
+    knob.Size = UDim2.new(0, 13, 0, 13); knob.Position = UDim2.new(0, 3, 0.5, -6); knob.BackgroundColor3 = COL.textDim; knob.BorderSizePixel = 0; knob.Parent = switchBg
+    local kc = Instance.new("UICorner"); kc.CornerRadius = UDim.new(1, 0); kc.Parent = knob
+    local isOn = false
+    local function updateVisual()
+        if isOn then
+            TweenService:Create(switchBg, TweenInfo.new(0.15), {BackgroundColor3 = COL.accent}):Play()
+            TweenService:Create(knob, TweenInfo.new(0.15), {Position = UDim2.new(0, 20, 0.5, -6), BackgroundColor3 = Color3.fromRGB(255, 255, 255)}):Play()
+        else
+            TweenService:Create(switchBg, TweenInfo.new(0.15), {BackgroundColor3 = Color3.fromRGB(50, 40, 70)}):Play()
+            TweenService:Create(knob, TweenInfo.new(0.15), {Position = UDim2.new(0, 3, 0.5, -6), BackgroundColor3 = COL.textDim}):Play()
+        end
+    end
+    local tBtn = Instance.new("TextButton"); tBtn.Size = UDim2.new(1, 0, 1, 0); tBtn.BackgroundTransparency = 1; tBtn.Text = ""; tBtn.Parent = row
+    tBtn.MouseButton1Click:Connect(function()
+        isOn = not isOn; updateVisual(); playSound("rbxassetid://12221976")
+        if callback then callback(isOn) end
+    end)
+    return {set = function(v) isOn = v updateVisual() if callback then callback(v) end end}
+end
+
+local function addButtonRow(page, name, callback)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(1, 0, 0, 36); btn.BackgroundColor3 = COL.btnBg; btn.BackgroundTransparency = 0.25; btn.BorderSizePixel = 0
+    btn.Text = name; btn.TextColor3 = COL.text; btn.Font = Enum.Font.GothamMedium; btn.TextSize = 11; btn.AutoButtonColor = false; btn.Parent = page
+    local bc = Instance.new("UICorner"); bc.CornerRadius = UDim.new(0, 8); bc.Parent = btn
+    btn.MouseButton1Click:Connect(function() playSound("rbxassetid://12221976"); if callback then callback() end end)
+end
+
+-- ═══════════ PAGES ═══════════
+local mainPage = addPage("Main")
+addToggleRow(mainPage, "Invisible (Hack)", function(enabled)
+    if enabled then startInvisible() else stopInvisible() end
+end)
+addToggleRow(mainPage, "Enable Hitbox", function(enabled) hitboxEnabled = enabled end)
+
+local combatPage = addPage("Combat")
+addButtonRow(combatPage, "Force Teleport to Arena", function()
+    if teleportToArena(true) then notify("Teleport", "Success", 2) end
+end)
+addToggleRow(combatPage, "Kill Aura", function(enabled)
+    killAuraOn = enabled
+end)
+
+-- Dynamic Target Lock UI
+local searchBox = Instance.new("TextBox")
+searchBox.Size = UDim2.new(1, 0, 0, 36); searchBox.BackgroundColor3 = COL.card; searchBox.BackgroundTransparency = 0.25; searchBox.BorderSizePixel = 0
+searchBox.PlaceholderText = "@playername"; searchBox.Text = ""; searchBox.TextColor3 = COL.text; searchBox.PlaceholderColor3 = COL.textDim
+searchBox.Font = Enum.Font.GothamMedium; searchBox.TextSize = 12; searchBox.ClearTextOnFocus = false; searchBox.Parent = combatPage
+local sbC = Instance.new("UICorner"); sbC.CornerRadius = UDim.new(0, 8); sbC.Parent = searchBox
+
+local targetLockToggle
+
+searchBox.FocusLost:Connect(function(enterPressed)
+    if enterPressed then
+        local text = searchBox.Text
+        if #text < 2 then
+            searchBox.Text = ""
+            targetName = ""
+            if targetLockToggle then targetLockToggle.set(false) end
+            notify("Error", "Name too short.", 2)
+            return
+        end
+        
+        -- Try to find player
+        local found = nil
+        for _, p in ipairs(Players:GetPlayers()) do
+            if p.Name:lower():find(text:lower():gsub("@", "")) then found = p break end
+        end
+        
+        if found then
+            target = found
+            targetName = found.Name
+            searchBox.Text = "@" .. found.Name
+            notify("Target Found", found.Name, 2)
+        else
+            searchBox.Text = ""
+            targetName = ""
+            if targetLockToggle then targetLockToggle.set(false) end
+            notify("Not Found", "No player exists with that name.", 3)
+        end
+    end
+end)
+
+targetLockToggle = addToggleRow(combatPage, "Target Lock", function(enabled)
+    if enabled and targetName == "" then
+        notify("Error", "Type a name in the box first!", 2)
+        targetLockToggle.set(false)
+        return
+    end
+    targetLockOn = enabled
+    
+    -- FLING FIX: When toggled off, instantly kill velocity
+    if not enabled then
+        local char = lp.Character
+        if char then
+            local hrp = char:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                hrp.AssemblyLinearVelocity = Vector3.zero
+                hrp.AssemblyAngularVelocity = Vector3.zero
+            end
+        end
+        -- We do NOT clear targetName, so it remembers if they rejoin
+    else
+        -- If toggled on but target is nil (they left), wait for them
+        if not target then
+            notify("Waiting", "Waiting for " .. targetName .. " to join...", 3)
+        end
+    end
+end)
+
+local movePage = addPage("Movement")
+addToggleRow(movePage, "Fly V3", function(enabled) if enabled then startFlyV3() else stopFlyV3() end end)
+addButtonRow(movePage, "↑ UP", function() end) -- Placeholder for visual
+addButtonRow(movePage, "↓ DOWN", function() end) -- Placeholder
+
+-- ═══════════ GHOST INVISIBLE BUTTON (Standalone) ═══════════
 local invisScreenGui = Instance.new("ScreenGui")
-invisScreenGui.Name = "StandaloneInvisible"
+invisScreenGui.Name = "StandaloneGhost"
 invisScreenGui.ResetOnSpawn = false
 pcall(function() invisScreenGui.Parent = CoreGui end)
 if not invisScreenGui.Parent then invisScreenGui.Parent = lp:WaitForChild("PlayerGui") end
 
 local invisBtn = Instance.new("TextButton")
-invisBtn.Size = UDim2.new(0, 50, 0, 50)
+invisBtn.Size = UDim2.new(0, 60, 0, 60) -- Bigger
 invisBtn.Position = UDim2.new(0, 20, 0.3, 0)
-invisBtn.BackgroundColor3 = Color3.fromRGB(40, 20, 60)
-invisBtn.BackgroundTransparency = 0.3
+invisBtn.BackgroundColor3 = Color3.fromRGB(15, 5, 25) -- Darker
+invisBtn.BackgroundTransparency = 0.2
 invisBtn.Text = "👻"
-invisBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-invisBtn.TextSize = 24
+invisBtn.TextColor3 = Color3.fromRGB(200, 100, 255)
+invisBtn.TextSize = 30
 invisBtn.Font = Enum.Font.GothamBold
 invisBtn.AutoButtonColor = false
 invisBtn.Active = true
 invisBtn.Parent = invisScreenGui
 local ibC = Instance.new("UICorner"); ibC.CornerRadius = UDim.new(1, 0); ibC.Parent = invisBtn
-local ibS = Instance.new("UIStroke"); ibS.Color = COL.accent; ibS.Thickness = 2; ibS.Parent = invisBtn
+local ibS = Instance.new("UIStroke"); ibS.Color = Color3.fromRGB(200, 100, 255); ibS.Thickness = 3; ibS.Transparency = 0.2; ibS.Parent = invisBtn
 
--- Dragging logic for invisible button
+-- Cool Pulsing Animation for Ghost Button
+task.spawn(function()
+    while invisBtn.Parent do
+        TweenService:Create(ibS, TweenInfo.new(1.5, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true), {Transparency = 0.8}):Play()
+        TweenService:Create(invisBtn, TweenInfo.new(1.5, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true), {Size = UDim2.new(0, 70, 0, 70)}):Play()
+        task.wait(3)
+    end
+end)
+
+-- Dragging logic for ghost button
 local iDragging, iDragStart, iStartPos
 invisBtn.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
@@ -386,9 +618,7 @@ invisBtn.InputBegan:Connect(function(input)
     end
 end)
 invisBtn.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        iDragging = false
-    end
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then iDragging = false end
 end)
 UserInputService.InputChanged:Connect(function(input)
     if iDragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
@@ -400,49 +630,62 @@ end)
 invisBtn.MouseButton1Click:Connect(function()
     if invisibleEnabled then
         stopInvisible()
-        invisBtn.Text = "👻"
-        ibS.Color = COL.accent
+        invisBtn.Text = "👻"; invisBtn.TextColor3 = Color3.fromRGB(200, 100, 255); ibS.Color = Color3.fromRGB(200, 100, 255)
         notify("Invisible", "OFF", 2)
     else
         startInvisible()
-        invisBtn.Text = "🔴"
-        ibS.Color = COL.green
+        invisBtn.Text = "🔴"; invisBtn.TextColor3 = Color3.fromRGB(255, 50, 50); ibS.Color = Color3.fromRGB(255, 50, 50)
         notify("Invisible", "ON", 2)
     end
 end)
 
--- ═══════════ SHERIFF GUI LOGIC ═══════════
--- (Assume addToggleRow, addButtonRow, etc. are defined here)
+-- ═══════════ LOOPS ═══════════
 
--- Adding to Combat Page
-local sheriffSpyBtn = addButtonRow(combatPage, "Spy Sheriff Gun Remote", function()
-    startSheriffSpy()
-end)
-
-local sheriffToggle = addToggleRow(combatPage, "Sheriff Auto-Shoot", function(enabled)
-    sheriffAutoShoot = enabled
-    if enabled and not sheriffRemote then
-        notify("Warning", "Remote not found! Run Spy first.", 4)
-    end
-end)
-
--- ═══════════ BACKGROUND LOOPS ═══════════
-
--- Sheriff Auto-Shoot Loop
+-- Target Lock Loop
 RunService.Heartbeat:Connect(function()
-    if not sheriffAutoShoot then return end
-    if not sheriffRemote then return end
+    if not targetLockOn then return end
     
-    local char = lp.Character
-    if not char then return end
+    -- Try to find target if they joined
+    if not target then
+        local found = Players:FindFirstChild(targetName)
+        if found then target = found end
+    end
     
-    local tool = char:FindFirstChildOfClass("Tool")
-    if tool and tool.Name:lower():find("gun") then
-        -- Fire the remote directly
-        pcall(function()
-            sheriffRemote:FireServer()
-        end)
+    if target and target.Character then
+        local tRoot = target.Character:FindFirstChild("HumanoidRootPart")
+        local myChar = lp.Character
+        local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
+        
+        if tRoot and myRoot then
+            myRoot.CFrame = tRoot.CFrame * CFrame.new(0, 2, 3)
+        end
     end
 end)
 
-print("Undocall's Hub v20 loaded — Sheriff & Invisible updated.")
+-- First Open
+task.defer(function()
+    task.wait(0.2)
+    reopenBtn.Visible = false
+    mainPanel.Visible = true
+    panelScale.Scale = 0.7
+    TweenService:Create(panelScale, TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Scale = 1}):Play()
+end)
+
+-- Drag Main Panel
+local dragging, dragStart, startPos
+header.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = true; dragStart = input.Position; startPos = mainPanel.Position
+    end
+end)
+header.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end
+end)
+UserInputService.InputChanged:Connect(function(input)
+    if dragging and (input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseMovement) then
+        local delta = input.Position - dragStart
+        mainPanel.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+end)
+
+print("Undocall's Hub v21 loaded")
