@@ -1,7 +1,4 @@
--- ═══════════ UNODOCALL'S HUB — FINAL v43 (AUTO SHERIFF FIXED) ═══════════
--- Arena: (-760, 11.5, 2040)
--- v36 Base + Perfect Auto Sheriff Sniper
-
+-- ═══════════ UNODOCALL'S HUB — FINAL v44 (NO CAMERA, CLEAN) ═══════════
 local StarterGui = game:GetService("StarterGui")
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -94,6 +91,7 @@ local hitboxEnabled = false
 local killAuraOn = false
 local opGodSpawnOn = false
 local targetLockOn = false
+local sheriffActive = false
 local target = nil
 local targetName = ""
 local auraRange = 40
@@ -101,12 +99,8 @@ local opAuraRange = 80
 local auraDelay = 0.75
 local lastAuraHit = 0
 local lastOpAuraHit = 0
-local spawningDebounce = false
-
--- Sheriff State
-local sheriffActive = false
-local sheriffTarget = nil
 local lastSheriffShot = 0
+local spawningDebounce = false
 
 getgenv().superPowerEnabled = false
 getgenv().infiniteJumpEnabled = false
@@ -133,13 +127,19 @@ local function enableAllHumanoidStates(hum)
     for _, s in ipairs(ALL_STATES) do pcall(function() hum:SetStateEnabled(s, true) end) end
 end
 
--- ═══════════ DYNAMIC TARGET LOCK LOGIC (Normal) ═══════════
+-- ═══════════ DYNAMIC TARGET LOCK LOGIC ═══════════
 Players.PlayerRemoving:Connect(function(plr)
     if plr.Name == targetName then
         playSound("rbxassetid://5410086084")
         local icon = "https://www.roblox.com/headshot-thumbnail/image?userId=" .. plr.UserId .. "&width=150&height=150&format=png"
         notify("TARGET LEFT", plr.Name .. " has left the game!", 5, icon)
         target = nil
+        
+        -- If target leaves and Sheriff is on, teleport to spawn
+        if sheriffActive then
+            sheriffActive = false
+            teleportToArena(true)
+        end
     end
 end)
 
@@ -474,7 +474,7 @@ local hC = Instance.new("UICorner"); hC.CornerRadius = UDim.new(0, 12); hC.Paren
 
 local hTitle = Instance.new("TextLabel")
 hTitle.Size = UDim2.new(0, 300, 1, 0); hTitle.Position = UDim2.new(0, 14, 0, 0)
-hTitle.BackgroundTransparency = 1; hTitle.Text = "Undocall's Hub (v43)"
+hTitle.BackgroundTransparency = 1; hTitle.Text = "Undocall's Hub (v44)"
 hTitle.TextColor3 = COL.text; hTitle.Font = Enum.Font.GothamBold; hTitle.TextSize = 16; hTitle.TextXAlignment = Enum.TextXAlignment.Left; hTitle.Parent = header
 
 local closeBtn = Instance.new("TextButton")
@@ -688,89 +688,7 @@ local killAuraToggle = addToggleRow(combatPage, "Kill Aura", function(enabled)
     if enabled then if not FlingRE or not SpawnerRE then findRemotes() end; if SpawnerRE then pcall(function() SpawnerRE:FireServer() end) end end
 end)
 
--- SHERIFF SNIPER SYSTEM
-local sSection = Instance.new("TextLabel")
-sSection.Size = UDim2.new(1, 0, 0, 20)
-sSection.BackgroundTransparency = 1
-sSection.Text = "TARGET SHERIFF SNIPER"
-sSection.TextColor3 = COL.accentLight
-sSection.Font = Enum.Font.GothamBold
-sSection.TextSize = 10
-sSection.TextXAlignment = Enum.TextXAlignment.Left
-sSection.Parent = combatPage
-
-local sSearch = Instance.new("TextBox")
-sSearch.Size = UDim2.new(1, 0, 0, 36)
-sSearch.BackgroundColor3 = COL.card
-sSearch.BackgroundTransparency = 0.1
-sSearch.BorderSizePixel = 0
-sSearch.PlaceholderText = "Type @name & press Enter"
-sSearch.Text = ""
-sSearch.TextColor3 = COL.text
-sSearch.PlaceholderColor3 = COL.textDim
-sSearch.Font = Enum.Font.GothamMedium
-sSearch.TextSize = 13
-sSearch.ClearTextOnFocus = false
-sSearch.Parent = combatPage
-local ssc = Instance.new("UICorner"); ssc.CornerRadius = UDim.new(0, 8); ssc.Parent = sSearch
-local sss = Instance.new("UIStroke"); sss.Color = COL.border; sss.Thickness = 1; sss.Transparency = 0.5; sss.Parent = sSearch
-
-local sTargetLbl = Instance.new("TextLabel")
-sTargetLbl.Size = UDim2.new(1, 0, 0, 16)
-sTargetLbl.BackgroundTransparency = 1
-sTargetLbl.Text = "Target: None"
-sTargetLbl.TextColor3 = COL.textDim
-sTargetLbl.Font = Enum.Font.GothamBold
-sTargetLbl.TextSize = 11
-sTargetLbl.TextXAlignment = Enum.TextXAlignment.Left
-sTargetLbl.Parent = combatPage
-
-sSearch.FocusLost:Connect(function(enterPressed)
-    if enterPressed then
-        local text = sSearch.Text:lower():gsub("@", "")
-        if #text > 0 then
-            for _, p in ipairs(Players:GetPlayers()) do
-                if p.Name:lower() == text or p.DisplayName:lower() == text then
-                    sheriffTarget = p
-                    sSearch.Text = "@" .. p.Name
-                    sTargetLbl.Text = "Target: " .. p.Name
-                    sTargetLbl.TextColor3 = COL.green
-                    return
-                end
-            end
-            sTargetLbl.Text = "Player not found"
-            sTargetLbl.TextColor3 = COL.red
-        end
-    end
-end)
-
-local sheriffToggle
-sheriffToggle = addToggleRow(combatPage, "Auto Sheriff (Requires Target)", function(enabled)
-    if enabled and not keyVerified then notify("Locked", "Enter key first", 3); sheriffToggle.set(false); return end
-    if enabled and not sheriffTarget then notify("Error", "Select a target first!", 2); sheriffToggle.set(false); return end
-    
-    sheriffActive = enabled
-    if enabled then
-        killAuraOn = false
-        opGodSpawnOn = false
-        
-        notify("Sheriff Auto", "Spawning & Locking " .. sheriffTarget.Name, 3)
-        
-        -- Fire Spawn Remote so we ride the Sheriff bull
-        if not SpawnerRE then findRemotes() end
-        if SpawnerRE then pcall(function() SpawnerRE:FireServer() end) end
-        
-    else
-        notify("Sheriff Auto", "Returning to Lobby", 3)
-        local char = lp.Character
-        if char then
-            local hum = char:FindFirstChildOfClass("Humanoid")
-            if hum then hum.Health = 0 end
-        end
-    end
-end)
-
--- TARGET LOCK
+-- DYNAMIC TARGET PLAYER CARD (SINGLE BOX FOR BOTH)
 local targetFrame = Instance.new("Frame")
 targetFrame.Size = UDim2.new(1, 0, 0, 70)
 targetFrame.BackgroundColor3 = COL.card
@@ -816,7 +734,7 @@ searchBox.Size = UDim2.new(1, 0, 0, 36)
 searchBox.BackgroundColor3 = COL.card
 searchBox.BackgroundTransparency = 0.1
 searchBox.BorderSizePixel = 0
-searchBox.PlaceholderText = "Type @name & press Enter (Normal Lock)"
+searchBox.PlaceholderText = "Type @name & press Enter"
 searchBox.Text = ""
 searchBox.TextColor3 = COL.text
 searchBox.PlaceholderColor3 = COL.textDim
@@ -846,7 +764,7 @@ searchBox.FocusLost:Connect(function(enterPressed)
     end
 end)
 
-targetLockToggle = addToggleRow(combatPage, "Enable Target Lock (Normal)", function(enabled)
+targetLockToggle = addToggleRow(combatPage, "Target Lock", function(enabled)
     if enabled and not keyVerified then notify("Locked", "Enter key first", 3); targetLockToggle.set(false); return end
     if enabled and (targetName == "" or not targetName) then notify("Error", "Type a name first!", 2); targetLockToggle.set(false); return end
     targetLockOn = enabled
@@ -858,6 +776,27 @@ targetLockToggle = addToggleRow(combatPage, "Enable Target Lock (Normal)", funct
         end
     else
         if not target then notify("Waiting", "Waiting for " .. targetName .. " to join...", 3) end
+    end
+end)
+
+local sheriffToggle
+sheriffToggle = addToggleRow(combatPage, "Auto Sheriff Sniper", function(enabled)
+    if enabled and not keyVerified then notify("Locked", "Enter key first", 3); sheriffToggle.set(false); return end
+    if enabled and not target then notify("Error", "Select a target first!", 2); sheriffToggle.set(false); return end
+    
+    sheriffActive = enabled
+    if enabled then
+        killAuraOn = false
+        opGodSpawnOn = false
+        targetLockOn = false
+        
+        notify("Sheriff Auto", "Spawning & Locking " .. target.Name, 3)
+        if not SpawnerRE then findRemotes() end
+        if SpawnerRE then pcall(function() SpawnerRE:FireServer() end) end
+    else
+        notify("Sheriff Auto", "Returning to Arena Spawn", 3)
+        -- Instead of killing, just teleport to spawn to clear state
+        teleportToArena(true)
     end
 end)
 
@@ -1035,12 +974,11 @@ UserInputService.InputChanged:Connect(function(input)
     end
 end)
 
--- ═══════════ SHERIFF LOGIC (TARGET ONLY) ═══════════
+-- ═══════════ SHERIFF LOGIC (NO CAMERA MOVEMENT) ═══════════
 RunService.RenderStepped:Connect(function()
-    if not sheriffActive or not sheriffTarget then return end
-    if not sheriffTarget.Character then 
-        sTargetLbl.Text = "Target dead/left"
-        sTargetLbl.TextColor3 = COL.red
+    if not sheriffActive or not target then return end
+    if not target.Character then 
+        notify("Sheriff", "Target dead/left", 2)
         return 
     end
     
@@ -1060,15 +998,14 @@ RunService.RenderStepped:Connect(function()
         return
     end
 
-    -- Auto fire ONLY if target is in arena (Z > 100)
-    if sheriffTarget.Character:FindFirstChild("HumanoidRootPart") then
-        if sheriffTarget.Character.HumanoidRootPart.Position.Z > LOBBY_MAX_Z then
+    -- Auto fire ONLY if target is inside arena
+    if target.Character:FindFirstChild("HumanoidRootPart") then
+        if target.Character.HumanoidRootPart.Position.Z > LOBBY_MAX_Z then
             local now = tick()
             if now - lastSheriffShot > 0.3 then 
                 lastSheriffShot = now
                 pcall(function()
-                    -- Aim camera slightly to make gun shoot towards them
-                    workspace.CurrentCamera.CFrame = CFrame.new(workspace.CurrentCamera.CFrame.Position, sheriffTarget.Character.HumanoidRootPart.Position)
+                    -- Fire tool (silent aim server-side)
                     tool:Activate()
                     if getconnections then
                         local conns = getconnections(tool.Activated)
@@ -1200,5 +1137,5 @@ UserInputService.JumpRequest:Connect(function()
     end
 end)
 
-print("Undocall's Hub v43 loaded. Sheriff camera fixed.")
+print("Undocall's Hub v44 loaded. Clean Auto Sheriff.")
 print("Discord: " .. KEY_LINK)
