@@ -1,4 +1,4 @@
--- ═══════════ UNODOCALL'S HUB — v41 (INTEGRATED TARGET SHERIFF) ═══════════
+-- ═══════════ UNODOCALL'S HUB — v42 (SHERIFF FIXED) ═══════════
 local StarterGui = game:GetService("StarterGui")
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -100,6 +100,7 @@ local opAuraRange = 80
 local auraDelay = 0.75
 local lastAuraHit = 0
 local lastOpAuraHit = 0
+local lastSheriffShot = 0
 local spawningDebounce = false
 
 getgenv().superPowerEnabled = false
@@ -126,24 +127,6 @@ local function enableAllHumanoidStates(hum)
     if not hum then return end
     for _, s in ipairs(ALL_STATES) do pcall(function() hum:SetStateEnabled(s, true) end) end
 end
-
--- ═══════════ DYNAMIC TARGET LOCK LOGIC ═══════════
-Players.PlayerRemoving:Connect(function(plr)
-    if plr.Name == targetName then
-        playSound("rbxassetid://5410086084")
-        local icon = "https://www.roblox.com/headshot-thumbnail/image?userId=" .. plr.UserId .. "&width=150&height=150&format=png"
-        notify("TARGET LEFT", plr.Name .. " has left the game!", 5, icon)
-        target = nil
-    end
-end)
-
-Players.PlayerAdded:Connect(function(plr)
-    if plr.Name == targetName and targetLockOn then
-        target = plr
-        playSound("rbxassetid://12221976")
-        notify("TARGET REJOINED", plr.Name .. " is back! Auto-locking...", 4)
-    end
-end)
 
 -- ═══════════ POTATO GRAPHICS ═══════════
 local function applyPotatoGraphics()
@@ -314,7 +297,6 @@ local function applyHitbox(character)
     if player and player == lp then return end
     local humanoid = character:FindFirstChildOfClass("Humanoid")
     if humanoid and humanoid.Health <= 0 then return end
-    local isR15 = humanoid and humanoid.RigType == Enum.HumanoidRigType.R15
     local rootPart = character:FindFirstChild("HumanoidRootPart") or character:FindFirstChild("UpperTorso")
     if rootPart then
         if not rootPart:FindFirstChild("OriginalSize") then
@@ -469,7 +451,7 @@ local hC = Instance.new("UICorner"); hC.CornerRadius = UDim.new(0, 12); hC.Paren
 
 local hTitle = Instance.new("TextLabel")
 hTitle.Size = UDim2.new(0, 300, 1, 0); hTitle.Position = UDim2.new(0, 14, 0, 0)
-hTitle.BackgroundTransparency = 1; hTitle.Text = "Undocall's Hub (v41)"
+hTitle.BackgroundTransparency = 1; hTitle.Text = "Undocall's Hub (v42)"
 hTitle.TextColor3 = COL.text; hTitle.Font = Enum.Font.GothamBold; hTitle.TextSize = 16; hTitle.TextXAlignment = Enum.TextXAlignment.Left; hTitle.Parent = header
 
 local closeBtn = Instance.new("TextButton")
@@ -649,8 +631,7 @@ end)
 
 -- MAIN
 local mainPage = addPage("Main")
-local hitRow = Instance.new("Frame")
-hitRow.Size = UDim2.new(1, 0, 0, 40); hitRow.BackgroundColor3 = COL.card; hitRow.BackgroundTransparency = 0.1; hitRow.Parent = hitPage
+local hitRow = Instance.new("Frame"); hitRow.Size = UDim2.new(1, 0, 0, 40); hitRow.BackgroundColor3 = COL.card; hitRow.BackgroundTransparency = 0.1; hitRow.Parent = mainPage
 local hrc = Instance.new("UICorner"); hrc.CornerRadius = UDim.new(0, 8); hrc.Parent = hitRow
 local hLbl = Instance.new("TextLabel"); hLbl.Size = UDim2.new(0, 70, 1, 0); hLbl.Position = UDim2.new(0, 10, 0, 0); hLbl.BackgroundTransparency = 1; hLbl.Text = "Hitbox"; hLbl.TextColor3 = COL.text; hLbl.Font = Enum.Font.GothamBold; hLbl.TextSize = 13; hLbl.TextXAlignment = Enum.TextXAlignment.Left; hLbl.Parent = hitRow
 local hVal = Instance.new("TextLabel"); hVal.Size = UDim2.new(0, 50, 1, 0); hVal.Position = UDim2.new(0.5, -25, 0, 0); hVal.BackgroundTransparency = 1; hVal.Text = "10"; hVal.TextColor3 = COL.accentLight; hVal.Font = Enum.Font.GothamBold; hVal.TextSize = 14; hVal.Parent = hitRow
@@ -684,11 +665,11 @@ local killAuraToggle = addToggleRow(combatPage, "Kill Aura", function(enabled)
     if enabled then if not FlingRE or not SpawnerRE then findRemotes() end; if SpawnerRE then pcall(function() SpawnerRE:FireServer() end) end end
 end)
 
--- SHERIFF UI (INTEGRATED INTO COMBAT PAGE)
+-- SHERIFF UI (SINGLE TARGET SYSTEM)
 local sSection = Instance.new("TextLabel")
 sSection.Size = UDim2.new(1, 0, 0, 20)
 sSection.BackgroundTransparency = 1
-sSection.Text = "SHERIFF SNIPER / TARGET KILL"
+sSection.Text = "SHERIFF TARGET KILL"
 sSection.TextColor3 = COL.accentLight
 sSection.Font = Enum.Font.GothamBold
 sSection.TextSize = 10
@@ -741,7 +722,7 @@ sSearch.FocusLost:Connect(function(enterPressed)
 end)
 
 local sheriffToggle
-sheriffToggle = addToggleRow(combatPage, "Enable Auto Sheriff", function(enabled)
+sheriffToggle = addToggleRow(combatPage, "Auto Sheriff (Requires Target)", function(enabled)
     if enabled and not keyVerified then notify("Locked", "Enter key first", 3); sheriffToggle.set(false); return end
     if enabled and not sheriffTarget then notify("Error", "Select a target first!", 2); sheriffToggle.set(false); return end
     
@@ -749,7 +730,6 @@ sheriffToggle = addToggleRow(combatPage, "Enable Auto Sheriff", function(enabled
     if enabled then
         killAuraOn = false
         opGodSpawnOn = false
-        targetLockOn = false
         
         notify("Sheriff Auto", "Spawning & Locking " .. sheriffTarget.Name, 3)
         
@@ -757,111 +737,24 @@ sheriffToggle = addToggleRow(combatPage, "Enable Auto Sheriff", function(enabled
         if not SpawnerRE then findRemotes() end
         if SpawnerRE then pcall(function() SpawnerRE:FireServer() end) end
         
-        -- 2. Wait then Teleport to Arena to bypass lobby check
+        -- 2. Spectate Camera Lock (Attaches camera to target without breaking manual control)
         task.spawn(function()
-            task.wait(1.5)
-            if sheriffActive then
-                teleportToArena(true)
+            task.wait(1.5) -- Wait for spawn
+            if sheriffActive and sheriffTarget.Character then
+                local tHum = sheriffTarget.Character:FindFirstChildOfClass("Humanoid")
+                if tHum then
+                    workspace.CurrentCamera.CameraSubject = tHum
+                end
             end
         end)
     else
-        notify("Sheriff Auto", "Returning to Lobby", 3)
+        notify("Sheriff Auto", "Stopping Sheriff", 3)
+        -- Restore camera back to local player
         local char = lp.Character
         if char then
             local hum = char:FindFirstChildOfClass("Humanoid")
-            if hum then hum.Health = 0 end
+            if hum then workspace.CurrentCamera.CameraSubject = hum end
         end
-    end
-end)
-
--- TARGET LOCK
-local targetFrame = Instance.new("Frame")
-targetFrame.Size = UDim2.new(1, 0, 0, 70)
-targetFrame.BackgroundColor3 = COL.card
-targetFrame.BackgroundTransparency = 0.1
-targetFrame.BorderSizePixel = 0
-targetFrame.Parent = combatPage
-local tfC = Instance.new("UICorner"); tfC.CornerRadius = UDim.new(0, 8); tfC.Parent = targetFrame
-local tfS = Instance.new("UIStroke"); tfS.Color = COL.border; tfS.Thickness = 1; tfS.Transparency = 0.5; tfS.Parent = targetFrame
-
-local targetAvatar = Instance.new("ImageLabel")
-targetAvatar.Size = UDim2.new(0, 50, 0, 50)
-targetAvatar.Position = UDim2.new(0, 10, 0.5, -25)
-targetAvatar.BackgroundColor3 = COL.bg
-targetAvatar.Image = "rbxthumb://type=AvatarHeadShot&id=1&w=150&h=150"
-targetAvatar.Parent = targetFrame
-local taC = Instance.new("UICorner"); taC.CornerRadius = UDim.new(1, 0); taC.Parent = targetAvatar
-local taS = Instance.new("UIStroke"); taS.Color = COL.accent; taS.Thickness = 2; taS.Parent = targetAvatar
-
-local targetUsername = Instance.new("TextLabel")
-targetUsername.Size = UDim2.new(1, -80, 0, 20)
-targetUsername.Position = UDim2.new(0, 70, 0, 15)
-targetUsername.BackgroundTransparency = 1
-targetUsername.Text = "@playername"
-targetUsername.TextColor3 = COL.text
-targetUsername.Font = Enum.Font.GothamBold
-targetUsername.TextSize = 13
-targetUsername.TextXAlignment = Enum.TextXAlignment.Left
-targetUsername.Parent = targetFrame
-
-local targetDisplayName = Instance.new("TextLabel")
-targetDisplayName.Size = UDim2.new(1, -80, 0, 16)
-targetDisplayName.Position = UDim2.new(0, 70, 0, 35)
-targetDisplayName.BackgroundTransparency = 1
-targetDisplayName.Text = "Display Name"
-targetDisplayName.TextColor3 = COL.textDim
-targetDisplayName.Font = Enum.Font.Gotham
-targetDisplayName.TextSize = 11
-targetDisplayName.TextXAlignment = Enum.TextXAlignment.Left
-targetDisplayName.Parent = targetFrame
-
-local searchBox = Instance.new("TextBox")
-searchBox.Size = UDim2.new(1, 0, 0, 36)
-searchBox.BackgroundColor3 = COL.card
-searchBox.BackgroundTransparency = 0.1
-searchBox.BorderSizePixel = 0
-searchBox.PlaceholderText = "Type @name & press Enter (Normal Lock)"
-searchBox.Text = ""
-searchBox.TextColor3 = COL.text
-searchBox.PlaceholderColor3 = COL.textDim
-searchBox.Font = Enum.Font.GothamMedium
-searchBox.TextSize = 13
-searchBox.ClearTextOnFocus = false
-searchBox.Parent = combatPage
-local sbC = Instance.new("UICorner"); sbC.CornerRadius = UDim.new(0, 8); sbC.Parent = searchBox
-local sbS = Instance.new("UIStroke"); sbS.Color = COL.border; sbS.Thickness = 1; sbS.Transparency = 0.5; sbS.Parent = searchBox
-
-local targetLockToggle
-searchBox.FocusLost:Connect(function(enterPressed)
-    if enterPressed then
-        local text = searchBox.Text
-        if #text < 2 then notify("Error", "Name too short.", 2); return end
-        local found = smartFind(text)
-        if found then
-            target = found; targetName = found.Name
-            searchBox.Text = "@" .. found.Name
-            targetUsername.Text = "@" .. found.Name
-            targetDisplayName.Text = found.DisplayName
-            targetAvatar.Image = "rbxthumb://type=AvatarHeadShot&id=" .. found.UserId .. "&w=150&h=150"
-            notify("Target Found", found.Name, 2)
-        else
-            notify("Not Found", "No player exists with that name.", 3)
-        end
-    end
-end)
-
-targetLockToggle = addToggleRow(combatPage, "Enable Target Lock (Normal)", function(enabled)
-    if enabled and not keyVerified then notify("Locked", "Enter key first", 3); targetLockToggle.set(false); return end
-    if enabled and (targetName == "" or not targetName) then notify("Error", "Type a name first!", 2); targetLockToggle.set(false); return end
-    targetLockOn = enabled
-    if not enabled then
-        local char = lp.Character
-        if char then
-            local hrp = char:FindFirstChild("HumanoidRootPart")
-            if hrp then hrp.AssemblyLinearVelocity = Vector3.zero; hrp.AssemblyAngularVelocity = Vector3.zero end
-        end
-    else
-        if not target then notify("Waiting", "Waiting for " .. targetName .. " to join...", 3) end
     end
 end)
 
@@ -1064,22 +957,22 @@ RunService.RenderStepped:Connect(function()
         return
     end
 
-    -- Lock Camera to target head
-    local tHead = sheriffTarget.Character:FindFirstChild("Head")
-    if tHead then
-        workspace.CurrentCamera.CFrame = CFrame.new(workspace.CurrentCamera.CFrame.Position, tHead.Position)
-    end
+    -- Camera is ALREADY attached via CameraSubject in the toggle. No forced CFrame lock.
 
     -- Auto fire
-    pcall(function()
-        tool:Activate()
-        if getconnections then
-            local conns = getconnections(tool.Activated)
-            if conns then
-                for _, c in ipairs(conns) do c:Fire() end
+    local now = tick()
+    if now - lastSheriffShot > 0.3 then -- Shoot every 0.3s
+        lastSheriffShot = now
+        pcall(function()
+            tool:Activate()
+            if getconnections then
+                local conns = getconnections(tool.Activated)
+                if conns then
+                    for _, c in ipairs(conns) do c:Fire() end
+                end
             end
-        end
-    end)
+        end)
+    end
 end)
 
 -- ═══════════ LOOPS ═══════════
@@ -1130,19 +1023,6 @@ RunService.Heartbeat:Connect(function()
         end
     end
     if nearest then pcall(function() FlingRE:FireServer(nearest) end) end
-end)
-
-RunService.Heartbeat:Connect(function()
-    if not targetLockOn or invisibleEnabled then return end
-    if not target then
-        local found = Players:FindFirstChild(targetName)
-        if found then target = found end
-    end
-    if target and target.Character then
-        local tRoot = target.Character:FindFirstChild("HumanoidRootPart")
-        local myRoot = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
-        if tRoot and myRoot then myRoot.CFrame = tRoot.CFrame * CFrame.new(0, 2, 3) end
-    end
 end)
 
 RunService.Heartbeat:Connect(function()
@@ -1200,5 +1080,5 @@ UserInputService.JumpRequest:Connect(function()
     end
 end)
 
-print("Undocall's Hub v41 loaded. Sheriff integrated into Combat tab.")
+print("Undocall's Hub v42 loaded. Sheriff camera fixed.")
 print("Discord: " .. KEY_LINK)
