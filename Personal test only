@@ -10,7 +10,6 @@ local Lighting = game:GetService("Lighting")
 local lp = Players.LocalPlayer
 while not lp do task.wait() lp = Players.LocalPlayer end
 
--- ═══════════ ARENA CONFIG ═══════════
 local ARENA_POS      = Vector3.new(-760, 11.5, 2040)
 local ARENA_TELEPORT = Vector3.new(-760, 14, 2040)
 local LOBBY_MAX_Z    = 100
@@ -44,7 +43,6 @@ local function notify(title, text, duration, icon)
     end)
 end
 
--- Find remotes
 local FlingRE = nil
 local SpawnerRE = nil
 
@@ -58,7 +56,6 @@ local function findRemotes()
 end
 findRemotes()
 
--- ═══════════ KEY SYSTEM ═══════════
 local KEY_LINK = "https://discord.gg/AUqu8YvHRw"
 local VALID_KEYS = { "UNDC-7KPX-9M2Q" }
 local KEY_FILE = "undocalls_key.txt"
@@ -78,7 +75,6 @@ pcall(function()
     end
 end)
 
--- ═══════════ STATE ═══════════
 local hitboxSize = 10
 local hitboxTransparency = 0.9
 local hitboxEnabled = false
@@ -98,7 +94,6 @@ local spawningDebounce = false
 getgenv().superPowerEnabled = false
 getgenv().infiniteJumpEnabled = false
 
--- ═══════════ HUMANOID STATE HELPERS ═══════════
 local ALL_STATES = {
     Enum.HumanoidStateType.Climbing, Enum.HumanoidStateType.FallingDown,
     Enum.HumanoidStateType.Flying, Enum.HumanoidStateType.Freefall,
@@ -120,7 +115,6 @@ local function enableAllHumanoidStates(hum)
     for _, s in ipairs(ALL_STATES) do pcall(function() hum:SetStateEnabled(s, true) end) end
 end
 
--- ═══════════ POTATO GRAPHICS ═══════════
 local function applyPotatoGraphics()
     pcall(function()
         Lighting.GlobalShadows = false
@@ -152,7 +146,6 @@ local function applyPotatoGraphics()
     notify("AntiLag", "Potato mode ON · " .. killed .. " effects off", 3)
 end
 
--- ═══════════ INVISIBLE ═══════════
 local invisibleEnabled = false
 local invisibleParts = {}
 local invisibleConnection = nil
@@ -206,11 +199,22 @@ local function stopInvisible()
     end
 end
 
--- ═══════════ FLY V3 ═══════════
 local flyV3Active = false
 local flyV3Speed = 1
 local flyV3UpHeld = false
 local flyV3DownHeld = false
+
+local function stopFlyV3()
+    flyV3Active = false
+    local char = lp.Character
+    if not char then return end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if hum then
+        enableAllHumanoidStates(hum)
+        pcall(function() hum:ChangeState(Enum.HumanoidStateType.RunningNoPhysics); hum.PlatformStand = false end)
+    end
+    pcall(function() if char:FindFirstChild("Animate") then char.Animate.Disabled = false end end)
+end
 
 local function startFlyV3()
     if flyV3Active then return end
@@ -218,7 +222,6 @@ local function startFlyV3()
     if not char then return end
     local hum = char:FindFirstChildOfClass("Humanoid")
     if not hum then return end
-
     if invisibleEnabled then stopInvisible() end
     flyV3Active = true
     disableAllHumanoidStates(hum)
@@ -227,7 +230,6 @@ local function startFlyV3()
         if char:FindFirstChild("Animate") then char.Animate.Disabled = true end
         for _, v in ipairs(hum:GetPlayingAnimationTracks()) do v:AdjustSpeed(0) end
     end)
-
     for i = 1, flyV3Speed do
         task.spawn(function()
             local hb = RunService.Heartbeat
@@ -241,18 +243,15 @@ local function startFlyV3()
             end
         end)
     end
-
     task.spawn(function()
         local isR6 = (hum.RigType == Enum.HumanoidRigType.R6)
         local torso = isR6 and char:FindFirstChild("Torso") or char:FindFirstChild("UpperTorso")
         if not torso then flyV3Active = false return end
-
         local bg = Instance.new("BodyGyro", torso)
         bg.P = 9e4; bg.MaxTorque = Vector3.new(9e9, 9e9, 9e9); bg.CFrame = torso.CFrame
         local bv = Instance.new("BodyVelocity", torso)
         bv.Velocity = Vector3.new(0, 0.1, 0); bv.MaxForce = Vector3.new(9e9, 9e9, 9e9)
         hum.PlatformStand = true
-
         while flyV3Active do
             RunService.RenderStepped:Wait()
             local c = lp.Character
@@ -270,19 +269,6 @@ local function startFlyV3()
     end)
 end
 
-local function stopFlyV3()
-    flyV3Active = false
-    local char = lp.Character
-    if not char then return end
-    local hum = char:FindFirstChildOfClass("Humanoid")
-    if hum then
-        enableAllHumanoidStates(hum)
-        pcall(function() hum:ChangeState(Enum.HumanoidStateType.RunningNoPhysics); hum.PlatformStand = false end)
-    end
-    pcall(function() if char:FindFirstChild("Animate") then char.Animate.Disabled = false end end)
-end
-
--- ═══════════ HITBOX & UTILS ═══════════
 local function applyHitbox(character)
     if not character then return end
     local player = Players:GetPlayerFromCharacter(character)
@@ -342,7 +328,6 @@ end
 for _, player in ipairs(Players:GetPlayers()) do trackPlayer(player) end
 Players.PlayerAdded:Connect(trackPlayer)
 
--- ═══════════ SMART SEARCH ═══════════
 local function smartFind(input)
     if not input or #input < 1 then return nil end
     input = input:lower():gsub("@", "")
@@ -360,7 +345,6 @@ local function smartFind(input)
     return nil
 end
 
--- ═══════════ MOUNT STRIP & TELEPORT ═══════════
 local function stripMount(character)
     if not character then return end
     for _, d in ipairs(character:GetDescendants()) do
@@ -384,23 +368,20 @@ local function teleportToArena(force)
     if not hrp or not hum then return false, "no root" end
     if hum.Health <= 0 then return false, "dead" end
     if not force and hrp.Position.Z < LOBBY_MAX_Z then return false, "in lobby" end
-
     pcall(function() hum.Sit = false; hum.SeatPart = nil; hum.PlatformStand = false end)
     stripMount(char)
     task.wait(0.1)
-
     pcall(function()
         hrp.Anchored = true; hrp.CFrame = CFrame.new(ARENA_TELEPORT)
         hrp.AssemblyLinearVelocity = Vector3.zero; hrp.AssemblyAngularVelocity = Vector3.zero
     end)
     task.wait(0.15)
     pcall(function() hrp.Anchored = false; hrp.CFrame = CFrame.new(ARENA_TELEPORT) end)
-
-    task.spawn(function() for i = 1, 20 do task.wait(0.05) stripMount(char) end end)
+    task.spawn(function() for i = 1, 20 do task.wait(0.05); stripMount(char) end end)
     return true, "ok"
 end
 
--- ═══════════ PREMIUM GUI ═══════════
+-- ═══════════ GUI ═══════════
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "UndocallsHub"
 ScreenGui.ResetOnSpawn = false
@@ -409,10 +390,10 @@ pcall(function() ScreenGui.Parent = CoreGui end)
 if not ScreenGui.Parent then ScreenGui.Parent = lp:WaitForChild("PlayerGui") end
 
 local COL = {
-    bg = Color3.fromRGB(30, 25, 40), card = Color3.fromRGB(50, 45, 65), 
+    bg = Color3.fromRGB(30, 25, 40), card = Color3.fromRGB(50, 45, 65),
     accent = Color3.fromRGB(123, 47, 190), accentLight = Color3.fromRGB(180, 120, 255),
     text = Color3.fromRGB(255, 255, 255), textDim = Color3.fromRGB(240, 240, 250),
-    border = Color3.fromRGB(100, 85, 130), btnBg = Color3.fromRGB(60, 50, 80), 
+    border = Color3.fromRGB(100, 85, 130), btnBg = Color3.fromRGB(60, 50, 80),
     sidebar = Color3.fromRGB(35, 30, 45), sidebarItem = Color3.fromRGB(60, 50, 80),
     red = Color3.fromRGB(255, 75, 75), green = Color3.fromRGB(75, 255, 75)
 }
@@ -431,7 +412,6 @@ local mpS = Instance.new("UIStroke"); mpS.Color = COL.border; mpS.Thickness = 2;
 local mpC = Instance.new("UICorner"); mpC.CornerRadius = UDim.new(0, 12); mpC.Parent = mainPanel
 local panelScale = Instance.new("UIScale"); panelScale.Scale = 1; panelScale.Parent = mainPanel
 
--- Header
 local header = Instance.new("Frame")
 header.Size = UDim2.new(1, 0, 0, 50)
 header.BackgroundColor3 = COL.sidebar
@@ -453,7 +433,6 @@ closeBtn.Text = "X"; closeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 closeBtn.Font = Enum.Font.GothamBold; closeBtn.TextSize = 12; closeBtn.Parent = header
 local cbC = Instance.new("UICorner"); cbC.CornerRadius = UDim.new(0, 6); cbC.Parent = closeBtn
 
--- Reopen Button
 local reopenBtn = Instance.new("TextButton")
 reopenBtn.Size = UDim2.new(0, 40, 0, 40); reopenBtn.Position = UDim2.new(0.5, -20, 0.5, -20)
 reopenBtn.BackgroundColor3 = COL.accent; reopenBtn.BackgroundTransparency = 0.85
@@ -488,7 +467,6 @@ end
 closeBtn.MouseButton1Click:Connect(closePanel)
 reopenBtn.MouseButton1Click:Connect(openPanel)
 
--- Sidebar
 local sidebar = Instance.new("Frame")
 sidebar.Size = UDim2.new(0, 110, 1, -50); sidebar.Position = UDim2.new(0, 0, 0, 50)
 sidebar.BackgroundColor3 = COL.sidebar; sidebar.BackgroundTransparency = 0.2; sidebar.BorderSizePixel = 0; sidebar.Parent = mainPanel
@@ -538,18 +516,15 @@ local function addToggleRow(page, name, callback)
     row.Size = UDim2.new(1, 0, 0, 40); row.BackgroundColor3 = COL.card; row.BackgroundTransparency = 0.1; row.BorderSizePixel = 0; row.Parent = page
     local rc = Instance.new("UICorner"); rc.CornerRadius = UDim.new(0, 8); rc.Parent = row
     local rowStroke = Instance.new("UIStroke"); rowStroke.Color = COL.border; rowStroke.Thickness = 1; rowStroke.Transparency = 0.5; rowStroke.Parent = row
-
     local label = Instance.new("TextLabel")
     label.Size = UDim2.new(1, -58, 1, 0); label.Position = UDim2.new(0, 10, 0, 0)
     label.BackgroundTransparency = 1; label.Text = name; label.TextColor3 = COL.text; label.Font = Enum.Font.GothamBold; label.TextSize = 13; label.TextXAlignment = Enum.TextXAlignment.Left; label.Parent = row
-    
     local switchBg = Instance.new("Frame")
     switchBg.Size = UDim2.new(0, 36, 0, 19); switchBg.Position = UDim2.new(1, -46, 0.5, -9); switchBg.BackgroundColor3 = Color3.fromRGB(50, 40, 70); switchBg.BorderSizePixel = 0; switchBg.Parent = row
     local sc = Instance.new("UICorner"); sc.CornerRadius = UDim.new(1, 0); sc.Parent = switchBg
     local knob = Instance.new("Frame")
     knob.Size = UDim2.new(0, 13, 0, 13); knob.Position = UDim2.new(0, 3, 0.5, -6); knob.BackgroundColor3 = COL.textDim; knob.BorderSizePixel = 0; knob.Parent = switchBg
     local kc = Instance.new("UICorner"); kc.CornerRadius = UDim.new(1, 0); kc.Parent = knob
-    
     local isOn = false
     local function updateVisual()
         if isOn then
@@ -562,12 +537,10 @@ local function addToggleRow(page, name, callback)
             TweenService:Create(rowStroke, TweenInfo.new(0.15), {Color = COL.border, Transparency = 0.5}):Play()
         end
     end
-    
     local tBtn = Instance.new("TextButton"); tBtn.Size = UDim2.new(1, 0, 1, 0); tBtn.BackgroundTransparency = 1; tBtn.Text = ""; tBtn.Parent = row
     tBtn.MouseButton1Down:Connect(function() TweenService:Create(row, TweenInfo.new(0.1), {Size = UDim2.new(0.98, 0, 0, 38)}):Play() end)
     tBtn.MouseButton1Up:Connect(function() TweenService:Create(row, TweenInfo.new(0.1, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Size = UDim2.new(1, 0, 0, 40)}):Play() end)
     tBtn.MouseLeave:Connect(function() TweenService:Create(row, TweenInfo.new(0.1, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Size = UDim2.new(1, 0, 0, 40)}):Play() end)
-    
     tBtn.MouseButton1Click:Connect(function()
         isOn = not isOn; updateVisual(); playSound("rbxassetid://12221976")
         if callback then callback(isOn) end
@@ -586,9 +559,7 @@ local function addButtonRow(page, name, callback)
     btn.MouseButton1Click:Connect(function() playSound("rbxassetid://12221976"); if callback then callback() end end)
 end
 
--- ═══════════ BUILD PAGES ═══════════
-
--- KEY
+-- ═══════════ PAGES ═══════════
 local keyPage = addPage("Key")
 local keyInput = Instance.new("TextBox")
 keyInput.Size = UDim2.new(1, 0, 0, 40); keyInput.BackgroundColor3 = COL.card; keyInput.BackgroundTransparency = 0.1; keyInput.BorderSizePixel = 0
@@ -621,7 +592,6 @@ keyInput.FocusLost:Connect(function(enterPressed)
     end
 end)
 
--- MAIN
 local mainPage = addPage("Main")
 local hitRow = Instance.new("Frame"); hitRow.Size = UDim2.new(1, 0, 0, 40); hitRow.BackgroundColor3 = COL.card; hitRow.BackgroundTransparency = 0.1; hitRow.Parent = mainPage
 local hrc = Instance.new("UICorner"); hrc.CornerRadius = UDim.new(0, 8); hrc.Parent = hitRow
@@ -637,7 +607,6 @@ hMinus.MouseButton1Click:Connect(function() hitboxSize = math.clamp(hitboxSize -
 addToggleRow(mainPage, "Enable Hitbox", function(enabled) toggleHitboxes(enabled) end)
 addToggleRow(mainPage, "Invisible (Backup)", function(enabled) if enabled then startInvisible() else stopInvisible() end end)
 
--- COMBAT
 local combatPage = addPage("Combat")
 
 local opGodSpawnToggle = addToggleRow(combatPage, "OP God Spawn", function(enabled)
@@ -654,10 +623,12 @@ end)
 local killAuraToggle = addToggleRow(combatPage, "Kill Aura", function(enabled)
     if enabled and not keyVerified then notify("Locked", "Enter key first", 3); killAuraToggle.set(false); return end
     killAuraOn = enabled
-    if enabled then if not FlingRE or not SpawnerRE then findRemotes() end; if SpawnerRE then pcall(function() SpawnerRE:FireServer() end) end end
+    if enabled then
+        if not FlingRE or not SpawnerRE then findRemotes() end
+        if SpawnerRE then pcall(function() SpawnerRE:FireServer() end) end
+    end
 end)
 
--- DYNAMIC TARGET PLAYER CARD
 local targetFrame = Instance.new("Frame")
 targetFrame.Size = UDim2.new(1, 0, 0, 70)
 targetFrame.BackgroundColor3 = COL.card
@@ -752,13 +723,11 @@ local sheriffToggle
 sheriffToggle = addToggleRow(combatPage, "Auto Sheriff Sniper", function(enabled)
     if enabled and not keyVerified then notify("Locked", "Enter key first", 3); sheriffToggle.set(false); return end
     if enabled and not target then notify("Error", "Select a target first!", 2); sheriffToggle.set(false); return end
-    
     sheriffActive = enabled
     if enabled then
         killAuraOn = false
         opGodSpawnOn = false
         targetLockOn = false
-        
         notify("Sheriff Auto", "Spawning & Locking " .. target.Name, 3)
         if not SpawnerRE then findRemotes() end
         if SpawnerRE then pcall(function() SpawnerRE:FireServer() end) end
@@ -768,7 +737,6 @@ sheriffToggle = addToggleRow(combatPage, "Auto Sheriff Sniper", function(enabled
     end
 end)
 
--- MOVEMENT
 local movePage = addPage("Movement")
 addToggleRow(movePage, "Fly V3", function(enabled) if enabled then startFlyV3() else stopFlyV3() end end)
 local fSpeedRow = Instance.new("Frame"); fSpeedRow.Size = UDim2.new(1, 0, 0, 40); fSpeedRow.BackgroundColor3 = COL.card; fSpeedRow.BackgroundTransparency = 0.1; fSpeedRow.Parent = movePage
@@ -805,7 +773,6 @@ UserInputService.InputEnded:Connect(function(input) if input.UserInputType == En
 addToggleRow(movePage, "Super Power", function(enabled) getgenv().superPowerEnabled = enabled; if not enabled then local char = lp.Character; local hum = char and char:FindFirstChildOfClass("Humanoid"); if hum then hum.WalkSpeed = 16; hum.JumpPower = 50 end end end)
 addToggleRow(movePage, "Infinite Jump", function(enabled) getgenv().infiniteJumpEnabled = enabled end)
 
--- MISC
 local miscPage = addPage("Misc")
 addButtonRow(miscPage, "AntiLag (Potato Graphics)", function() applyPotatoGraphics() end)
 addButtonRow(miscPage, "AntiKick", function() loadstring(game:HttpGet("https://raw.githubusercontent.com/OBFhm5650lol/AntickLol/refs/heads/main/Anticklol"))() end)
@@ -818,12 +785,12 @@ sideBtns["Main"].btn.Font = Enum.Font.GothamBold
 sideBtns["Main"].stroke.Color = COL.accentLight
 sideBtns["Main"].stroke.Transparency = 0
 
--- ═══════════ STANDALONE TOGGLES (v36 Exact) ═══════════
+-- ═══════════ STANDALONE PILLS ═══════════
 local StandaloneGui = Instance.new("ScreenGui")
 StandaloneGui.Name = "Standalone_Toggles"
 StandaloneGui.ResetOnSpawn = false
 StandaloneGui.DisplayOrder = 999
-StandaloneGui.IgnoreGuiInset = true 
+StandaloneGui.IgnoreGuiInset = true
 pcall(function() StandaloneGui.Parent = CoreGui end)
 if not StandaloneGui.Parent then StandaloneGui.Parent = lp:WaitForChild("PlayerGui") end
 
@@ -899,7 +866,6 @@ end
 aFlingBtn.MouseButton1Click:Connect(function() toggleAntiFling(not noFallEnabled) end)
 
 local invisBtn, invisStroke, invisText, invisDot = createPill("Invisible", "👻", UDim2.new(0, 64, 0, 253))
-
 invisBtn.MouseButton1Click:Connect(function()
     if invisibleEnabled then
         stopInvisible()
@@ -916,7 +882,6 @@ invisBtn.MouseButton1Click:Connect(function()
     end
 end)
 
--- First open animation
 task.defer(function()
     task.wait(0.2)
     reopenBtn.Visible = false
@@ -925,7 +890,6 @@ task.defer(function()
     TweenService:Create(panelScale, TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Scale = 1}):Play()
 end)
 
--- Drag Logic
 local dragging, dragStart, startPos
 header.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
@@ -942,47 +906,59 @@ UserInputService.InputChanged:Connect(function(input)
     end
 end)
 
--- ═══════════ SHERIFF INFINITE SPAM ═══════════
+-- ═══════════ FIXED SHERIFF LOOP ═══════════
 task.spawn(function()
     while task.wait(0.15) do
-        if sheriffActive and target then
-            local char = lp.Character
-            if not char then continue end
-            
-            local hum = char:FindFirstChildOfClass("Humanoid")
-            if not hum or hum.Health <= 0 then continue end
+        if not sheriffActive or not target then continue end
 
-            -- Equip gun
-            local tool = char:FindFirstChildOfClass("Tool")
-            if not tool or not (tool.Name:lower():find("gun") or tool.Name:lower():find("sheriff") or tool.Name:lower():find("shotgun")) then
-                local bp = lp:FindFirstChild("Backpack")
-                if bp then
-                    local gun = bp:FindFirstChild("Shotgun") or bp:FindFirstChild("Gun") or bp:FindFirstChild("Sheriff")
-                    if gun then hum:EquipTool(gun) end
-                end
-                continue
+        local char = lp.Character
+        if not char then continue end
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        if not hum or hum.Health <= 0 then continue end
+
+        -- teleport on top of target every tick
+        local tChar = target.Character
+        if tChar then
+            local tHRP = tChar:FindFirstChild("HumanoidRootPart")
+            local myHRP = char:FindFirstChild("HumanoidRootPart")
+            if tHRP and myHRP then
+                myHRP.CFrame = tHRP.CFrame * CFrame.new(0, 3, 0)
             end
-
-            -- Force Camera to look at target (Silent Aim)
-            if target.Character and target.Character:FindFirstChild("Head") then
-                workspace.CurrentCamera.CFrame = CFrame.new(workspace.CurrentCamera.CFrame.Position, target.Character.Head.Position)
-            end
-
-            -- Shoot
-            pcall(function()
-                tool:Activate()
-                if getconnections then
-                    local conns = getconnections(tool.Activated)
-                    if conns then
-                        for _, c in ipairs(conns) do c:Fire() end
-                    end
-                end
-            end)
         end
+
+        -- FIX 1: find shotgun by exact name
+        local tool = char:FindFirstChild("Shotgun")
+
+        -- FIX 2: check backpack too
+        if not tool then
+            local bp = lp:FindFirstChild("Backpack")
+            if bp then tool = bp:FindFirstChild("Shotgun") end
+        end
+
+        -- FIX 3: equip if in backpack then wait before firing
+        if tool and tool.Parent == lp.Backpack then
+            hum:EquipTool(tool)
+            task.wait(0.2)
+            -- re-fetch from char after equip
+            tool = char:FindFirstChild("Shotgun")
+        end
+
+        if not tool then continue end
+
+        -- aim camera at target head
+        if tChar and tChar:FindFirstChild("Head") then
+            workspace.CurrentCamera.CFrame = CFrame.new(
+                workspace.CurrentCamera.CFrame.Position,
+                tChar.Head.Position
+            )
+        end
+
+        -- fire
+        pcall(function() tool:Activate() end)
     end
 end)
 
--- ═══════════ LOOPS ═══════════
+-- ═══════════ FIXED KILL AURA LOOP ═══════════
 RunService.Heartbeat:Connect(function()
     if not killAuraOn or not keyVerified or not FlingRE then return end
     local now = tick()
@@ -1001,9 +977,11 @@ RunService.Heartbeat:Connect(function()
             end
         end
     end
-    if nearest then pcall(function() FlingRE:FireServer(nearest) end) end
+    -- FIX: send Name string not instance
+    if nearest then pcall(function() FlingRE:FireServer(nearest.Name) end) end
 end)
 
+-- ═══════════ OP GOD SPAWN LOOP ═══════════
 RunService.Heartbeat:Connect(function()
     if not opGodSpawnOn or not keyVerified or not FlingRE then return end
     local char = lp.Character
@@ -1029,9 +1007,11 @@ RunService.Heartbeat:Connect(function()
             end
         end
     end
-    if nearest then pcall(function() FlingRE:FireServer(nearest) end) end
+    -- FIX: send Name string not instance
+    if nearest then pcall(function() FlingRE:FireServer(nearest.Name) end) end
 end)
 
+-- ═══════════ TARGET LOCK LOOP ═══════════
 RunService.Heartbeat:Connect(function()
     if not targetLockOn or invisibleEnabled then return end
     if not target then
@@ -1045,6 +1025,7 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
+-- ═══════════ SUPER POWER + HITBOX LOOP ═══════════
 RunService.Heartbeat:Connect(function()
     local char = lp.Character
     if not char then return end
@@ -1062,6 +1043,7 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
+-- ═══════════ CHARACTER RESPAWN ═══════════
 lp.CharacterAdded:Connect(function(char)
     task.wait(0.7)
     pcall(function()
@@ -1091,6 +1073,14 @@ lp.CharacterAdded:Connect(function(char)
     if opGodSpawnOn then
         task.spawn(function() task.wait(1); teleportToArena(true); for i = 1, 60 do task.wait(0.05); stripMount(char) end end)
     end
+    -- re-fire spawner if sheriff was active
+    if sheriffActive then
+        task.spawn(function()
+            task.wait(1)
+            if not SpawnerRE then findRemotes() end
+            if SpawnerRE then pcall(function() SpawnerRE:FireServer() end) end
+        end)
+    end
 end)
 
 UserInputService.JumpRequest:Connect(function()
@@ -1100,5 +1090,5 @@ UserInputService.JumpRequest:Connect(function()
     end
 end)
 
-print("Undocall's Hub v45 loaded. Infinite Sheriff Spam active.")
+print("Undocall's Hub v45 loaded.")
 print("Discord: " .. KEY_LINK)
