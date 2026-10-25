@@ -1,6 +1,6 @@
--- ═══════════ UNODOCALL'S HUB — FINAL v36 (PERFECT POSITIONS) ═══════════
+-- ═══════════ UNODOCALL'S HUB — FINAL v40 (AUTO SHERIFF) ═══════════
 -- Arena: (-760, 11.5, 2040)
--- Fixed 36px Inset bug so buttons match the Positioner Tool exactly.
+-- v36 Base + Target-Only Auto Sheriff
 
 local StarterGui = game:GetService("StarterGui")
 local Players = game:GetService("Players")
@@ -551,7 +551,7 @@ local hC = Instance.new("UICorner"); hC.CornerRadius = UDim.new(0, 12); hC.Paren
 
 local hTitle = Instance.new("TextLabel")
 hTitle.Size = UDim2.new(0, 300, 1, 0); hTitle.Position = UDim2.new(0, 14, 0, 0)
-hTitle.BackgroundTransparency = 1; hTitle.Text = "Undocall's Hub (v36)"
+hTitle.BackgroundTransparency = 1; hTitle.Text = "Undocall's Hub (v40)"
 hTitle.TextColor3 = COL.text; hTitle.Font = Enum.Font.GothamBold; hTitle.TextSize = 16; hTitle.TextXAlignment = Enum.TextXAlignment.Left; hTitle.Parent = header
 
 local closeBtn = Instance.new("TextButton")
@@ -926,12 +926,12 @@ sideBtns["Main"].btn.Font = Enum.Font.GothamBold
 sideBtns["Main"].stroke.Color = COL.accentLight
 sideBtns["Main"].stroke.Transparency = 0
 
--- ═══════════ PREMIUM STANDALONE TOGGLES ═══════════
+-- ═══════════ PREMIUM STANDALONE TOGGLES (v36 Exact) ═══════════
 local StandaloneGui = Instance.new("ScreenGui")
 StandaloneGui.Name = "Standalone_Toggles"
 StandaloneGui.ResetOnSpawn = false
 StandaloneGui.DisplayOrder = 999
-StandaloneGui.IgnoreGuiInset = true -- FIXED: PREVENTS 36px SHIFT
+StandaloneGui.IgnoreGuiInset = true 
 pcall(function() StandaloneGui.Parent = CoreGui end)
 if not StandaloneGui.Parent then StandaloneGui.Parent = lp:WaitForChild("PlayerGui") end
 
@@ -992,7 +992,6 @@ local function createPill(name, icon, pos)
     return btn, stroke, textLbl, dot
 end
 
--- EXACT POSITIONS APPLIED HERE
 local aFlingBtn, aFlingStroke, aFlingText, aFlingDot = createPill("A-Fling", "🛡️", UDim2.new(0, 65, 0, 203))
 local noFallEnabled = false
 local noFallConnection
@@ -1049,7 +1048,6 @@ end
 
 aFlingBtn.MouseButton1Click:Connect(function() toggleAntiFling(not noFallEnabled) end)
 
--- EXACT POSITIONS APPLIED HERE
 local invisBtn, invisStroke, invisText, invisDot = createPill("Invisible", "👻", UDim2.new(0, 64, 0, 253))
 
 invisBtn.MouseButton1Click:Connect(function()
@@ -1066,6 +1064,197 @@ invisBtn.MouseButton1Click:Connect(function()
         TweenService:Create(invisStroke, TweenInfo.new(0.2), {Color = COL.green}):Play()
         notify("Invisible", "ON", 2)
     end
+end)
+
+-- ═══════════ TARGET-ONLY AUTO SHERIFF GUI ═══════════
+local sheriffGui = Instance.new("ScreenGui")
+sheriffGui.Name = "AutoSheriffGui"
+sheriffGui.ResetOnSpawn = false
+sheriffGui.DisplayOrder = 9999
+sheriffGui.IgnoreGuiInset = true
+pcall(function() sheriffGui.Parent = CoreGui end)
+if not sheriffGui.Parent then sheriffGui.Parent = lp:WaitForChild("PlayerGui") end
+
+local sFrame = Instance.new("Frame")
+sFrame.Size = UDim2.new(0, 220, 0, 175)
+sFrame.Position = UDim2.new(0, 20, 0.4, -100) -- Placed above the other buttons
+sFrame.BackgroundColor3 = Color3.fromRGB(15, 12, 22)
+sFrame.BorderSizePixel = 0
+sFrame.Active = true
+sFrame.Parent = sheriffGui
+local sfc = Instance.new("UICorner"); sfc.CornerRadius = UDim.new(0, 8); sfc.Parent = sFrame
+local sfs = Instance.new("UIStroke"); sfs.Color = Color3.fromRGB(255, 200, 100); sfs.Thickness = 2; sfs.Parent = sFrame
+
+local sDrag, sDragStart, sStartPos
+sFrame.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        sDrag = true; sDragStart = input.Position; sStartPos = sFrame.Position
+    end
+end)
+sFrame.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then sDrag = false end
+end)
+UserInputService.InputChanged:Connect(function(input)
+    if sDrag and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+        local delta = input.Position - sDragStart
+        sFrame.Position = UDim2.new(sStartPos.X.Scale, sStartPos.X.Offset + delta.X, sStartPos.Y.Scale, sStartPos.Y.Offset + delta.Y)
+    end
+end)
+
+local sTitle = Instance.new("TextLabel")
+sTitle.Size = UDim2.new(1, 0, 0, 25)
+sTitle.BackgroundColor3 = Color3.fromRGB(40, 30, 20)
+sTitle.Text = "🤠 TARGET SHERIFF KILLER"
+sTitle.TextColor3 = Color3.fromRGB(255, 200, 100)
+sTitle.Font = Enum.Font.GothamBold
+sTitle.TextSize = 11
+sTitle.Parent = sFrame
+local stc = Instance.new("UICorner"); stc.CornerRadius = UDim.new(0, 8); stc.Parent = sTitle
+
+local sSearch = Instance.new("TextBox")
+sSearch.Size = UDim2.new(1, -20, 0, 30)
+sSearch.Position = UDim2.new(0, 10, 0, 35)
+sSearch.BackgroundColor3 = Color3.fromRGB(30, 25, 44)
+sSearch.BorderSizePixel = 0
+sSearch.PlaceholderText = "Lock Target (@name)"
+sSearch.Text = ""
+sSearch.TextColor3 = Color3.fromRGB(255, 255, 255)
+sSearch.Font = Enum.Font.GothamMedium
+sSearch.TextSize = 12
+sSearch.Parent = sFrame
+local ssc = Instance.new("UICorner"); ssc.CornerRadius = UDim.new(0, 6); ssc.Parent = sSearch
+
+local sTargetLbl = Instance.new("TextLabel")
+sTargetLbl.Size = UDim2.new(1, -20, 0, 16)
+sTargetLbl.Position = UDim2.new(0, 10, 0, 70)
+sTargetLbl.BackgroundTransparency = 1
+sTargetLbl.Text = "No target locked"
+sTargetLbl.TextColor3 = Color3.fromRGB(200, 200, 200)
+sTargetLbl.Font = Enum.Font.GothamBold
+sTargetLbl.TextSize = 11
+sTargetLbl.TextXAlignment = Enum.TextXAlignment.Left
+sTargetLbl.Parent = sFrame
+
+local sToggleBtn = Instance.new("TextButton")
+sToggleBtn.Size = UDim2.new(1, -20, 0, 36)
+sToggleBtn.Position = UDim2.new(0, 10, 0, 95)
+sToggleBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+sToggleBtn.Text = "AUTO KILL: OFF"
+sToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+sToggleBtn.Font = Enum.Font.GothamBold
+sToggleBtn.TextSize = 13
+sToggleBtn.Parent = sFrame
+local stbc = Instance.new("UICorner"); stbc.CornerRadius = UDim.new(0, 6); stbc.Parent = sToggleBtn
+
+local sNote = Instance.new("TextLabel")
+sNote.Size = UDim2.new(1, -20, 0, 14)
+sNote.Position = UDim2.new(0, 10, 0, 140)
+sNote.BackgroundTransparency = 1
+sNote.Text = "* Auto-spawns ONLY if target is valid"
+sNote.TextColor3 = Color3.fromRGB(150, 150, 150)
+sNote.Font = Enum.Font.Gotham
+sNote.TextSize = 9
+sNote.TextXAlignment = Enum.TextXAlignment.Left
+sNote.Parent = sFrame
+
+local sheriffTarget = nil
+local sheriffActive = false
+
+sSearch.FocusLost:Connect(function(enterPressed)
+    if enterPressed then
+        local text = sSearch.Text:lower():gsub("@", "")
+        if #text > 0 then
+            for _, p in ipairs(Players:GetPlayers()) do
+                if p.Name:lower() == text or p.DisplayName:lower() == text then
+                    sheriffTarget = p
+                    sSearch.Text = "@" .. p.Name
+                    sTargetLbl.Text = "Target: " .. p.Name
+                    sTargetLbl.TextColor3 = Color3.fromRGB(100, 255, 100)
+                    return
+                end
+            end
+            sTargetLbl.Text = "Player not found"
+            sTargetLbl.TextColor3 = Color3.fromRGB(255, 75, 75)
+        end
+    end
+end)
+
+sToggleBtn.MouseButton1Click:Connect(function()
+    if not sheriffTarget then
+        notify("Error", "You must lock a target first!", 2)
+        return
+    end
+    
+    sheriffActive = not sheriffActive
+    if sheriffActive then
+        -- TURN OFF ALL OTHER HACKS TO PREVENT BANS
+        killAuraOn = false
+        opGodSpawnOn = false
+        targetLockOn = false
+        
+        sToggleBtn.Text = "AUTO KILL: ON"
+        sToggleBtn.BackgroundColor3 = Color3.fromRGB(50, 200, 50)
+        notify("Target Sheriff", "Spawning & Auto-Shooting " .. sheriffTarget.Name, 3)
+        
+        -- Auto Spawn
+        if not SpawnerRE then findRemotes() end
+        if SpawnerRE then pcall(function() SpawnerRE:FireServer() end) end
+    else
+        sToggleBtn.Text = "AUTO KILL: OFF"
+        sToggleBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+        notify("Target Sheriff", "Returning to Lobby", 3)
+        
+        -- Force character to die to return to lobby
+        local char = lp.Character
+        if char then
+            local hum = char:FindFirstChildOfClass("Humanoid")
+            if hum then hum.Health = 0 end
+        end
+    end
+end)
+
+-- AUTO SHERIFF LOGIC (TARGET ONLY)
+RunService.RenderStepped:Connect(function()
+    if not sheriffActive or not sheriffTarget then return end
+    if not sheriffTarget.Character then 
+        sTargetLbl.Text = "Target dead/out of bounds"
+        sTargetLbl.TextColor3 = Color3.fromRGB(255, 75, 75)
+        return 
+    end
+    
+    local char = lp.Character
+    if not char then return end
+    
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not hum or hum.Health <= 0 then return end
+
+    -- Ensure we have the gun equipped
+    local tool = char:FindFirstChildOfClass("Tool")
+    if not tool or not tool.Name:lower():find("gun") then
+        local bp = lp:FindFirstChild("Backpack")
+        if bp then
+            local gun = bp:FindFirstChild("Shotgun") or bp:FindFirstChild("Gun") or bp:FindFirstChild("Sheriff")
+            if gun then hum:EquipTool(gun) end
+        end
+        return
+    end
+
+    -- Lock Camera ONLY to the targeted player's head
+    local tHead = sheriffTarget.Character:FindFirstChild("Head")
+    if tHead then
+        workspace.CurrentCamera.CFrame = CFrame.new(workspace.CurrentCamera.CFrame.Position, tHead.Position)
+    end
+
+    -- Auto Fire ONLY at the target
+    pcall(function()
+        tool:Activate()
+        if getconnections then
+            local conns = getconnections(tool.Activated)
+            if conns then
+                for _, c in ipairs(conns) do c:Fire() end
+            end
+        end
+    end)
 end)
 
 -- First open animation
@@ -1247,5 +1436,5 @@ UserInputService.JumpRequest:Connect(function()
     end
 end)
 
-print("Undocall's Hub v36 loaded. Exact coordinates applied and Inset fixed.")
+print("Undocall's Hub v40 loaded. Target Sheriff integrated.")
 print("Discord: " .. KEY_LINK)
