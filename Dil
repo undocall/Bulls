@@ -1,942 +1,1265 @@
--- // Hitblox v6.0 — Kovak Edition
--- // Full rewrite: bug-fixed + 6 new unique features
+-- ═══════════ UNODOCALL'S HUB — HALLOWEEN EDITION 🎃 ═══════════
+-- Arena: (-760, 11.5, 2040)
+-- Fully themed Halloween UI + Original v36 Logic
 
-local StarterGui         = game:GetService("StarterGui")
-local Players            = game:GetService("Players")
-local RunService         = game:GetService("RunService")
-local Lighting           = game:GetService("Lighting")
-local CoreGui            = game:GetService("CoreGui")
-local UserInputService   = game:GetService("UserInputService")
-local TweenService       = game:GetService("TweenService")
+local StarterGui = game:GetService("StarterGui")
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local CoreGui = game:GetService("CoreGui")
+local UserInputService = game:GetService("UserInputService")
+local Lighting = game:GetService("Lighting")
 
-local LP = Players.LocalPlayer
-while not LP do task.wait() LP = Players.LocalPlayer end
+local lp = Players.LocalPlayer
+while not lp do task.wait() lp = Players.LocalPlayer end
 
--- ── UTILS ─────────────────────────────────────────────────────────────────────
+-- ═══════════ ARENA CONFIG ═══════════
+local ARENA_POS      = Vector3.new(-760, 11.5, 2040)
+local ARENA_TELEPORT = Vector3.new(-760, 14, 2040)
+local LOBBY_MAX_Z    = 100
+
 local function isEnemy(player)
-    if player == LP then return false end
+    if player == lp then return false end
     local teams = game:GetService("Teams"):GetTeams()
     if #teams > 1 then
-        if not LP.Team or not player.Team then return true end
-        return LP.Team ~= player.Team
+        if lp.Team == nil or player.Team == nil then return true end
+        return lp.Team ~= player.Team
     end
     return true
 end
 
-local function getHRP(p)
-    local c = p == LP and LP.Character or p.Character
-    return c and c:FindFirstChild("HumanoidRootPart")
+local function playSound(soundId)
+    local sound = Instance.new("Sound")
+    sound.SoundId = soundId
+    sound.Parent = workspace
+    pcall(function() sound:Play() end)
+    sound.Ended:Connect(function() sound:Destroy() end)
 end
 
-local function getHum(p)
-    local c = p == LP and LP.Character or p.Character
-    return c and c:FindFirstChildOfClass("Humanoid")
-end
-
-local function notify(title, text, dur)
+local function notify(title, text, duration, icon)
     pcall(function()
         StarterGui:SetCore("SendNotification", {
-            Title    = title,
-            Text     = text,
-            Duration = dur or 2,
+            Title = title or "Hub",
+            Text = text or "",
+            Duration = duration or 3,
+            Icon = icon
         })
     end)
 end
 
-local function playSound(id)
-    local s = Instance.new("Sound")
-    s.SoundId = id
-    s.Parent  = workspace
-    pcall(function() s:Play() end)
-    s.Ended:Connect(function() s:Destroy() end)
+-- Find remotes
+local FlingRE = nil
+local SpawnerRE = nil
+
+local function findRemotes()
+    for _, obj in pairs(game:GetDescendants()) do
+        if obj:IsA("RemoteEvent") then
+            if obj.Name == "FlingRemoteEvent" then FlingRE = obj
+            elseif obj.Name == "SpawnerRemoteEvent" then SpawnerRE = obj end
+        end
+    end
+end
+findRemotes()
+if not FlingRE or not SpawnerRE then
+    task.spawn(function()
+        local tries = 0
+        repeat task.wait(1) findRemotes() tries = tries + 1 until (FlingRE and SpawnerRE) or tries > 30
+    end)
 end
 
--- ── LOAD UI ───────────────────────────────────────────────────────────────────
-task.wait()
-playSound("rbxassetid://12221831")
+-- ═══════════ KEY SYSTEM ═══════════
+local KEY_LINK = "https://discord.gg/AUqu8YvHRw"
+local VALID_KEYS = { "UNDC-7KPX-9M2Q" }
+local KEY_FILE = "undocalls_key.txt"
+local keyVerified = false
 
-local uiLibrary
-local ok, err = pcall(function()
-    uiLibrary = loadstring(game:HttpGet(
-        "https://raw.githubusercontent.com/AZYsGithub/Arceus-X-UI-Library/main/source.lua"
-    ))()
+local function checkKey(input)
+    for _, k in ipairs(VALID_KEYS) do
+        if input == k then return true end
+    end
+    return false
+end
+
+pcall(function()
+    if isfile(KEY_FILE) then
+        local savedKey = readfile(KEY_FILE)
+        if savedKey and checkKey(savedKey) then keyVerified = true end
+    end
 end)
-if not ok or not uiLibrary then error("UI load failed: " .. tostring(err)) end
 
-uiLibrary:SetTitle("Hitblox v6.0 — Kovak")
-uiLibrary:SetIcon("http://www.roblox.com/asset/?id=91738788645337")
-uiLibrary:SetTheme("HighContrast")
-task.wait(0.1)
-playSound("rbxassetid://195868961")
+-- ═══════════ STATE ═══════════
+local hitboxSize = 10
+local hitboxTransparency = 0.9
+local hitboxEnabled = false
+local killAuraOn = false
+local opGodSpawnOn = false
+local targetLockOn = false
+local target = nil
+local targetName = ""
+local auraRange = 40
+local opAuraRange = 80
+local auraDelay = 0.75
+local lastAuraHit = 0
+local lastOpAuraHit = 0
+local spawningDebounce = false
 
--- ── STATE ─────────────────────────────────────────────────────────────────────
-local hitboxSize         = 10
-local hitboxTransp       = 0.85
-local hitboxEnabled      = false
-local hitboxConn         = nil      -- FIX: RunService connection, not coroutine
+getgenv().superPowerEnabled = false
+getgenv().infiniteJumpEnabled = false
 
-local espEnabled         = false
-local espGuis            = {}
-local espConns           = {}       -- FIX: per-player render connections
+-- ═══════════ HUMANOID STATE HELPERS ═══════════
+local ALL_STATES = {
+    Enum.HumanoidStateType.Climbing, Enum.HumanoidStateType.FallingDown,
+    Enum.HumanoidStateType.Flying, Enum.HumanoidStateType.Freefall,
+    Enum.HumanoidStateType.GettingUp, Enum.HumanoidStateType.Jumping,
+    Enum.HumanoidStateType.Landed, Enum.HumanoidStateType.Physics,
+    Enum.HumanoidStateType.PlatformStanding, Enum.HumanoidStateType.Ragdoll,
+    Enum.HumanoidStateType.Running, Enum.HumanoidStateType.RunningNoPhysics,
+    Enum.HumanoidStateType.Seated, Enum.HumanoidStateType.StrafingNoPhysics,
+    Enum.HumanoidStateType.Swimming,
+}
 
-local GOD_RANGE_SQ       = 50 * 50          -- GOD aura (close)
-local GLOBAL_RANGE_SQ    = 15000 * 15000    -- FIX: separate variable, no shadowing
+local function disableAllHumanoidStates(hum)
+    if not hum then return end
+    for _, s in ipairs(ALL_STATES) do pcall(function() hum:SetStateEnabled(s, false) end) end
+end
 
--- new feature state
-local killStreak         = 0
-local lastKillTime       = 0
-local groundLockEnabled  = false
-local groundLockConn     = nil
-local flingurfEnabled    = false
-local flingurfConn       = nil
-local crowdMagnetEnabled = false
-local crowdMagnetConn   = nil
-local autoRespawnConn    = nil
-local specAlertConn      = nil
+local function enableAllHumanoidStates(hum)
+    if not hum then return end
+    for _, s in ipairs(ALL_STATES) do pcall(function() hum:SetStateEnabled(s, true) end) end
+end
 
--- saved part data for clean reset
--- { [character] = { [partName] = {size, transparency, brickcolor, material, cancollide} } }
-local savedHitboxData    = {}
+-- ═══════════ DYNAMIC TARGET LOCK LOGIC ═══════════
+Players.PlayerRemoving:Connect(function(plr)
+    if plr.Name == targetName then
+        playSound("rbxassetid://5410086084")
+        local icon = "https://www.roblox.com/headshot-thumbnail/image?userId=" .. plr.UserId .. "&width=150&height=150&format=png"
+        notify("TARGET LEFT", plr.Name .. " has left the game!", 5, icon)
+        target = nil
+    end
+end)
 
--- ── HITBOX ────────────────────────────────────────────────────────────────────
-local function saveAndExpand(char)
-    if not char then return end
-    local p = Players:GetPlayerFromCharacter(char)
-    if p == LP then return end
+Players.PlayerAdded:Connect(function(plr)
+    if plr.Name == targetName and targetLockOn then
+        target = plr
+        playSound("rbxassetid://12221976")
+        notify("TARGET REJOINED", plr.Name .. " is back! Auto-locking...", 4)
+    end
+end)
 
-    local hum = char:FindFirstChildOfClass("Humanoid")
-    if hum and hum.Health <= 0 then return end
-
-    local isR15 = hum and hum.RigType == Enum.HumanoidRigType.R15
-
-    local targets = {"HumanoidRootPart", "Head"}
-    if isR15 then
-        for _, n in ipairs({"UpperTorso","LowerTorso","LeftUpperArm","RightUpperArm","LeftUpperLeg","RightUpperLeg"}) do
-            targets[#targets+1] = n
+-- ═══════════ POTATO GRAPHICS ═══════════
+local function applyPotatoGraphics()
+    pcall(function()
+        Lighting.GlobalShadows = false
+        Lighting.ShadowSoftness = 0
+        Lighting.EnvironmentDiffuseScale = 0
+        Lighting.EnvironmentSpecularScale = 0
+        Lighting.FogEnd = 1000000
+        Lighting.Brightness = 1
+    end)
+    pcall(function()
+        local terrain = workspace:FindFirstChildOfClass("Terrain")
+        if terrain then
+            terrain.WaterWaveSize = 0
+            terrain.WaterWaveSpeed = 0
+            terrain.WaterReflectance = 0
+            terrain.WaterTransparency = 1
+        end
+    end)
+    local killed = 0
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj:IsA("ParticleEmitter") or obj:IsA("Smoke")
+            or obj:IsA("Fire") or obj:IsA("Sparkles")
+            or obj:IsA("Beam") or obj:IsA("Trail") then
+            pcall(function() obj.Enabled = false end)
+            killed = killed + 1
         end
     end
+    pcall(function() settings().Rendering.QualityLevel = 1 end)
+    notify("AntiLag", "Potato mode ON · " .. killed .. " effects off", 3)
+end
 
-    if not savedHitboxData[char] then savedHitboxData[char] = {} end
+-- ═══════════ INVISIBLE ═══════════
+local invisibleEnabled = false
+local invisibleParts = {}
+local invisibleConnection = nil
 
-    for _, name in ipairs(targets) do
-        local part = char:FindFirstChild(name)
-        if part and part:IsA("BasePart") then
-            -- save original on first expand only
-            if not savedHitboxData[char][name] then
-                savedHitboxData[char][name] = {
-                    size         = part.Size,
-                    transparency = part.Transparency,  -- FIX: save real transparency
-                    brickcolor   = part.BrickColor,
-                    material     = part.Material,
-                    cancollide   = part.CanCollide,
-                    massless     = part.Massless,
-                }
-            end
-            part.Size         = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
-            part.Transparency = hitboxTransp
-            part.BrickColor   = name == "Head" and BrickColor.new("Bright red") or BrickColor.new("Dark red")
-            part.Material     = Enum.Material.ForceField
-            part.CanCollide   = false
-            if name == "Head" then part.Massless = true end
-        end
+local function setupInvisibleParts()
+    invisibleParts = {}
+    local char = lp.Character
+    if not char then return end
+    for _, d in ipairs(char:GetDescendants()) do
+        if d:IsA("BasePart") and d.Transparency == 0 then table.insert(invisibleParts, d) end
     end
 end
 
-local function restoreChar(char)
-    if not char then return end
-    local data = savedHitboxData[char]
-    if not data then return end
-    for name, orig in pairs(data) do
-        local part = char:FindFirstChild(name)
-        if part and part:IsA("BasePart") then
+local function startInvisible()
+    if invisibleEnabled then return end
+    invisibleEnabled = true
+    if flyV3Active then stopFlyV3() end
+    setupInvisibleParts()
+    for _, part in ipairs(invisibleParts) do pcall(function() part.Transparency = 0.5 end) end
+    if not invisibleConnection then
+        invisibleConnection = RunService.Heartbeat:Connect(function()
+            if not invisibleEnabled then return end
+            local c = lp.Character
+            if not c then return end
+            local h = c:FindFirstChildOfClass("Humanoid")
+            local r = c:FindFirstChild("HumanoidRootPart")
+            if not h or not r then return end
             pcall(function()
-                part.Size         = orig.size
-                part.Transparency = orig.transparency  -- FIX: restore real value
-                part.BrickColor   = orig.brickcolor
-                part.Material     = orig.material
-                part.CanCollide   = orig.cancollide
-                if name == "Head" then part.Massless = orig.massless end
+                local origCF = r.CFrame
+                local origOffset = h.CameraOffset
+                local downCF = origCF * CFrame.new(0, -200000, 0)
+                r.CFrame = downCF
+                h.CameraOffset = downCF:ToObjectSpace(CFrame.new(origCF.Position)).Position
+                RunService.RenderStepped:Wait()
+                r.CFrame = origCF
+                h.CameraOffset = origOffset
             end)
+        end)
+    end
+end
+
+local function stopInvisible()
+    invisibleEnabled = false
+    for _, part in ipairs(invisibleParts) do pcall(function() part.Transparency = 0 end) end
+    invisibleParts = {}
+    if invisibleConnection then invisibleConnection:Disconnect() invisibleConnection = nil end
+    local char = lp.Character
+    if char then
+        local h = char:FindFirstChildOfClass("Humanoid")
+        if h then pcall(function() h.CameraOffset = Vector3.zero end) end
+    end
+end
+
+-- ═══════════ FLY V3 ═══════════
+local flyV3Active = false
+local flyV3Speed = 1
+local flyV3UpHeld = false
+local flyV3DownHeld = false
+
+local function startFlyV3()
+    if flyV3Active then return end
+    local char = lp.Character
+    if not char then return end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not hum then return end
+
+    if invisibleEnabled then stopInvisible() end
+    flyV3Active = true
+    disableAllHumanoidStates(hum)
+    pcall(function() hum:ChangeState(Enum.HumanoidStateType.Swimming) end)
+    pcall(function()
+        if char:FindFirstChild("Animate") then char.Animate.Disabled = true end
+        for _, v in ipairs(hum:GetPlayingAnimationTracks()) do v:AdjustSpeed(0) end
+    end)
+
+    for i = 1, flyV3Speed do
+        task.spawn(function()
+            local hb = RunService.Heartbeat
+            while flyV3Active do
+                hb:Wait()
+                local c = lp.Character
+                if not c then break end
+                local h = c:FindFirstChildOfClass("Humanoid")
+                if not h or not h.Parent then break end
+                if h.MoveDirection.Magnitude > 0 then pcall(function() c:TranslateBy(h.MoveDirection) end) end
+            end
+        end)
+    end
+
+    task.spawn(function()
+        local isR6 = (hum.RigType == Enum.HumanoidRigType.R6)
+        local torso = isR6 and char:FindFirstChild("Torso") or char:FindFirstChild("UpperTorso")
+        if not torso then flyV3Active = false return end
+
+        local bg = Instance.new("BodyGyro", torso)
+        bg.P = 9e4; bg.MaxTorque = Vector3.new(9e9, 9e9, 9e9); bg.CFrame = torso.CFrame
+        local bv = Instance.new("BodyVelocity", torso)
+        bv.Velocity = Vector3.new(0, 0.1, 0); bv.MaxForce = Vector3.new(9e9, 9e9, 9e9)
+        hum.PlatformStand = true
+
+        while flyV3Active do
+            RunService.RenderStepped:Wait()
+            local c = lp.Character
+            if not c then break end
+            local h = c:FindFirstChildOfClass("Humanoid")
+            local hrp = c:FindFirstChild("HumanoidRootPart")
+            if not h or not hrp or h.Health <= 0 then break end
+            if flyV3UpHeld then pcall(function() hrp.CFrame = hrp.CFrame * CFrame.new(0, 1, 0) end)
+            elseif flyV3DownHeld then pcall(function() hrp.CFrame = hrp.CFrame * CFrame.new(0, -1, 0) end) end
+            bv.Velocity = Vector3.zero
+            bg.CFrame = workspace.CurrentCamera.CFrame
+        end
+        bg:Destroy() bv:Destroy()
+        pcall(function() hum.PlatformStand = false; if char:FindFirstChild("Animate") then char.Animate.Disabled = false end end)
+    end)
+end
+
+local function stopFlyV3()
+    flyV3Active = false
+    local char = lp.Character
+    if not char then return end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if hum then
+        enableAllHumanoidStates(hum)
+        pcall(function() hum:ChangeState(Enum.HumanoidStateType.RunningNoPhysics); hum.PlatformStand = false end)
+    end
+    pcall(function() if char:FindFirstChild("Animate") then char.Animate.Disabled = false end end)
+end
+
+-- ═══════════ HITBOX ═══════════
+local function applyHitbox(character)
+    if not character then return end
+    local player = Players:GetPlayerFromCharacter(character)
+    if player and player == lp then return end
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    if humanoid and humanoid.Health <= 0 then return end
+    local isR15 = humanoid and humanoid.RigType == Enum.HumanoidRigType.R15
+    local rootPart = character:FindFirstChild("HumanoidRootPart") or character:FindFirstChild("UpperTorso")
+    if rootPart then
+        if not rootPart:FindFirstChild("OriginalSize") then
+            local o = Instance.new("Vector3Value"); o.Name = "OriginalSize"; o.Value = rootPart.Size; o.Parent = rootPart
+        end
+        rootPart.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
+        rootPart.Transparency = hitboxTransparency
+        rootPart.BrickColor = BrickColor.new("Dark red")
+        rootPart.Material = Enum.Material.ForceField
+        rootPart.CanCollide = false
+        if isR15 then
+            local lt = character:FindFirstChild("LowerTorso")
+            if lt then
+                if not lt:FindFirstChild("OriginalSize") then
+                    local o = Instance.new("Vector3Value"); o.Name = "OriginalSize"; o.Value = lt.Size; o.Parent = lt
+                end
+                lt.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
+                lt.Transparency = hitboxTransparency
+                lt.BrickColor = BrickColor.new("Dark red")
+                lt.Material = Enum.Material.ForceField
+                lt.CanCollide = false
+            end
         end
     end
-    savedHitboxData[char] = nil
-end
-
-local function applyToAll()
-    for _, p in ipairs(Players:GetPlayers()) do
-        if isEnemy(p) and p.Character then saveAndExpand(p.Character) end
+    local head = character:FindFirstChild("Head")
+    if head then
+        if not head:FindFirstChild("OriginalSize") then
+            local o = Instance.new("Vector3Value"); o.Name = "OriginalSize"; o.Value = head.Size; o.Parent = head
+        end
+        head.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
+        head.Transparency = hitboxTransparency
+        head.BrickColor = BrickColor.new("Bright red")
+        head.Material = Enum.Material.ForceField
+        head.CanCollide = false
+        head.Massless = true
+    end
+    if isR15 then
+        for _, pn in ipairs({"UpperTorso","LowerTorso","LeftUpperArm","RightUpperArm","LeftUpperLeg","RightUpperLeg"}) do
+            local p = character:FindFirstChild(pn)
+            if p then
+                if not p:FindFirstChild("OriginalSize") then
+                    local o = Instance.new("Vector3Value"); o.Name = "OriginalSize"; o.Value = p.Size; o.Parent = p
+                end
+                p.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
+                p.Transparency = hitboxTransparency
+                p.BrickColor = BrickColor.new("Dark red")
+                p.Material = Enum.Material.ForceField
+                p.CanCollide = false
+            end
+        end
     end
 end
 
-local function restoreAll()
-    for _, p in ipairs(Players:GetPlayers()) do
-        if p.Character then restoreChar(p.Character) end
+local function resetHitbox(character)
+    if not character then return end
+    local player = Players:GetPlayerFromCharacter(character)
+    if player and player == lp then return end
+    local rootPart = character:FindFirstChild("HumanoidRootPart") or character:FindFirstChild("UpperTorso")
+    if rootPart and rootPart:FindFirstChild("OriginalSize") then
+        rootPart.Size = rootPart.OriginalSize.Value; rootPart.Transparency = 1; rootPart.BrickColor = BrickColor.new("Medium stone grey"); rootPart.Material = Enum.Material.Plastic; rootPart.CanCollide = true
     end
-    savedHitboxData = {}
+    local head = character:FindFirstChild("Head")
+    if head and head:FindFirstChild("OriginalSize") then
+        head.Size = head.OriginalSize.Value; head.Transparency = 1; head.BrickColor = BrickColor.new("Medium stone grey"); head.Material = Enum.Material.Plastic; head.CanCollide = true; head.Massless = false
+    end
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    local isR15 = humanoid and humanoid.RigType == Enum.HumanoidRigType.R15
+    if isR15 then
+        for _, pn in ipairs({"LowerTorso","UpperTorso","LeftUpperArm","RightUpperArm","LeftUpperLeg","RightUpperLeg"}) do
+            local p = character:FindFirstChild(pn)
+            if p and p:FindFirstChild("OriginalSize") then
+                p.Size = p.OriginalSize.Value; p.Transparency = 1; p.CanCollide = true; p.BrickColor = BrickColor.new("Medium stone grey"); p.Material = Enum.Material.Plastic
+            end
+        end
+    end
+end
+
+local function applyHitboxesToAllPlayers()
+    for _, player in ipairs(Players:GetPlayers()) do
+        if isEnemy(player) and player.Character then applyHitbox(player.Character) end
+    end
+end
+
+local function resetHitboxesOnAllPlayers()
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player.Character then resetHitbox(player.Character) end
+    end
 end
 
 local function toggleHitboxes(enabled)
     hitboxEnabled = enabled
     playSound("rbxassetid://12221976")
-
-    if hitboxConn then hitboxConn:Disconnect() hitboxConn = nil end  -- FIX: proper cleanup
-
-    if enabled then
-        applyToAll()
-        -- FIX: RunService connection instead of coroutine
-        hitboxConn = RunService.Heartbeat:Connect(function()
-            if not hitboxEnabled then return end
-            applyToAll()
-        end)
-    else
-        restoreAll()
-    end
+    if enabled then applyHitboxesToAllPlayers() else resetHitboxesOnAllPlayers() end
 end
 
--- ── ESP ───────────────────────────────────────────────────────────────────────
-local function clearESP(player)
-    if espGuis[player] then
-        pcall(function() espGuis[player]:Destroy() end)
-        espGuis[player] = nil
-    end
-    if espConns[player] then
-        pcall(function() espConns[player]:Disconnect() end)  -- FIX: disconnect render conn
-        espConns[player] = nil
-    end
-end
-
-local function createESP(player)
-    clearESP(player)
-    if not player or not player.Character or player == LP then return end
-    if not isEnemy(player) then return end
-
-    local head    = player.Character:FindFirstChild("Head")
-    local root    = player.Character:FindFirstChild("HumanoidRootPart")
-    local anchor  = head or root
-    if not anchor then return end
-
-    local bg      = Instance.new("BillboardGui")
-    bg.Adornee    = anchor
-    bg.Size       = UDim2.new(0, 100, 0, 50)
-    bg.StudsOffset= Vector3.new(0, 2, 0)
-    bg.AlwaysOnTop= true
-    bg.Parent     = anchor
-
-    local lbl         = Instance.new("TextLabel", bg)
-    lbl.Size          = UDim2.new(1, 0, 1, 0)
-    lbl.BackgroundTransparency = 1
-    lbl.TextColor3    = Color3.new(1, 0, 0)
-    lbl.TextStrokeTransparency= 0
-    lbl.Text          = player.Name
-    lbl.TextScaled    = true
-    lbl.Font          = Enum.Font.SourceSansBold
-
-    espGuis[player] = bg
-
-    local lastT = tick()
-    -- FIX: store connection so it can be cleaned up
-    espConns[player] = RunService.RenderStepped:Connect(function()
-        if not bg or not bg.Parent then
-            clearESP(player)
-            return
-        end
-        if tick() - lastT < 0.1 then return end
-        lastT = tick()
-        local pr = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-        local lr = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
-        if pr and lr then
-            local dist = (lr.Position - pr.Position).Magnitude
-            local sz   = math.clamp(100 - dist * 0.5, 10, 100)
-            bg.Size    = UDim2.new(0, sz, 0, sz * 0.5)
-        end
-    end)
-end
-
-local function toggleESP(enabled)
-    espEnabled = enabled
-    playSound("rbxassetid://12221976")
-    if enabled then
-        for _, p in ipairs(Players:GetPlayers()) do
-            if isEnemy(p) then createESP(p) end
-        end
-    else
-        for p, _ in pairs(espGuis) do clearESP(p) end
-    end
-end
-
--- ── PLAYER TRACKING ───────────────────────────────────────────────────────────
 local function trackPlayer(player)
     if not player then return end
-    if not isEnemy(player) then return end
-
-    player.CharacterAdded:Connect(function(char)
-        task.wait(1)
-        local hum = char:WaitForChild("Humanoid")
-        hum.HealthChanged:Connect(function()
-            if hitboxEnabled then
-                if hum.Health > 0 then saveAndExpand(char) else restoreChar(char) end
+    if isEnemy(player) then
+        player.CharacterAdded:Connect(function(character)
+            task.wait(1)
+            local humanoid = character:WaitForChild("Humanoid")
+            local function updateHitboxState()
+                if hitboxEnabled then
+                    if humanoid.Health > 0 then applyHitbox(character) else resetHitbox(character) end
+                end
             end
+            updateHitboxState()
+            humanoid.HealthChanged:Connect(updateHitboxState)
         end)
-        if hitboxEnabled then saveAndExpand(char) end
-        if espEnabled     then createESP(player)   end
-    end)
-
-    if player.Character then
-        if hitboxEnabled then saveAndExpand(player.Character) end
-        if espEnabled     then createESP(player)              end
+        if player.Character then
+            local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
+            if humanoid and hitboxEnabled then
+                if humanoid.Health > 0 then applyHitbox(player.Character) else resetHitbox(player.Character) end
+            end
+        end
     end
 end
 
-for _, p in ipairs(Players:GetPlayers()) do trackPlayer(p) end
+for _, player in ipairs(Players:GetPlayers()) do trackPlayer(player) end
 Players.PlayerAdded:Connect(trackPlayer)
-Players.PlayerRemoving:Connect(function(p) clearESP(p) end)
 
--- ── STANDARD UI ───────────────────────────────────────────────────────────────
-local fovInc = uiLibrary:AddButton("(Fov +)", function()
-    workspace.CurrentCamera.FieldOfView = math.clamp(workspace.CurrentCamera.FieldOfView + 5, 1, 120)
-end)
-local fovDec = uiLibrary:AddButton("(Fov -)", function()
-    workspace.CurrentCamera.FieldOfView = math.clamp(workspace.CurrentCamera.FieldOfView - 5, 1, 120)
-end)
-local hbInc = uiLibrary:AddButton("(Hitbox +)", function()
-    hitboxSize = math.clamp(hitboxSize + 5, 1, 50)
-    if hitboxEnabled then applyToAll() end
-end)
-local hbDec = uiLibrary:AddButton("(Hitbox -)", function()
-    hitboxSize = math.clamp(hitboxSize - 5, 1, 50)
-    if hitboxEnabled then applyToAll() end
-end)
-
-uiLibrary:AddButton("FullBright", function()
-    local L = Lighting
-    local function applyFB()
-        L.Brightness        = 2
-        L.OutdoorAmbient    = Color3.fromRGB(255,255,255)
-        L.Ambient           = Color3.fromRGB(255,255,255)
-        L.TimeOfDay         = "14:00:00"
-        L.FogStart          = 0
-        L.FogEnd            = 100000
-        L.FogColor          = Color3.fromRGB(255,255,255)
+-- ═══════════ SMART SEARCH ═══════════
+local function smartFind(input)
+    if not input or #input < 1 then return nil end
+    input = input:lower():gsub("@", "")
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p.Name:lower() == input or p.DisplayName:lower() == input then return p end
     end
-    applyFB()
-    if getgenv().fbConn then getgenv().fbConn:Disconnect() end
-    getgenv().fbConn = RunService.Heartbeat:Connect(applyFB)
-end)
-
-uiLibrary:AddButton("AntiLag", function()
-    loadstring(game:HttpGet("https://raw.githubusercontent.com/OBFhm5650lol/Al/refs/heads/main/AntiLag", true))()
-end)
-uiLibrary:AddButton("AntiKick", function()
-    loadstring(game:HttpGet("https://raw.githubusercontent.com/OBFhm5650lol/AntkickLol/refs/heads/main/Antikicklol"))()
-end)
-
-uiLibrary:AddToggle("FOV Toggle", function(e)
-    fovInc.Visible = e
-    fovDec.Visible = e
-end, false)
-
-uiLibrary:AddToggle("Expand Hitbox", function(e)
-    toggleHitboxes(e)
-    hbInc.Visible = e
-    hbDec.Visible = e
-end, false)
-
-uiLibrary:AddToggle("ESP", function(e) toggleESP(e) end, false)
-
-uiLibrary:AddToggle("FPP Toggle", function(e)
-    LP.CameraMode = e and Enum.CameraMode.LockFirstPerson or Enum.CameraMode.Classic
-end, false)
-
--- ── SUPER POWER / NOCLIP / INSTANT RECOVERY ───────────────────────────────────
-getgenv().superPowerEnabled    = false
-getgenv().noclipEnabled        = false
-getgenv().instantRecovery      = false
-getgenv().isRecovering         = false
-getgenv().recoveryDelay        = 0.6
-
-uiLibrary:AddToggle("Super Power (Speed/InfJump)", function(e)
-    getgenv().superPowerEnabled = e
-    if not e then
-        local hum = getHum(LP)
-        if hum then hum.WalkSpeed = 16 hum.JumpPower = 50 end
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p.Name:lower():sub(1, #input) == input then return p end
+        if p.DisplayName:lower():sub(1, #input) == input then return p end
     end
-end, false)
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p.Name:lower():find(input, 1, true) then return p end
+        if p.DisplayName:lower():find(input, 1, true) then return p end
+    end
+    return nil
+end
 
-uiLibrary:AddToggle("Ghost Mode (Noclip)", function(e)
-    getgenv().noclipEnabled = e
-end, false)
+-- ═══════════ MOUNT STRIP & TELEPORT ═══════════
+local function stripMount(character)
+    if not character then return end
+    for _, d in ipairs(character:GetDescendants()) do
+        if d:IsA("Weld") or d:IsA("WeldConstraint") or d:IsA("Motor6D") then
+            local p0, p1 = d.Part0, d.Part1
+            if p0 and p1 then
+                local n0, n1 = p0.Name:lower(), p1.Name:lower()
+                if n0:find("seat") or n1:find("seat") or n0:find("bull") or n1:find("bull") then pcall(function() d:Destroy() end) end
+            end
+        end
+    end
+    local hum = character:FindFirstChildOfClass("Humanoid")
+    if hum and hum.Sit then hum.Sit = false; hum.SeatPart = nil; hum.Jump = true end
+end
 
-uiLibrary:AddToggle("Instant Recovery (Fast Stand)", function(e)
-    getgenv().instantRecovery = e
-end, false)
-
-uiLibrary:AddButton("(Recovery Delay +0.1s)", function()
-    getgenv().recoveryDelay = math.clamp(
-        math.round(((getgenv().recoveryDelay or 0.6) + 0.1) * 10) / 10, 0, 10)
-    notify("Hitblox", "Recovery Delay: " .. getgenv().recoveryDelay .. "s")
-end)
-uiLibrary:AddButton("(Recovery Delay -0.1s)", function()
-    getgenv().recoveryDelay = math.clamp(
-        math.round(((getgenv().recoveryDelay or 0.6) - 0.1) * 10) / 10, 0, 10)
-    notify("Hitblox", "Recovery Delay: " .. getgenv().recoveryDelay .. "s")
-end)
-
-RunService.Stepped:Connect(function()
-    local char = LP.Character
-    if not char then return end
-    local hum = char:FindFirstChildOfClass("Humanoid")
+local function teleportToArena(force)
+    local char = lp.Character
+    if not char then return false, "no character" end
     local hrp = char:FindFirstChild("HumanoidRootPart")
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not hrp or not hum then return false, "no root" end
+    if hum.Health <= 0 then return false, "dead" end
+    if not force and hrp.Position.Z < LOBBY_MAX_Z then return false, "in lobby" end
 
-    if hum and getgenv().superPowerEnabled then
-        hum.WalkSpeed   = 120
-        hum.JumpPower   = 150
-        hum.UseJumpPower= true
-    end
+    pcall(function() hum.Sit = false; hum.SeatPart = nil; hum.PlatformStand = false end)
+    stripMount(char)
+    task.wait(0.1)
 
-    if getgenv().noclipEnabled then
-        for _, part in ipairs(char:GetDescendants()) do
-            if part:IsA("BasePart") and part.CanCollide then
-                part.CanCollide = false
+    pcall(function()
+        hrp.Anchored = true; hrp.CFrame = CFrame.new(ARENA_TELEPORT)
+        hrp.AssemblyLinearVelocity = Vector3.zero; hrp.AssemblyAngularVelocity = Vector3.zero
+    end)
+    task.wait(0.15)
+    pcall(function() hrp.Anchored = false; hrp.CFrame = CFrame.new(ARENA_TELEPORT) end)
+
+    task.spawn(function() for i = 1, 20 do task.wait(0.05) stripMount(char) end end)
+    return true, "ok"
+end
+
+-- ═══════════ PREMIUM HALLOWEEN GUI 🎃 ═══════════
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "UndocallsHub"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.IgnoreGuiInset = true
+pcall(function() ScreenGui.Parent = CoreGui end)
+if not ScreenGui.Parent then ScreenGui.Parent = lp:WaitForChild("PlayerGui") end
+
+-- Halloween Theme Colors 🎃
+local COL = {
+    bg = Color3.fromRGB(15, 10, 20),         -- Deep Midnight
+    card = Color3.fromRGB(35, 25, 45),       -- Dark Spooky Purple
+    accent = Color3.fromRGB(255, 120, 0),    -- Pumpkin Orange
+    accentLight = Color3.fromRGB(255, 180, 50), -- Glowing Orange
+    text = Color3.fromRGB(255, 255, 255), 
+    textDim = Color3.fromRGB(200, 180, 220),
+    border = Color3.fromRGB(80, 40, 120),    -- Witch Purple
+    btnBg = Color3.fromRGB(50, 30, 70), 
+    sidebar = Color3.fromRGB(20, 15, 30), 
+    sidebarItem = Color3.fromRGB(45, 25, 60),
+    red = Color3.fromRGB(255, 50, 50),       -- Blood Red
+    green = Color3.fromRGB(100, 255, 100),   -- Toxic Green
+    purple = Color3.fromRGB(150, 0, 255)
+}
+
+local mainPanel = Instance.new("Frame")
+mainPanel.Size = UDim2.new(0, 480, 0, 380)
+mainPanel.Position = UDim2.new(0.5, -240, 0.5, -190)
+mainPanel.BackgroundColor3 = COL.bg
+mainPanel.BackgroundTransparency = 0.3
+mainPanel.BorderSizePixel = 0
+mainPanel.ClipsDescendants = true
+mainPanel.Visible = false
+mainPanel.Active = true
+mainPanel.Parent = ScreenGui
+
+-- Spooky Background Image
+local bgImage = Instance.new("ImageLabel")
+bgImage.Size = UDim2.new(1, 0, 1, 0)
+bgImage.BackgroundTransparency = 1
+bgImage.Image = "rbxassetid://169585459" -- Haunted Forest Moon
+bgImage.ImageTransparency = 0.4
+bgImage.ScaleType = Enum.ScaleType.Crop
+bgImage.Parent = mainPanel
+
+local mpS = Instance.new("UIStroke"); mpS.Color = COL.accent; mpS.Thickness = 2; mpS.Transparency = 0.2; mpS.Parent = mainPanel
+local mpC = Instance.new("UICorner"); mpC.CornerRadius = UDim.new(0, 12); mpC.Parent = mainPanel
+local panelScale = Instance.new("UIScale"); panelScale.Scale = 1; panelScale.Parent = mainPanel
+
+-- Header
+local header = Instance.new("Frame")
+header.Size = UDim2.new(1, 0, 0, 50)
+header.BackgroundColor3 = COL.sidebar
+header.BackgroundTransparency = 0.2
+header.BorderSizePixel = 0
+header.Active = true
+header.Parent = mainPanel
+local hC = Instance.new("UICorner"); hC.CornerRadius = UDim.new(0, 12); hC.Parent = header
+
+local hTitle = Instance.new("TextLabel")
+hTitle.Size = UDim2.new(0, 300, 1, 0); hTitle.Position = UDim2.new(0, 14, 0, 0)
+hTitle.BackgroundTransparency = 1; hTitle.Text = "🎃 Undocall's Hub (v36) 🎃"
+hTitle.TextColor3 = COL.accentLight; hTitle.Font = Enum.Font.GothamBold; hTitle.TextSize = 16; hTitle.TextXAlignment = Enum.TextXAlignment.Left; hTitle.Parent = header
+
+-- Gradient for Header
+local hGradient = Instance.new("UIGradient")
+hGradient.Color = ColorSequence.new({
+    ColorSequenceKeypoint.new(0.00, Color3.fromRGB(255, 120, 0)),
+    ColorSequenceKeypoint.new(1.00, Color3.fromRGB(150, 0, 255))
+})
+hGradient.Rotation = 45
+hGradient.Parent = hTitle
+
+local closeBtn = Instance.new("TextButton")
+closeBtn.Size = UDim2.new(0, 28, 0, 28); closeBtn.Position = UDim2.new(1, -36, 0, 11)
+closeBtn.BackgroundColor3 = Color3.fromRGB(160, 40, 40); closeBtn.BackgroundTransparency = 0.2
+closeBtn.Text = "X"; closeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+closeBtn.Font = Enum.Font.GothamBold; closeBtn.TextSize = 12; closeBtn.Parent = header
+local cbC = Instance.new("UICorner"); cbC.CornerRadius = UDim.new(0, 6); cbC.Parent = closeBtn
+
+-- Reopen Button
+local reopenBtn = Instance.new("TextButton")
+reopenBtn.Size = UDim2.new(0, 40, 0, 40); reopenBtn.Position = UDim2.new(0.5, -20, 0.5, -20)
+reopenBtn.BackgroundColor3 = COL.accent; reopenBtn.BackgroundTransparency = 0.85
+reopenBtn.Text = "🎃"; reopenBtn.TextColor3 = Color3.fromRGB(255, 255, 255); reopenBtn.TextTransparency = 0.2
+reopenBtn.Font = Enum.Font.GothamBold; reopenBtn.TextSize = 22; reopenBtn.AutoButtonColor = false; reopenBtn.Visible = true; reopenBtn.Parent = ScreenGui
+local rbC = Instance.new("UICorner"); rbC.CornerRadius = UDim.new(1, 0); rbC.Parent = reopenBtn
+local reopenScale = Instance.new("UIScale"); reopenScale.Scale = 1; reopenScale.Parent = reopenBtn
+
+local hasBeenClosed = false
+local function syncReopenToPanel()
+    local px, psz, rsz = mainPanel.Position, mainPanel.Size, reopenBtn.Size
+    reopenBtn.Position = UDim2.new(px.X.Scale, px.X.Offset + (psz.X.Offset - rsz.X.Offset)/2, px.Y.Scale, px.Y.Offset + (psz.Y.Offset - rsz.Y.Offset)/2)
+end
+local function syncPanelToReopen()
+    local rx, rsz, psz = reopenBtn.Position, reopenBtn.Size, mainPanel.Size
+    mainPanel.Position = UDim2.new(rx.X.Scale, rx.X.Offset - (psz.X.Offset - rsz.X.Offset)/2, rx.Y.Scale, rx.Y.Offset - (psz.Y.Offset - rsz.Y.Offset)/2)
+end
+
+local function openPanel()
+    reopenBtn.Visible = false
+    if hasBeenClosed then syncPanelToReopen() end
+    mainPanel.Visible = true; panelScale.Scale = 0.85
+    TweenService:Create(panelScale, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Scale = 1}):Play()
+end
+local function closePanel()
+    TweenService:Create(panelScale, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {Scale = 0.85}):Play()
+    task.wait(0.2)
+    mainPanel.Visible = false; syncReopenToPanel(); hasBeenClosed = true; reopenBtn.Visible = true; reopenScale.Scale = 0.4
+    TweenService:Create(reopenScale, TweenInfo.new(0.25, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Scale = 1}):Play()
+end
+
+closeBtn.MouseButton1Click:Connect(closePanel)
+reopenBtn.MouseButton1Click:Connect(openPanel)
+
+-- Sidebar
+local sidebar = Instance.new("Frame")
+sidebar.Size = UDim2.new(0, 110, 1, -50); sidebar.Position = UDim2.new(0, 0, 0, 50)
+sidebar.BackgroundColor3 = COL.sidebar; sidebar.BackgroundTransparency = 0.2; sidebar.BorderSizePixel = 0; sidebar.Parent = mainPanel
+local sbL = Instance.new("UIListLayout"); sbL.Padding = UDim.new(0, 6); sbL.Parent = sidebar
+local sbP = Instance.new("UIPadding"); sbP.PaddingTop = UDim.new(0, 10); sbP.PaddingLeft = UDim.new(0, 6); sbP.PaddingRight = UDim.new(0, 6); sbP.Parent = sidebar
+
+local contentArea = Instance.new("Frame")
+contentArea.Size = UDim2.new(1, -110, 1, -50); contentArea.Position = UDim2.new(0, 110, 0, 50)
+contentArea.BackgroundTransparency = 1; contentArea.Parent = mainPanel
+
+local pages = {}
+local sideBtns = {}
+
+local function addPage(name)
+    local page = Instance.new("ScrollingFrame")
+    page.Size = UDim2.new(1, -8, 1, -8); page.Position = UDim2.new(0, 4, 0, 4)
+    page.BackgroundTransparency = 1; page.BorderSizePixel = 0; page.ScrollBarThickness = 3; page.ScrollBarImageColor3 = COL.accent
+    page.CanvasSize = UDim2.new(0, 0, 0, 0); page.AutomaticCanvasSize = Enum.AutomaticSize.Y; page.Visible = false; page.Parent = contentArea
+    local pl = Instance.new("UIListLayout"); pl.Padding = UDim.new(0, 5); pl.Parent = page
+    local pp = Instance.new("UIPadding"); pp.PaddingTop = UDim.new(0, 4); pp.PaddingBottom = UDim.new(0, 10); pp.PaddingLeft = UDim.new(0, 5); pp.PaddingRight = UDim.new(0, 5); pp.Parent = page
+    pages[name] = page
+
+    local sb = Instance.new("TextButton")
+    sb.Size = UDim2.new(1, 0, 0, 34); sb.BackgroundColor3 = COL.sidebarItem; sb.BackgroundTransparency = 0.1
+    sb.Text = name; sb.TextColor3 = COL.textDim; sb.Font = Enum.Font.GothamBold; sb.TextSize = 13; sb.AutoButtonColor = false; sb.Parent = sidebar
+    
+    local sbc = Instance.new("UICorner"); sbc.CornerRadius = UDim.new(0, 8); sbc.Parent = sb
+    local sbs = Instance.new("UIStroke"); sbs.Color = COL.border; sbs.Thickness = 1; sbs.Transparency = 0.5; sbs.Parent = sb
+    sideBtns[name] = {btn = sb, stroke = sbs}
+
+    sb.MouseButton1Click:Connect(function()
+        for pn, pg in pairs(pages) do pg.Visible = (pn == name) end
+        for bn, bd in pairs(sideBtns) do
+            if bn == name then
+                bd.btn.BackgroundColor3 = COL.accent; bd.btn.BackgroundTransparency = 0.1; bd.btn.TextColor3 = Color3.fromRGB(0,0,0); bd.btn.Font = Enum.Font.GothamBold
+                bd.stroke.Color = COL.accentLight; bd.stroke.Transparency = 0
+            else
+                bd.btn.BackgroundColor3 = COL.sidebarItem; bd.btn.BackgroundTransparency = 0.1; bd.btn.TextColor3 = COL.textDim; bd.btn.Font = Enum.Font.GothamBold
+                bd.stroke.Color = COL.border; bd.stroke.Transparency = 0.5
             end
         end
-    end
+    end)
+    return page
+end
 
-    if hum and hrp and getgenv().instantRecovery then
-        local state = hum:GetState()
-        local isKnocked = hum.PlatformStand or hum.Sit
-            or state == Enum.HumanoidStateType.FallingDown
-            or state == Enum.HumanoidStateType.Ragdoll
-            or state == Enum.HumanoidStateType.GettingUp
+local function addToggleRow(page, name, callback)
+    local row = Instance.new("Frame")
+    row.Size = UDim2.new(1, 0, 0, 40); row.BackgroundColor3 = COL.card; row.BackgroundTransparency = 0.1; row.BorderSizePixel = 0; row.Parent = page
+    local rc = Instance.new("UICorner"); rc.CornerRadius = UDim.new(0, 8); rc.Parent = row
+    
+    local rowStroke = Instance.new("UIStroke"); rowStroke.Color = COL.border; rowStroke.Thickness = 1; rowStroke.Transparency = 0.5; rowStroke.Parent = row
 
-        if isKnocked then
-            hrp.AssemblyAngularVelocity = Vector3.zero
-            if not getgenv().isRecovering then
-                getgenv().isRecovering = true
-                task.spawn(function()
-                    task.wait(getgenv().recoveryDelay or 0.6)
-                    if char and hum and hrp and hum.Health > 0 then
-                        hum.PlatformStand = false
-                        hum.Sit           = false
-                        hum:ChangeState(Enum.HumanoidStateType.Running)
-                        hrp.AssemblyAngularVelocity = Vector3.zero
-                        local _, ry, _ = hrp.CFrame:ToOrientation()
-                        hrp.CFrame = CFrame.new(hrp.Position + Vector3.new(0,1.5,0)) * CFrame.Angles(0,ry,0)
-                    end
-                    task.wait(0.2)
-                    getgenv().isRecovering = false
-                end)
-            end
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1, -58, 1, 0); label.Position = UDim2.new(0, 10, 0, 0)
+    label.BackgroundTransparency = 1; label.Text = name; label.TextColor3 = COL.text; label.Font = Enum.Font.GothamBold; label.TextSize = 13; label.TextXAlignment = Enum.TextXAlignment.Left; label.Parent = row
+    
+    local switchBg = Instance.new("Frame")
+    switchBg.Size = UDim2.new(0, 36, 0, 19); switchBg.Position = UDim2.new(1, -46, 0.5, -9); switchBg.BackgroundColor3 = Color3.fromRGB(30, 20, 40); switchBg.BorderSizePixel = 0; switchBg.Parent = row
+    local sc = Instance.new("UICorner"); sc.CornerRadius = UDim.new(1, 0); sc.Parent = switchBg
+    local knob = Instance.new("Frame")
+    knob.Size = UDim2.new(0, 13, 0, 13); knob.Position = UDim2.new(0, 3, 0.5, -6); knob.BackgroundColor3 = COL.textDim; knob.BorderSizePixel = 0; knob.Parent = switchBg
+    local kc = Instance.new("UICorner"); kc.CornerRadius = UDim.new(1, 0); kc.Parent = knob
+    
+    local isOn = false
+    local function updateVisual()
+        if isOn then
+            TweenService:Create(switchBg, TweenInfo.new(0.15), {BackgroundColor3 = COL.green}):Play()
+            TweenService:Create(knob, TweenInfo.new(0.15), {Position = UDim2.new(0, 20, 0.5, -6), BackgroundColor3 = Color3.fromRGB(0, 0, 0)}):Play()
+            TweenService:Create(rowStroke, TweenInfo.new(0.15), {Color = COL.green, Transparency = 0.2}):Play()
         else
-            getgenv().isRecovering = false
+            TweenService:Create(switchBg, TweenInfo.new(0.15), {BackgroundColor3 = Color3.fromRGB(30, 20, 40)}):Play()
+            TweenService:Create(knob, TweenInfo.new(0.15), {Position = UDim2.new(0, 3, 0.5, -6), BackgroundColor3 = COL.textDim}):Play()
+            TweenService:Create(rowStroke, TweenInfo.new(0.15), {Color = COL.border, Transparency = 0.5}):Play()
+        end
+    end
+    
+    local tBtn = Instance.new("TextButton"); tBtn.Size = UDim2.new(1, 0, 1, 0); tBtn.BackgroundTransparency = 1; tBtn.Text = ""; tBtn.Parent = row
+    
+    tBtn.MouseButton1Down:Connect(function() TweenService:Create(row, TweenInfo.new(0.1), {Size = UDim2.new(0.98, 0, 0, 38)}):Play() end)
+    tBtn.MouseButton1Up:Connect(function() TweenService:Create(row, TweenInfo.new(0.1, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Size = UDim2.new(1, 0, 0, 40)}):Play() end)
+    tBtn.MouseLeave:Connect(function() TweenService:Create(row, TweenInfo.new(0.1, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Size = UDim2.new(1, 0, 0, 40)}):Play() end)
+    
+    tBtn.MouseButton1Click:Connect(function()
+        isOn = not isOn; updateVisual(); playSound("rbxassetid://12221976")
+        if callback then callback(isOn) end
+    end)
+    return {set = function(v) isOn = v updateVisual() if callback then callback(v) end end}
+end
+
+local function addValueRow(page, name, initialVal, minVal, maxVal, step, onChange)
+    local row = Instance.new("Frame")
+    row.Size = UDim2.new(1, 0, 0, 40); row.BackgroundColor3 = COL.card; row.BackgroundTransparency = 0.1; row.BorderSizePixel = 0; row.Parent = page
+    local rc = Instance.new("UICorner"); rc.CornerRadius = UDim.new(0, 8); rc.Parent = row
+    local rs = Instance.new("UIStroke"); rs.Color = COL.border; rs.Thickness = 1; rs.Transparency = 0.5; rs.Parent = row
+    
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(0, 70, 1, 0); label.Position = UDim2.new(0, 10, 0, 0)
+    label.BackgroundTransparency = 1; label.Text = name; label.TextColor3 = COL.text; label.Font = Enum.Font.GothamBold; label.TextSize = 13; label.TextXAlignment = Enum.TextXAlignment.Left; label.Parent = row
+    
+    local valueText = Instance.new("TextLabel")
+    valueText.Size = UDim2.new(0, 50, 1, 0); valueText.Position = UDim2.new(0.5, -25, 0, 0)
+    valueText.BackgroundTransparency = 1; valueText.Text = tostring(initialVal); valueText.TextColor3 = COL.accentLight; valueText.Font = Enum.Font.GothamBold; valueText.TextSize = 14; valueText.Parent = row
+    
+    local currentValue = initialVal
+    local minusBtn = Instance.new("TextButton")
+    minusBtn.Size = UDim2.new(0, 32, 0, 28); minusBtn.Position = UDim2.new(1, -74, 0.5, -14)
+    minusBtn.BackgroundColor3 = COL.btnBg; minusBtn.BackgroundTransparency = 0.1; minusBtn.Text = "−"; minusBtn.TextColor3 = COL.accent; minusBtn.Font = Enum.Font.GothamBold; minusBtn.TextSize = 16; minusBtn.AutoButtonColor = false; minusBtn.Parent = row
+    local mc = Instance.new("UICorner"); mc.CornerRadius = UDim.new(0, 6); mc.Parent = minusBtn
+    
+    local plusBtn = Instance.new("TextButton")
+    plusBtn.Size = UDim2.new(0, 32, 0, 28); plusBtn.Position = UDim2.new(1, -38, 0.5, -14)
+    plusBtn.BackgroundColor3 = COL.btnBg; plusBtn.BackgroundTransparency = 0.1; plusBtn.Text = "+"; plusBtn.TextColor3 = COL.accent; plusBtn.Font = Enum.Font.GothamBold; plusBtn.TextSize = 16; plusBtn.AutoButtonColor = false; plusBtn.Parent = row
+    local pc2 = Instance.new("UICorner"); pc2.CornerRadius = UDim.new(0, 6); pc2.Parent = plusBtn
+    
+    plusBtn.MouseButton1Click:Connect(function() currentValue = math.clamp(currentValue + step, minVal, maxVal); valueText.Text = tostring(currentValue); if onChange then onChange(currentValue) end end)
+    minusBtn.MouseButton1Click:Connect(function() currentValue = math.clamp(currentValue - step, minVal, maxVal); valueText.Text = tostring(currentValue); if onChange then onChange(currentValue) end end)
+    return {setValue = function(v) currentValue = math.clamp(v, minVal, maxVal) valueText.Text = tostring(currentValue) end}
+end
+
+local function addButtonRow(page, name, callback)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(1, 0, 0, 36); btn.BackgroundColor3 = COL.btnBg; btn.BackgroundTransparency = 0.1; btn.BorderSizePixel = 0
+    btn.Text = name; btn.TextColor3 = COL.accentLight; btn.Font = Enum.Font.GothamBold; btn.TextSize = 13; btn.AutoButtonColor = false; btn.Parent = page
+    local bc = Instance.new("UICorner"); bc.CornerRadius = UDim.new(0, 8); bc.Parent = btn
+    local bs = Instance.new("UIStroke"); bs.Color = COL.accent; bs.Thickness = 1; bs.Transparency = 0.5; bs.Parent = btn
+    
+    btn.MouseButton1Down:Connect(function() TweenService:Create(btn, TweenInfo.new(0.1), {Size = UDim2.new(0.98, 0, 0, 34)}):Play() end)
+    btn.MouseButton1Up:Connect(function() TweenService:Create(btn, TweenInfo.new(0.1, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Size = UDim2.new(1, 0, 0, 36)}):Play() end)
+    btn.MouseLeave:Connect(function() TweenService:Create(btn, TweenInfo.new(0.1, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Size = UDim2.new(1, 0, 0, 36)}):Play() end)
+    
+    btn.MouseButton1Click:Connect(function() playSound("rbxassetid://12221976"); if callback then callback() end end)
+end
+
+-- ═══════════ BUILD PAGES ═══════════
+
+-- KEY
+local keyPage = addPage("Key")
+local keyInput = Instance.new("TextBox")
+keyInput.Size = UDim2.new(1, 0, 0, 40); keyInput.BackgroundColor3 = COL.card; keyInput.BackgroundTransparency = 0.1; keyInput.BorderSizePixel = 0
+keyInput.PlaceholderText = "Key"; keyInput.Text = ""; keyInput.TextColor3 = COL.text; keyInput.Font = Enum.Font.GothamMedium; keyInput.TextSize = 13; keyInput.ClearTextOnFocus = false; keyInput.Visible = not keyVerified; keyInput.Parent = keyPage
+local kiC = Instance.new("UICorner"); kiC.CornerRadius = UDim.new(0, 8); kiC.Parent = keyInput
+local kiS = Instance.new("UIStroke"); kiS.Color = COL.border; kiS.Thickness = 1; kiS.Transparency = 0.5; kiS.Parent = keyInput
+
+local getKeyBtn = Instance.new("TextButton")
+getKeyBtn.Size = UDim2.new(1, 0, 0, 36); getKeyBtn.BackgroundColor3 = COL.btnBg; getKeyBtn.BackgroundTransparency = 0.1; getKeyBtn.BorderSizePixel = 0
+getKeyBtn.Text = "Get Key"; getKeyBtn.TextColor3 = Color3.fromRGB(114, 137, 218); getKeyBtn.Font = Enum.Font.GothamBold; getKeyBtn.TextSize = 13; getKeyBtn.AutoButtonColor = false; getKeyBtn.Visible = not keyVerified; getKeyBtn.Parent = keyPage
+local gkC = Instance.new("UICorner"); gkC.CornerRadius = UDim.new(0, 8); gkC.Parent = getKeyBtn
+local gkS = Instance.new("UIStroke"); gkS.Color = COL.border; gkS.Thickness = 1; gkS.Transparency = 0.5; gkS.Parent = getKeyBtn
+
+local keyActivatedL = Instance.new("TextLabel")
+keyActivatedL.Size = UDim2.new(1, 0, 0, 44); keyActivatedL.BackgroundColor3 = COL.card; keyActivatedL.BackgroundTransparency = 0.1
+keyActivatedL.Text = "✓  Key Activated"; keyActivatedL.TextColor3 = COL.green; keyActivatedL.Font = Enum.Font.GothamBold; keyActivatedL.TextSize = 14; keyActivatedL.Visible = keyVerified; keyActivatedL.Parent = keyPage
+local kac = Instance.new("UICorner"); kac.CornerRadius = UDim.new(0, 8); kac.Parent = keyActivatedL
+local kas = Instance.new("UIStroke"); kas.Color = COL.green; kas.Thickness = 1; kas.Transparency = 0.5; kas.Parent = keyActivatedL
+
+getKeyBtn.MouseButton1Click:Connect(function() pcall(function() setclipboard(KEY_LINK) end); playSound("rbxassetid://12221976"); notify("Discord", "Link copied!", 3) end)
+keyInput.FocusLost:Connect(function(enterPressed)
+    if enterPressed then
+        if checkKey(keyInput.Text) then
+            keyVerified = true; pcall(function() writefile(KEY_FILE, keyInput.Text) end)
+            keyInput.Text = ""; keyInput.Visible = false; getKeyBtn.Visible = false; keyActivatedL.Visible = true
+            playSound("rbxassetid://12221976"); notify("Unlocked", "OP features active", 3)
+        else
+            keyInput.Text = ""; playSound("rbxassetid://12221976"); notify("Invalid key", "Get key from Discord", 3)
         end
     end
 end)
 
-UserInputService.JumpRequest:Connect(function()
-    if getgenv().superPowerEnabled then
-        local hum = getHum(LP)
-        if hum then hum:ChangeState(Enum.HumanoidStateType.Jumping) end
+-- MAIN
+local mainPage = addPage("Main")
+addValueRow(mainPage, "Hitbox", 10, 1, 50, 5, function(val) hitboxSize = val; if hitboxEnabled then applyHitboxesToAllPlayers() end end)
+addToggleRow(mainPage, "Enable Hitbox", function(enabled) toggleHitboxes(enabled) end)
+addToggleRow(mainPage, "Invisible (Backup)", function(enabled) if enabled then startInvisible() else stopInvisible() end end)
+
+-- COMBAT
+local combatPage = addPage("Combat")
+
+local opGodSpawnToggle = addToggleRow(combatPage, "OP God Spawn", function(enabled)
+    if enabled and not keyVerified then notify("Locked", "Enter key first", 3); opGodSpawnToggle.set(false); return end
+    if enabled then opGodSpawnOn = true; teleportToArena(true); notify("OP Spawn", "At arena, auto aura running", 3)
+    else opGodSpawnOn = false end
+end)
+
+addButtonRow(combatPage, "Force Teleport to Arena", function()
+    if not keyVerified then notify("Locked", "Enter key first", 3); return end
+    local ok, msg = teleportToArena(true); if ok then notify("Teleported", "At arena", 2) else notify("Failed", msg, 3) end
+end)
+
+local killAuraToggle = addToggleRow(combatPage, "Kill Aura", function(enabled)
+    if enabled and not keyVerified then notify("Locked", "Enter key first", 3); killAuraToggle.set(false); return end
+    killAuraOn = enabled
+    if enabled then if not FlingRE or not SpawnerRE then findRemotes() end; if SpawnerRE then pcall(function() SpawnerRE:FireServer() end) end end
+end)
+
+-- DYNAMIC TARGET PLAYER CARD
+local targetFrame = Instance.new("Frame")
+targetFrame.Size = UDim2.new(1, 0, 0, 70)
+targetFrame.BackgroundColor3 = COL.card
+targetFrame.BackgroundTransparency = 0.1
+targetFrame.BorderSizePixel = 0
+targetFrame.Parent = combatPage
+local tfC = Instance.new("UICorner"); tfC.CornerRadius = UDim.new(0, 8); tfC.Parent = targetFrame
+local tfS = Instance.new("UIStroke"); tfS.Color = COL.border; tfS.Thickness = 1; tfS.Transparency = 0.5; tfS.Parent = targetFrame
+
+local targetAvatar = Instance.new("ImageLabel")
+targetAvatar.Size = UDim2.new(0, 50, 0, 50)
+targetAvatar.Position = UDim2.new(0, 10, 0.5, -25)
+targetAvatar.BackgroundColor3 = COL.bg
+targetAvatar.Image = "rbxthumb://type=AvatarHeadShot&id=1&w=150&h=150"
+targetAvatar.Parent = targetFrame
+local taC = Instance.new("UICorner"); taC.CornerRadius = UDim.new(1, 0); taC.Parent = targetAvatar
+local taS = Instance.new("UIStroke"); taS.Color = COL.accent; taS.Thickness = 2; taS.Parent = targetAvatar
+
+local targetUsername = Instance.new("TextLabel")
+targetUsername.Size = UDim2.new(1, -80, 0, 20)
+targetUsername.Position = UDim2.new(0, 70, 0, 15)
+targetUsername.BackgroundTransparency = 1
+targetUsername.Text = "@playername"
+targetUsername.TextColor3 = COL.text
+targetUsername.Font = Enum.Font.GothamBold
+targetUsername.TextSize = 13
+targetUsername.TextXAlignment = Enum.TextXAlignment.Left
+targetUsername.Parent = targetFrame
+
+local targetDisplayName = Instance.new("TextLabel")
+targetDisplayName.Size = UDim2.new(1, -80, 0, 16)
+targetDisplayName.Position = UDim2.new(0, 70, 0, 35)
+targetDisplayName.BackgroundTransparency = 1
+targetDisplayName.Text = "Display Name"
+targetDisplayName.TextColor3 = COL.textDim
+targetDisplayName.Font = Enum.Font.Gotham
+targetDisplayName.TextSize = 11
+targetDisplayName.TextXAlignment = Enum.TextXAlignment.Left
+targetDisplayName.Parent = targetFrame
+
+local searchBox = Instance.new("TextBox")
+searchBox.Size = UDim2.new(1, 0, 0, 36)
+searchBox.BackgroundColor3 = COL.card
+searchBox.BackgroundTransparency = 0.1
+searchBox.BorderSizePixel = 0
+searchBox.PlaceholderText = "Type @name & press Enter"
+searchBox.Text = ""
+searchBox.TextColor3 = COL.text
+searchBox.PlaceholderColor3 = COL.textDim
+searchBox.Font = Enum.Font.GothamMedium
+searchBox.TextSize = 13
+searchBox.ClearTextOnFocus = false
+searchBox.Parent = combatPage
+local sbC = Instance.new("UICorner"); sbC.CornerRadius = UDim.new(0, 8); sbC.Parent = searchBox
+local sbS = Instance.new("UIStroke"); sbS.Color = COL.border; sbS.Thickness = 1; sbS.Transparency = 0.5; sbS.Parent = searchBox
+
+local targetLockToggle
+searchBox.FocusLost:Connect(function(enterPressed)
+    if enterPressed then
+        local text = searchBox.Text
+        if #text < 2 then
+            notify("Error", "Name too short.", 2); return
+        end
+        local found = smartFind(text)
+        if found then
+            target = found; targetName = found.Name
+            searchBox.Text = "@" .. found.Name
+            targetUsername.Text = "@" .. found.Name
+            targetDisplayName.Text = found.DisplayName
+            targetAvatar.Image = "rbxthumb://type=AvatarHeadShot&id=" .. found.UserId .. "&w=150&h=150"
+            notify("Target Found", found.Name, 2)
+        else
+            notify("Not Found", "No player exists with that name.", 3)
+        end
     end
 end)
 
--- ── GOD KILL AURA ─────────────────────────────────────────────────────────────
-local AURA_COOLDOWN = 0.05   -- FIX: rate-limit firetouchinterest, not every PreRender
-local lastAuraFire  = 0
-
-uiLibrary:AddToggle("GOD Kill-Aura (Close Range)", function(enabled)
-    getgenv().godAuraEnabled = enabled
-    if enabled then
-        if not getgenv().godAuraConn then
-            getgenv().godAuraConn = RunService.Heartbeat:Connect(function()  -- FIX: Heartbeat not PreRender
-                if not getgenv().godAuraEnabled then return end
-                local now = tick()
-                if now - lastAuraFire < AURA_COOLDOWN then return end
-                lastAuraFire = now
-
-                local char = LP.Character
-                if not char then return end
-                local myRoot = char:FindFirstChild("HumanoidRootPart")
-                local hum    = char:FindFirstChildOfClass("Humanoid")
-                if not (myRoot and hum and hum.Health > 0) then return end
-
-                local tool   = char:FindFirstChildOfClass("Tool")
-                if not tool then
-                    local bp = LP:FindFirstChild("Backpack")
-                    if bp then
-                        local t = bp:FindFirstChildOfClass("Tool")
-                        if t then hum:EquipTool(t) end
-                    end
-                    return
-                end
-
-                local handle = tool:FindFirstChild("Handle") or tool:FindFirstChildWhichIsA("BasePart")
-                if not handle then return end
-                tool:Activate()
-
-                local myPos = myRoot.Position
-                for _, p in ipairs(Players:GetPlayers()) do
-                    if isEnemy(p) and p.Character then
-                        local ec   = p.Character
-                        local eHum = ec:FindFirstChildOfClass("Humanoid")
-                        local eRoot= ec:FindFirstChild("HumanoidRootPart") or ec:FindFirstChild("UpperTorso")
-                        if eRoot and eHum and eHum.Health > 0 then
-                            local off   = myPos - eRoot.Position
-                            local distSq= off.X*off.X + off.Y*off.Y + off.Z*off.Z
-                            if distSq <= GOD_RANGE_SQ then
-                                for _, pt in ipairs({eRoot, ec:FindFirstChild("Head"),
-                                    ec:FindFirstChild("UpperTorso"), ec:FindFirstChild("LowerTorso")}) do
-                                    if pt and firetouchinterest then
-                                        firetouchinterest(handle, pt, 0)
-                                        firetouchinterest(handle, pt, 1)
-                                    end
-                                end
-                            end
-                        end
-                    end
-                end
-            end)
+targetLockToggle = addToggleRow(combatPage, "Enable Target Lock", function(enabled)
+    if enabled and not keyVerified then notify("Locked", "Enter key first", 3); targetLockToggle.set(false); return end
+    if enabled and (targetName == "" or not targetName) then notify("Error", "Type a name first!", 2); targetLockToggle.set(false); return end
+    targetLockOn = enabled
+    if not enabled then
+        local char = lp.Character
+        if char then
+            local hrp = char:FindFirstChild("HumanoidRootPart")
+            if hrp then hrp.AssemblyLinearVelocity = Vector3.zero; hrp.AssemblyAngularVelocity = Vector3.zero end
         end
     else
-        if getgenv().godAuraConn then
-            getgenv().godAuraConn:Disconnect()
-            getgenv().godAuraConn = nil
-        end
+        if not target then notify("Waiting", "Waiting for " .. targetName .. " to join...", 3) end
     end
-end, false)
-
--- ── ANTI-FLING BUTTON ─────────────────────────────────────────────────────────
-pcall(function()
-    if CoreGui:FindFirstChild("AntiFlingGui") then CoreGui.AntiFlingGui:Destroy() end
 end)
 
-local flingGui = Instance.new("ScreenGui")
-flingGui.Name         = "AntiFlingGui"
-flingGui.ResetOnSpawn = false
-pcall(function() flingGui.Parent = CoreGui end)
-if not flingGui.Parent then flingGui.Parent = LP:WaitForChild("PlayerGui") end
+-- MOVEMENT
+local movePage = addPage("Movement")
+addToggleRow(movePage, "Fly V3", function(enabled) if enabled then startFlyV3() else stopFlyV3() end end)
+addValueRow(movePage, "Speed", 1, 1, 10, 1, function(val) flyV3Speed = val; if flyV3Active then stopFlyV3(); task.wait(0.1); startFlyV3() end end)
 
-local flingBtn = Instance.new("TextButton")
-flingBtn.Size             = UDim2.new(0,130,0,45)
-flingBtn.Position         = UDim2.new(0.85,-10,0.45,0)
-flingBtn.BackgroundColor3 = Color3.fromRGB(25,25,25)
-flingBtn.BorderSizePixel  = 0
-flingBtn.Text             = "Anti-Fling: OFF"
-flingBtn.TextColor3       = Color3.fromRGB(255,75,75)
-flingBtn.TextSize         = 14
-flingBtn.Font             = Enum.Font.SourceSansBold
-flingBtn.Active           = true
-flingBtn.Draggable        = true
-flingBtn.Parent           = flingGui
-Instance.new("UICorner", flingBtn).CornerRadius = UDim.new(0,8)
-local fStroke = Instance.new("UIStroke", flingBtn)
-fStroke.Color     = Color3.fromRGB(255,75,75)
-fStroke.Thickness = 2
+local upDownRow = Instance.new("Frame")
+upDownRow.Size = UDim2.new(1, 0, 0, 40); upDownRow.BackgroundColor3 = COL.card; upDownRow.BackgroundTransparency = 0.1; upDownRow.BorderSizePixel = 0; upDownRow.Parent = movePage
+local udC = Instance.new("UICorner"); udC.CornerRadius = UDim.new(0, 8); udC.Parent = upDownRow
+local upBtn = Instance.new("TextButton")
+upBtn.Size = UDim2.new(0, 100, 0, 30); upBtn.Position = UDim2.new(0, 10, 0.5, -15); upBtn.BackgroundColor3 = Color3.fromRGB(79, 200, 120); upBtn.BackgroundTransparency = 0.1
+upBtn.Text = "↑"; upBtn.TextColor3 = Color3.fromRGB(0, 0, 0); upBtn.Font = Enum.Font.GothamBold; upBtn.TextSize = 18; upBtn.AutoButtonColor = false; upBtn.Parent = upDownRow
+local upC = Instance.new("UICorner"); upC.CornerRadius = UDim.new(0, 6); upC.Parent = upBtn
+local downBtn = Instance.new("TextButton")
+downBtn.Size = UDim2.new(0, 100, 0, 30); downBtn.Position = UDim2.new(1, -110, 0.5, -15); downBtn.BackgroundColor3 = Color3.fromRGB(215, 200, 121); downBtn.BackgroundTransparency = 0.1
+downBtn.Text = "↓"; downBtn.TextColor3 = Color3.fromRGB(0, 0, 0); downBtn.Font = Enum.Font.GothamBold; downBtn.TextSize = 18; downBtn.AutoButtonColor = false; downBtn.Parent = upDownRow
+local dnC = Instance.new("UICorner"); dnC.CornerRadius = UDim.new(0, 6); dnC.Parent = downBtn
 
+upBtn.MouseButton1Down:Connect(function() flyV3UpHeld = true end)
+upBtn.MouseButton1Up:Connect(function() flyV3UpHeld = false end)
+upBtn.MouseLeave:Connect(function() flyV3UpHeld = false end)
+
+downBtn.MouseButton1Down:Connect(function() flyV3DownHeld = true end)
+downBtn.MouseButton1Up:Connect(function() flyV3DownHeld = false end)
+downBtn.MouseLeave:Connect(function() flyV3DownHeld = false end)
+UserInputService.InputEnded:Connect(function(input) if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then flyV3UpHeld = false; flyV3DownHeld = false end end)
+
+addToggleRow(movePage, "Super Power", function(enabled) getgenv().superPowerEnabled = enabled; if not enabled then local char = lp.Character; local hum = char and char:FindFirstChildOfClass("Humanoid"); if hum then hum.WalkSpeed = 16; hum.JumpPower = 50 end end end)
+addToggleRow(movePage, "Infinite Jump", function(enabled) getgenv().infiniteJumpEnabled = enabled end)
+
+-- MISC
+local miscPage = addPage("Misc")
+addButtonRow(miscPage, "AntiLag (Potato Graphics)", function() applyPotatoGraphics() end)
+addButtonRow(miscPage, "AntiKick", function() loadstring(game:HttpGet("https://raw.githubusercontent.com/OBFhm5650lol/AntickLol/refs/heads/main/Anticklol"))() end)
+
+pages["Main"].Visible = true
+sideBtns["Main"].btn.BackgroundColor3 = COL.accent
+sideBtns["Main"].btn.BackgroundTransparency = 0.1
+sideBtns["Main"].btn.TextColor3 = Color3.fromRGB(0,0,0)
+sideBtns["Main"].btn.Font = Enum.Font.GothamBold
+sideBtns["Main"].stroke.Color = COL.accentLight
+sideBtns["Main"].stroke.Transparency = 0
+
+-- ═══════════ PREMIUM HALLOWEEN STANDALONE TOGGLES 🎃 ═══════════
+local StandaloneGui = Instance.new("ScreenGui")
+StandaloneGui.Name = "Standalone_Toggles"
+StandaloneGui.ResetOnSpawn = false
+StandaloneGui.DisplayOrder = 999
+StandaloneGui.IgnoreGuiInset = true
+pcall(function() StandaloneGui.Parent = CoreGui end)
+if not StandaloneGui.Parent then StandaloneGui.Parent = lp:WaitForChild("PlayerGui") end
+
+local function createPill(name, icon, pos)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0, 95, 0, 32)
+    btn.Position = pos
+    btn.BackgroundColor3 = Color3.fromRGB(25, 15, 35)
+    btn.BackgroundTransparency = 0.15
+    btn.BorderSizePixel = 0
+    btn.Text = ""
+    btn.AutoButtonColor = false
+    btn.Active = true
+    btn.Parent = StandaloneGui
+    
+    local grad = Instance.new("UIGradient")
+    grad.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0.00, Color3.fromRGB(60, 30, 80)),
+        ColorSequenceKeypoint.new(1.00, Color3.fromRGB(30, 15, 45))
+    })
+    grad.Rotation = 45
+    grad.Parent = btn
+
+    local corner = Instance.new("UICorner"); corner.CornerRadius = UDim.new(1, 0); corner.Parent = btn
+    local stroke = Instance.new("UIStroke"); stroke.Color = COL.red; stroke.Thickness = 2; stroke.Parent = btn
+    
+    local iconLbl = Instance.new("TextLabel")
+    iconLbl.Text = icon
+    iconLbl.Size = UDim2.new(0, 24, 1, 0)
+    iconLbl.Position = UDim2.new(0, 4, 0, 0)
+    iconLbl.BackgroundTransparency = 1
+    iconLbl.TextColor3 = Color3.fromRGB(255, 255, 255)
+    iconLbl.TextSize = 14
+    iconLbl.Parent = btn
+    
+    local textLbl = Instance.new("TextLabel")
+    textLbl.Text = name
+    textLbl.Size = UDim2.new(1, -35, 1, 0)
+    textLbl.Position = UDim2.new(0, 28, 0, 0)
+    textLbl.BackgroundTransparency = 1
+    textLbl.TextColor3 = COL.red
+    textLbl.Font = Enum.Font.GothamBold
+    textLbl.TextSize = 11
+    textLbl.TextXAlignment = Enum.TextXAlignment.Left
+    textLbl.Parent = btn
+    
+    local dot = Instance.new("Frame")
+    dot.Size = UDim2.new(0, 6, 0, 6)
+    dot.Position = UDim2.new(1, -10, 0.5, -3)
+    dot.BackgroundColor3 = COL.red
+    dot.Parent = btn
+    local dotCorner = Instance.new("UICorner"); dotCorner.CornerRadius = UDim.new(1, 0); dotCorner.Parent = dot
+
+    btn.MouseButton1Down:Connect(function() TweenService:Create(btn, TweenInfo.new(0.1), {Size = UDim2.new(0, 90, 0, 30)}):Play() end)
+    btn.MouseButton1Up:Connect(function() TweenService:Create(btn, TweenInfo.new(0.1, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Size = UDim2.new(0, 95, 0, 32)}):Play() end)
+    btn.MouseLeave:Connect(function() TweenService:Create(btn, TweenInfo.new(0.1, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Size = UDim2.new(0, 95, 0, 32)}):Play() end)
+
+    return btn, stroke, textLbl, dot
+end
+
+-- EXACT POSITIONS APPLIED HERE
+local aFlingBtn, aFlingStroke, aFlingText, aFlingDot = createPill("A-Fling", "💀", UDim2.new(0, 65, 0, 203))
 local noFallEnabled = false
-local noFallConn    = nil
+local noFallConnection
 
 local function executeACR(char, hum, hrp)
     if not (char and hum and hrp) then return end
     pcall(function()
-        hrp.Anchored = true
-        hrp.AssemblyLinearVelocity  = Vector3.zero
-        hrp.AssemblyAngularVelocity = Vector3.zero
-        hum.PlatformStand = false
-        hum.Sit           = false
-        local pos  = hrp.Position
-        local look = hrp.CFrame.LookVector
-        local flat = Vector3.new(look.X,0,look.Z)
-        if flat.Magnitude < 0.1 then flat = Vector3.new(0,0,-1) end
-        flat = flat.Unit
-        hrp.CFrame = CFrame.new(pos + Vector3.new(0,2.5,0), pos + Vector3.new(0,2.5,0) + flat)
+        hrp.Anchored = true; hrp.AssemblyLinearVelocity = Vector3.zero; hrp.AssemblyAngularVelocity = Vector3.zero
+        hum.PlatformStand = false; hum.Sit = false
+        local currentPos = hrp.Position; local lookVector = hrp.CFrame.LookVector
+        local flatLook = Vector3.new(lookVector.X, 0, lookVector.Z).Unit
+        if flatLook.Magnitude < 0.1 then flatLook = Vector3.new(0, 0, -1) end
+        local newPos = currentPos + Vector3.new(0, 2.5, 0)
+        hrp.CFrame = CFrame.new(newPos, newPos + flatLook)
         hum:ChangeState(Enum.HumanoidStateType.Freefall)
-        task.wait(0.05)
-        hrp.Anchored = false
-        hum.Jump     = true
+        task.wait(0.05); hrp.Anchored = false; hum.Jump = true
     end)
 end
 
-local function setStates(hum, on)
-    if not hum then return end
-    hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, not on)
-    hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll,     not on)
-end
-
-local function toggleAntiFling(on)
-    noFallEnabled = on
-    local char = LP.Character
-    local hum  = char and char:FindFirstChildOfClass("Humanoid")
-    local hrp  = char and char:FindFirstChild("HumanoidRootPart")
-
-    if on then
-        flingBtn.Text       = "Anti-Fling: ON"
-        flingBtn.TextColor3 = Color3.fromRGB(75,255,75)
-        fStroke.Color       = Color3.fromRGB(75,255,75)
+local function toggleAntiFling(enabled)
+    noFallEnabled = enabled
+    local char = lp.Character; local hum = char and char:FindFirstChildOfClass("Humanoid"); local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    if enabled then
+        TweenService:Create(aFlingText, TweenInfo.new(0.2), {TextColor3 = COL.green}):Play()
+        TweenService:Create(aFlingDot, TweenInfo.new(0.2), {BackgroundColor3 = COL.green}):Play()
+        TweenService:Create(aFlingStroke, TweenInfo.new(0.2), {Color = COL.green}):Play()
+        
         executeACR(char, hum, hrp)
-        setStates(hum, true)
-        if not noFallConn then
-            noFallConn = RunService.Heartbeat:Connect(function()
+        pcall(function() hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false); hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false) end)
+        if not noFallConnection then
+            noFallConnection = RunService.Heartbeat:Connect(function()
                 pcall(function()
-                    local c = LP.Character
-                    if not c then return end
-                    local r = c:FindFirstChild("HumanoidRootPart")
-                    local h = c:FindFirstChildOfClass("Humanoid")
+                    local c = lp.Character; if not c then return end
+                    local r = c:FindFirstChild("HumanoidRootPart"); local h = c:FindFirstChildOfClass("Humanoid")
                     if r and h then
-                        local lv = r.AssemblyLinearVelocity
-                        local av = r.AssemblyAngularVelocity
-                        if Vector3.new(lv.X,0,lv.Z).Magnitude > 150 or av.Magnitude > 75 then
-                            executeACR(c, h, r)
-                        end
-                        if h.PlatformStand then
-                            h.PlatformStand = false
-                            h.Jump          = true
-                        end
+                        local lv = r.AssemblyLinearVelocity; local av = r.AssemblyAngularVelocity
+                        local hs = Vector3.new(lv.X, 0, lv.Z).Magnitude
+                        if hs > 150 or av.Magnitude > 75 then executeACR(c, h, r) end
+                        if h.PlatformStand then h.PlatformStand = false; h.Jump = true end
                     end
                 end)
             end)
         end
     else
-        flingBtn.Text       = "Anti-Fling: OFF"
-        flingBtn.TextColor3 = Color3.fromRGB(255,75,75)
-        fStroke.Color       = Color3.fromRGB(255,75,75)
-        if noFallConn then noFallConn:Disconnect() noFallConn = nil end
-        setStates(hum, false)
+        TweenService:Create(aFlingText, TweenInfo.new(0.2), {TextColor3 = COL.red}):Play()
+        TweenService:Create(aFlingDot, TweenInfo.new(0.2), {BackgroundColor3 = COL.red}):Play()
+        TweenService:Create(aFlingStroke, TweenInfo.new(0.2), {Color = COL.red}):Play()
+        
+        if noFallConnection then noFallConnection:Disconnect(); noFallConnection = nil end
+        pcall(function() hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, true); hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, true) end)
         executeACR(char, hum, hrp)
     end
 end
 
-flingBtn.MouseButton1Click:Connect(function() toggleAntiFling(not noFallEnabled) end)
-LP.CharacterAdded:Connect(function(c)
-    if noFallEnabled then
-        task.wait(0.5)
-        setStates(c:WaitForChild("Humanoid"), true)
-    end
-end)
+aFlingBtn.MouseButton1Click:Connect(function() toggleAntiFling(not noFallEnabled) end)
 
--- ── GLOBAL AURA — FIX: no longer teleports to every enemy every frame ────────
--- now: teleport to ONE random enemy, strike, return — with 0.08s min gap
-local GLOBAL_STRIKE_CD = 0.08
-local lastGlobalStrike = 0
+-- EXACT POSITIONS APPLIED HERE
+local invisBtn, invisStroke, invisText, invisDot = createPill("Invisible", "👻", UDim2.new(0, 64, 0, 253))
 
-uiLibrary:AddToggle("Global Autohit (Cross-map)", function(enabled)
-    getgenv().globalAuraEnabled = enabled
-    if enabled then
-        if not getgenv().globalAuraConn then
-            getgenv().globalAuraConn = RunService.Heartbeat:Connect(function()
-                if not getgenv().globalAuraEnabled then return end
-                local now = tick()
-                if now - lastGlobalStrike < GLOBAL_STRIKE_CD then return end
-                lastGlobalStrike = now
-
-                local char = LP.Character
-                if not char then return end
-                local myRoot = char:FindFirstChild("HumanoidRootPart")
-                local hum    = char:FindFirstChildOfClass("Humanoid")
-                if not (myRoot and hum and hum.Health > 0) then return end
-
-                local origin = myRoot.CFrame
-
-                -- pick ONE target this tick, cycle through them
-                local enemies = {}
-                for _, p in ipairs(Players:GetPlayers()) do
-                    if isEnemy(p) and p.Character then
-                        local eHum  = p.Character:FindFirstChildOfClass("Humanoid")
-                        local eRoot = p.Character:FindFirstChild("HumanoidRootPart")
-                        if eRoot and eHum and eHum.Health > 0 then
-                            local off = origin.Position - eRoot.Position
-                            if off.X*off.X+off.Y*off.Y+off.Z*off.Z <= GLOBAL_RANGE_SQ then
-                                enemies[#enemies+1] = {root = eRoot, char = p.Character}
-                            end
-                        end
-                    end
-                end
-
-                if #enemies == 0 then return end
-                local target = enemies[math.random(#enemies)]
-
-                local tool   = char:FindFirstChildOfClass("Tool")
-                local handle = tool and (tool:FindFirstChild("Handle") or tool:FindFirstChildWhichIsA("BasePart"))
-
-                myRoot.CFrame = target.root.CFrame * CFrame.new(0,0,1)
-                myRoot.AssemblyAngularVelocity = Vector3.new(100000,100000,100000)
-
-                if tool and handle then
-                    tool:Activate()
-                    if firetouchinterest then
-                        firetouchinterest(handle, target.root, 0)
-                        firetouchinterest(handle, target.root, 1)
-                    end
-                end
-
-                task.wait(0.01)
-                myRoot.AssemblyAngularVelocity = Vector3.zero
-                myRoot.AssemblyLinearVelocity  = Vector3.zero
-                myRoot.CFrame = origin
-            end)
-        end
+invisBtn.MouseButton1Click:Connect(function()
+    if invisibleEnabled then
+        stopInvisible()
+        TweenService:Create(invisText, TweenInfo.new(0.2), {TextColor3 = COL.red}):Play()
+        TweenService:Create(invisDot, TweenInfo.new(0.2), {BackgroundColor3 = COL.red}):Play()
+        TweenService:Create(invisStroke, TweenInfo.new(0.2), {Color = COL.red}):Play()
+        notify("Invisible", "OFF", 2)
     else
-        if getgenv().globalAuraConn then
-            getgenv().globalAuraConn:Disconnect()
-            getgenv().globalAuraConn = nil
-        end
+        startInvisible()
+        TweenService:Create(invisText, TweenInfo.new(0.2), {TextColor3 = COL.green}):Play()
+        TweenService:Create(invisDot, TweenInfo.new(0.2), {BackgroundColor3 = COL.green}):Play()
+        TweenService:Create(invisStroke, TweenInfo.new(0.2), {Color = COL.green}):Play()
+        notify("Invisible", "ON", 2)
     end
-end, false)
-
--- ════════════════════════════════════════════════════════════════
---  NEW UNIQUE FEATURES
--- ════════════════════════════════════════════════════════════════
-
--- ── 1. KILL STREAK COUNTER ────────────────────────────────────────────────────
--- tracks kills by watching enemy health drop to 0
-local streakGui = Instance.new("ScreenGui")
-streakGui.Name         = "StreakGui"
-streakGui.ResetOnSpawn = false
-pcall(function() streakGui.Parent = CoreGui end)
-if not streakGui.Parent then streakGui.Parent = LP:WaitForChild("PlayerGui") end
-
-local streakLabel = Instance.new("TextLabel")
-streakLabel.Size                  = UDim2.new(0,200,0,50)
-streakLabel.Position              = UDim2.new(0.5,-100,0,10)
-streakLabel.BackgroundTransparency= 1
-streakLabel.TextColor3            = Color3.fromRGB(255,200,0)
-streakLabel.TextStrokeTransparency= 0
-streakLabel.Font                  = Enum.Font.GothamBold
-streakLabel.TextSize              = 24
-streakLabel.Text                  = ""
-streakLabel.Parent                = streakGui
-
-local function flashStreak(text)
-    streakLabel.Text             = text
-    streakLabel.TextTransparency = 0
-    local tw = TweenService:Create(
-        streakLabel,
-        TweenInfo.new(1.5, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
-        {TextTransparency = 1}
-    )
-    tw:Play()
-end
-
-local function getStreakText(n)
-    if n >= 10 then return "💀 UNSTOPPABLE x"..n
-    elseif n >= 7 then return "🔥 RAMPAGE x"..n
-    elseif n >= 5 then return "⚡ KILLING SPREE x"..n
-    elseif n >= 3 then return "🐂 BULL RUN x"..n
-    else return "Kill x"..n end
-end
-
-local trackedHealthConns = {}
-
-local function watchEnemy(player)
-    if trackedHealthConns[player] then return end
-    local function hookChar(char)
-        local hum = char and char:FindFirstChildOfClass("Humanoid")
-        if not hum then return end
-        trackedHealthConns[player] = hum.Died:Connect(function()
-            local now = tick()
-            if now - lastKillTime < 8 then
-                killStreak = killStreak + 1
-            else
-                killStreak = 1
-            end
-            lastKillTime = now
-            flashStreak(getStreakText(killStreak))
-            playSound("rbxassetid://12221976")
-        end)
-    end
-    hookChar(player.Character)
-    player.CharacterAdded:Connect(hookChar)
-end
-
-for _, p in ipairs(Players:GetPlayers()) do
-    if isEnemy(p) then watchEnemy(p) end
-end
-Players.PlayerAdded:Connect(function(p)
-    if isEnemy(p) then watchEnemy(p) end
 end)
 
--- ── 2. GROUND LOCK — kills Y knockback, keeps XZ movement ────────────────────
--- server only sees normal movement, purely client velocity clamp
-uiLibrary:AddToggle("Ground Lock (No Knockback)", function(enabled)
-    groundLockEnabled = enabled
-    if groundLockConn then groundLockConn:Disconnect() groundLockConn = nil end
-    if enabled then
-        groundLockConn = RunService.Heartbeat:Connect(function()
-            local char = LP.Character
-            local hrp  = char and char:FindFirstChild("HumanoidRootPart")
-            if not hrp then return end
-            local lv = hrp.AssemblyLinearVelocity
-            -- if Y velocity is strong upward (knockback) — clamp it
-            if lv.Y > 30 then
-                hrp.AssemblyLinearVelocity = Vector3.new(lv.X, math.min(lv.Y, 30), lv.Z)
-            end
-            -- kill spin always
-            local av = hrp.AssemblyAngularVelocity
-            if av.Magnitude > 5 then
-                hrp.AssemblyAngularVelocity = Vector3.zero
-            end
-        end)
-    end
-end, false)
-
--- ── 3. FLING SURF — redirect incoming fling toward nearest enemy ──────────────
--- when someone flings you, instead of flying off the island you fly INTO someone
-uiLibrary:AddToggle("Fling Surf (Redirect Flings)", function(enabled)
-    flingurfEnabled = enabled
-    if flingurfConn then flingurfConn:Disconnect() flingurfConn = nil end
-    if enabled then
-        flingurfConn = RunService.Heartbeat:Connect(function()
-            local char = LP.Character
-            local hrp  = char and char:FindFirstChild("HumanoidRootPart")
-            if not hrp then return end
-            local lv = hrp.AssemblyLinearVelocity
-            local spd = lv.Magnitude
-            -- only kick in when we're actually being flung (high speed)
-            if spd < 80 then return end
-
-            -- find nearest enemy and redirect velocity toward them
-            local myPos   = hrp.Position
-            local bestDist= math.huge
-            local bestPos = nil
-
-            for _, p in ipairs(Players:GetPlayers()) do
-                if isEnemy(p) and p.Character then
-                    local eRoot = p.Character:FindFirstChild("HumanoidRootPart")
-                    if eRoot then
-                        local d = (myPos - eRoot.Position).Magnitude
-                        if d < bestDist and d > 1 then
-                            bestDist = d
-                            bestPos  = eRoot.Position
-                        end
-                    end
-                end
-            end
-
-            if bestPos then
-                local dir = (bestPos - myPos).Unit
-                hrp.AssemblyLinearVelocity = dir * spd  -- keep speed, change direction
-            end
-        end)
-    end
-end, false)
-
--- ── 4. CROWD MAGNET — charge toward densest cluster, not just nearest ─────────
--- finds the position with the most enemies within 20 studs and drives into it
-uiLibrary:AddToggle("Crowd Magnet (Brawl Ram)", function(enabled)
-    crowdMagnetEnabled = enabled
-    if crowdMagnetConn then crowdMagnetConn:Disconnect() crowdMagnetConn = nil end
-    if enabled then
-        crowdMagnetConn = RunService.Heartbeat:Connect(function()
-            local char = LP.Character
-            local hrp  = char and char:FindFirstChild("HumanoidRootPart")
-            local hum  = char and char:FindFirstChildOfClass("Humanoid")
-            if not (hrp and hum and hum.Health > 0) then return end
-
-            local CLUSTER_RADIUS = 20
-            local myPos = hrp.Position
-
-            -- collect enemy positions
-            local positions = {}
-            for _, p in ipairs(Players:GetPlayers()) do
-                if isEnemy(p) and p.Character then
-                    local eRoot = p.Character:FindFirstChild("HumanoidRootPart")
-                    local eHum  = p.Character:FindFirstChildOfClass("Humanoid")
-                    if eRoot and eHum and eHum.Health > 0 then
-                        positions[#positions+1] = eRoot.Position
-                    end
-                end
-            end
-
-            if #positions == 0 then return end
-
-            -- score each candidate by how many others are within cluster radius
-            local bestScore = -1
-            local bestPos   = nil
-
-            for _, candPos in ipairs(positions) do
-                local score = 0
-                for _, otherPos in ipairs(positions) do
-                    if (candPos - otherPos).Magnitude <= CLUSTER_RADIUS then
-                        score = score + 1
-                    end
-                end
-                if score > bestScore then
-                    bestScore = score
-                    bestPos   = candPos
-                end
-            end
-
-            if bestPos then
-                local dir = (bestPos - myPos).Unit
-                local bv  = hrp:FindFirstChild("CrowdMagnet_BV")
-                if not bv then
-                    bv          = Instance.new("BodyVelocity")
-                    bv.Name     = "CrowdMagnet_BV"
-                    bv.MaxForce = Vector3.new(math.huge,0,math.huge)
-                    bv.Parent   = hrp
-                end
-                bv.Velocity = dir * (hum.WalkSpeed * 3)
-            end
-        end)
-    else
-        -- clean up BodyVelocity
-        local hrp = getHRP(LP)
-        if hrp then
-            local bv = hrp:FindFirstChild("CrowdMagnet_BV")
-            if bv then bv:Destroy() end
-        end
-    end
-end, false)
-
--- ── 5. AUTO RESPAWN — instant respawn, no death screen ───────────────────────
-uiLibrary:AddToggle("Auto Respawn", function(enabled)
-    if autoRespawnConn then autoRespawnConn:Disconnect() autoRespawnConn = nil end
-    if enabled then
-        local function hookDeath(char)
-            local hum = char:WaitForChild("Humanoid")
-            hum.Died:Connect(function()
-                task.wait(0.1)
-                LP:LoadCharacter()
-            end)
-        end
-        if LP.Character then hookDeath(LP.Character) end
-        autoRespawnConn = LP.CharacterAdded:Connect(hookDeath)
-    end
-end, false)
-
--- ── 6. SPECTATOR ALERT — know when someone's camera is on you ────────────────
--- checks which players have camera subject pointing at your character parts
-uiLibrary:AddToggle("Spectator Alert", function(enabled)
-    if specAlertConn then specAlertConn:Disconnect() specAlertConn = nil end
-    if enabled then
-        local lastAlert   = 0
-        local lastWatcher = ""
-        specAlertConn = RunService.Heartbeat:Connect(function()
-            local now = tick()
-            if now - lastAlert < 3 then return end  -- alert max every 3s
-            local myChar = LP.Character
-            if not myChar then return end
-            for _, p in ipairs(Players:GetPlayers()) do
-                if p ~= LP then
-                    -- spectators typically have no character or their cam follows your parts
-                    local pChar = p.Character
-                    if not pChar then
-                        -- spectating someone — rough heuristic: no active character
-                        if p.Name ~= lastWatcher then
-                            lastWatcher = p.Name
-                            lastAlert   = now
-                            notify("👁 Spectator Alert", p.Name .. " may be watching you", 3)
-                        end
-                    end
-                end
-            end
-        end)
-    end
-end, false)
-
--- ── CLEANUP ON RESPAWN ────────────────────────────────────────────────────────
-LP.CharacterAdded:Connect(function()
-    -- clear old hitbox save data for our own character (irrelevant but safe)
-    killStreak = 0
+-- First open animation
+task.defer(function()
+    task.wait(0.2)
+    reopenBtn.Visible = false
+    mainPanel.Visible = true
+    panelScale.Scale = 0.7
+    TweenService:Create(panelScale, TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Scale = 1}):Play()
 end)
 
-print("[Hitblox v6.0] Kovak Edition loaded.")
+-- ═══════════ FIXED DRAG LOGIC (STOPS CAMERA MOVE) ═══════════
+local dragging, dragStart, startPos
+header.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = true; dragStart = input.Position; startPos = mainPanel.Position
+        
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                dragging = false
+            end
+        end)
+    end
+end)
+UserInputService.InputChanged:Connect(function(input)
+    if dragging and (input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseMovement) then
+        local delta = input.Position - dragStart
+        mainPanel.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+end)
+
+-- ═══════════ LOOPS ═══════════
+
+-- Standard Kill Aura
+RunService.Heartbeat:Connect(function()
+    if not killAuraOn or not keyVerified or not FlingRE then return end
+    local now = tick()
+    if now - lastAuraHit < auraDelay then return end
+    lastAuraHit = now
+
+    local myChar = lp.Character
+    local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
+    if not myRoot then return end
+
+    local nearest, nearestDist = nil, auraRange
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= lp and p.Character then
+            local root = p.Character:FindFirstChild("HumanoidRootPart")
+            local eHum = p.Character:FindFirstChildOfClass("Humanoid")
+            if root and eHum and eHum.Health > 0 then
+                local dist = (myRoot.Position - root.Position).Magnitude
+                if dist < nearestDist then nearest = p; nearestDist = dist end
+            end
+        end
+    end
+    if nearest then pcall(function() FlingRE:FireServer(nearest) end) end
+end)
+
+-- OP God Spawn loop
+RunService.Heartbeat:Connect(function()
+    if not opGodSpawnOn or not keyVerified or not FlingRE then return end
+    local char = lp.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    if not (hrp and hum) or hum.Health <= 0 or invisibleEnabled then return end
+
+    if hum.Sit then hum.Sit = false; hum.SeatPart = nil end
+    stripMount(char)
+
+    if (hrp.Position - ARENA_POS).Magnitude > 150 then
+        pcall(function()
+            hum.Sit = false; hum.SeatPart = nil
+            hrp.Anchored = true; hrp.CFrame = CFrame.new(ARENA_TELEPORT)
+            hrp.AssemblyLinearVelocity = Vector3.zero; hrp.AssemblyAngularVelocity = Vector3.zero
+            task.wait(0.1); hrp.Anchored = false
+        end)
+    end
+
+    local now = tick()
+    if now - lastOpAuraHit < auraDelay then return end
+    lastOpAuraHit = now
+
+    local nearest, nearestDist = nil, opAuraRange
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= lp and p.Character then
+            local root = p.Character:FindFirstChild("HumanoidRootPart")
+            local eHum = p.Character:FindFirstChildOfClass("Humanoid")
+            if root and eHum and eHum.Health > 0 then
+                local dist = (hrp.Position - root.Position).Magnitude
+                if dist < nearestDist then nearest = p; nearestDist = dist end
+            end
+        end
+    end
+    if nearest then pcall(function() FlingRE:FireServer(nearest) end) end
+end)
+
+-- Dynamic Target Lock
+RunService.Heartbeat:Connect(function()
+    if not targetLockOn or invisibleEnabled then return end
+    if not target then
+        local found = Players:FindFirstChild(targetName)
+        if found then target = found end
+    end
+    if target and target.Character then
+        local tChar = target.Character
+        local tRoot = tChar:FindFirstChild("HumanoidRootPart")
+        local myChar = lp.Character
+        local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
+        if tRoot and myRoot then myRoot.CFrame = tRoot.CFrame * CFrame.new(0, 2, 3) end
+    end
+end)
+
+-- Respawn handling
+lp.CharacterAdded:Connect(function(char)
+    task.wait(0.7)
+    pcall(function()
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        if hum then hum.PlatformStand = false; enableAllHumanoidStates(hum) end
+        if char:FindFirstChild("Animate") then char.Animate.Disabled = false end
+    end)
+    flyV3Active = false; flyV3UpHeld = false; flyV3DownHeld = false
+
+    if invisibleEnabled then
+        invisibleEnabled = false; invisibleParts = {}
+        if invisibleConnection then invisibleConnection:Disconnect(); invisibleConnection = nil end
+        TweenService:Create(invisText, TweenInfo.new(0.2), {TextColor3 = COL.red}):Play()
+        TweenService:Create(invisDot, TweenInfo.new(0.2), {BackgroundColor3 = COL.red}):Play()
+        TweenService:Create(invisStroke, TweenInfo.new(0.2), {Color = COL.red}):Play()
+    end
+
+    if killAuraOn and keyVerified and not spawningDebounce then
+        spawningDebounce = true
+        task.spawn(function()
+            task.wait(0.5)
+            local root = char:FindFirstChild("HumanoidRootPart")
+            if root and root.Position.Z < LOBBY_MAX_Z then
+                pcall(function() if not SpawnerRE then findRemotes() end; if SpawnerRE then SpawnerRE:FireServer() end end)
+            end
+            task.wait(2); spawningDebounce = false
+        end)
+    end
+
+    if opGodSpawnOn then
+        task.spawn(function()
+            task.wait(1); teleportToArena(true)
+            for i = 1, 60 do task.wait(0.05); stripMount(char) end
+        end)
+    end
+end)
+
+-- Physics & Hitbox
+RunService.Heartbeat:Connect(function()
+    local char = lp.Character
+    if not char then return end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if hum and getgenv().superPowerEnabled then
+        hum.WalkSpeed = 120; hum.JumpPower = 150; hum.UseJumpPower = true
+    end
+    if hitboxEnabled then
+        for _, p in ipairs(Players:GetPlayers()) do
+            if p ~= lp and p.Character then
+                local hrp = p.Character:FindFirstChild("HumanoidRootPart")
+                if hrp then
+                    if not hrp:FindFirstChild("OriginalSize") then
+                        local o = Instance.new("Vector3Value"); o.Name = "OriginalSize"; o.Value = hrp.Size; o.Parent = hrp
+                    end
+                    hrp.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize); hrp.Transparency = hitboxTransparency; hrp.CanCollide = false
+                end
+            end
+        end
+    end
+end)
+
+-- Infinite Jump
+UserInputService.JumpRequest:Connect(function()
+    if getgenv().superPowerEnabled or getgenv().infiniteJumpEnabled then
+        local char = lp.Character; local hum = char and char:FindFirstChildOfClass("Humanoid")
+        if hum then hum:ChangeState(Enum.HumanoidStateType.Jumping) end
+    end
+end)
+
+print("🎃 Undocall's Hub v36 (Halloween Edition) loaded. 🎃")
+print("Discord: " .. KEY_LINK)
