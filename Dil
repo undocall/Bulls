@@ -1,6 +1,6 @@
--- ═══════════ UNODOCALL'S HUB — HALLOWEEN EDITION 🎃 ═══════════
+-- ═══════════ UNODOCALL'S HUB — HALLOWEEN EDITION (FIXED) 🎃 ═══════════
 -- Arena: (-760, 11.5, 2040)
--- Studio-Level Halloween UI + Original v36 Logic
+-- Added missing Auto Sheriff + Fixed Reopen Button transparency
 
 local StarterGui = game:GetService("StarterGui")
 local Players = game:GetService("Players")
@@ -94,6 +94,7 @@ local hitboxEnabled = false
 local killAuraOn = false
 local opGodSpawnOn = false
 local targetLockOn = false
+local sheriffActive = false
 local target = nil
 local targetName = ""
 local auraRange = 40
@@ -101,6 +102,7 @@ local opAuraRange = 80
 local auraDelay = 0.75
 local lastAuraHit = 0
 local lastOpAuraHit = 0
+local lastSheriffShot = 0
 local spawningDebounce = false
 
 getgenv().superPowerEnabled = false
@@ -139,7 +141,7 @@ Players.PlayerRemoving:Connect(function(plr)
 end)
 
 Players.PlayerAdded:Connect(function(plr)
-    if plr.Name == targetName and targetLockOn then
+    if plr.Name == targetName and (targetLockOn or sheriffActive) then
         target = plr
         playSound("rbxassetid://12221976")
         notify("TARGET REJOINED", plr.Name .. " is back! Auto-locking...", 4)
@@ -178,7 +180,7 @@ local function applyPotatoGraphics()
     notify("AntiLag", "Potato mode ON · " .. killed .. " effects off", 3)
 end
 
--- ═══════════ FLY V3 (forward declarations for cross-references) ═══════════
+-- ═══════════ FLY V3 ═══════════
 local flyV3Active = false
 local flyV3Speed = 1
 local flyV3UpHeld = false
@@ -238,7 +240,6 @@ local function stopInvisible()
     end
 end
 
--- ═══════════ FLY V3 ═══════════
 local function startFlyV3()
     if flyV3Active then return end
     local char = lp.Character
@@ -498,7 +499,6 @@ end
 
 -- ═══════════════════════════════════════════════════
 -- STUDIO HALLOWEEN GUI — FULL REBUILD
--- Design language: Obsidian Manor | Ember Glow System
 -- ═══════════════════════════════════════════════════
 
 local ScreenGui = Instance.new("ScreenGui")
@@ -509,71 +509,47 @@ ScreenGui.DisplayOrder = 100
 pcall(function() ScreenGui.Parent = CoreGui end)
 if not ScreenGui.Parent then ScreenGui.Parent = lp:WaitForChild("PlayerGui") end
 
--- ─── STUDIO PALETTE ───────────────────────────────
--- Obsidian Manor: layered depth, not flat paint
 local C = {
-    -- Base layers (deep)
-    void        = Color3.fromRGB(6,   4,   10),   -- true black-purple, base
-    obsidian    = Color3.fromRGB(12,  8,   18),   -- panel bg
-    manor       = Color3.fromRGB(18,  12,  28),   -- card layer 1
-    crypt       = Color3.fromRGB(24,  16,  38),   -- card layer 2 / hover
-    tomb        = Color3.fromRGB(32,  20,  48),   -- sidebar
-    grave       = Color3.fromRGB(40,  26,  58),   -- sidebar item
-
-    -- Ember glow system (warm accents)
-    ember       = Color3.fromRGB(255, 95,  20),   -- primary orange, saturated
-    flame       = Color3.fromRGB(255, 145, 40),   -- lighter ember
-    spark       = Color3.fromRGB(255, 200, 80),   -- tip of the flame / highlights
-    coal        = Color3.fromRGB(140, 45,  10),   -- deep ember shadow
-
-    -- Blood accents
-    blood       = Color3.fromRGB(160, 20,  30),   -- crimson border
-    gore        = Color3.fromRGB(200, 40,  40),   -- active blood red
-    wound       = Color3.fromRGB(220, 60,  60),   -- highlight blood
-
-    -- Arcane purple
-    arcane      = Color3.fromRGB(90,  30,  140),  -- border/glow purple
-    witch       = Color3.fromRGB(120, 50,  180),  -- active purple
-    specter     = Color3.fromRGB(160, 80,  220),  -- light purple highlight
-
-    -- Status
-    toxic       = Color3.fromRGB(80,  210, 100),  -- on/active
-    toxicDark   = Color3.fromRGB(40,  120, 55),   -- on shadow
-    deathRed    = Color3.fromRGB(210, 40,  40),   -- off/danger
-    deathDark   = Color3.fromRGB(110, 20,  20),   -- off shadow
-
-    -- Text
-    bone        = Color3.fromRGB(240, 230, 215),  -- primary text (warm white)
-    ash         = Color3.fromRGB(180, 165, 150),  -- secondary text
-    dust        = Color3.fromRGB(110, 95,  85),   -- dim text
+    void        = Color3.fromRGB(6,   4,   10),
+    obsidian    = Color3.fromRGB(12,  8,   18),
+    manor       = Color3.fromRGB(18,  12,  28),
+    crypt       = Color3.fromRGB(24,  16,  38),
+    tomb        = Color3.fromRGB(32,  20,  48),
+    grave       = Color3.fromRGB(40,  26,  58),
+    ember       = Color3.fromRGB(255, 95,  20),
+    flame       = Color3.fromRGB(255, 145, 40),
+    spark       = Color3.fromRGB(255, 200, 80),
+    coal        = Color3.fromRGB(140, 45,  10),
+    blood       = Color3.fromRGB(160, 20,  30),
+    gore        = Color3.fromRGB(200, 40,  40),
+    wound       = Color3.fromRGB(220, 60,  60),
+    arcane      = Color3.fromRGB(90,  30,  140),
+    witch       = Color3.fromRGB(120, 50,  180),
+    specter     = Color3.fromRGB(160, 80,  220),
+    toxic       = Color3.fromRGB(80,  210, 100),
+    toxicDark   = Color3.fromRGB(40,  120, 55),
+    deathRed    = Color3.fromRGB(210, 40,  40),
+    deathDark   = Color3.fromRGB(110, 20,  20),
+    bone        = Color3.fromRGB(240, 230, 215),
+    ash         = Color3.fromRGB(180, 165, 150),
+    dust        = Color3.fromRGB(110, 95,  85),
 }
 
--- ─── UTILITY BUILDER FUNCTIONS ────────────────────
-
--- Adds an inner shadow gradient (dark at edges = depth illusion)
 local function addDepthGradient(frame, rotation, c1, c2, t1, t2)
     local g = Instance.new("UIGradient")
-    g.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0,   c1 or C.void),
-        ColorSequenceKeypoint.new(1,   c2 or C.crypt),
-    })
-    g.Transparency = NumberSequence.new({
-        NumberSequenceKeypoint.new(0,   t1 or 0),
-        NumberSequenceKeypoint.new(1,   t2 or 0),
-    })
+    g.Color = ColorSequence.new({ ColorSequenceKeypoint.new(0, c1 or C.void), ColorSequenceKeypoint.new(1, c2 or C.crypt) })
+    g.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, t1 or 0), NumberSequenceKeypoint.new(1, t2 or 0) })
     g.Rotation = rotation or 90
     g.Parent = frame
     return g
 end
 
--- Glowing stroke with gradient
 local function addGlowStroke(frame, c1, c2, thickness, transparency)
     local s = Instance.new("UIStroke")
     s.Thickness = thickness or 1.5
     s.Transparency = transparency or 0
     s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
     s.LineJoinMode = Enum.LineJoinMode.Round
-    -- UIStroke doesn't support gradients directly but we layer on a frame border
     s.Color = c1 or C.arcane
     s.Parent = frame
     return s
@@ -606,15 +582,10 @@ local function addListLayout(frame, padding, direction, alignment)
     return l
 end
 
--- Tween shorthand
 local function tw(obj, t, props, style, dir)
-    return TweenService:Create(obj,
-        TweenInfo.new(t or 0.18, style or Enum.EasingStyle.Quad, dir or Enum.EasingDirection.Out),
-        props
-    )
+    return TweenService:Create(obj, TweenInfo.new(t or 0.18, style or Enum.EasingStyle.Quad, dir or Enum.EasingDirection.Out), props)
 end
 
--- Ripple flash on click (subtle brightness pulse)
 local function addClickRipple(btn, frame)
     local flash = Instance.new("Frame")
     flash.Size = UDim2.new(1, 0, 1, 0)
@@ -624,15 +595,13 @@ local function addClickRipple(btn, frame)
     flash.ZIndex = frame.ZIndex + 5
     addCorner(flash, 8)
     flash.Parent = frame
-
     btn.MouseButton1Down:Connect(function()
         flash.BackgroundTransparency = 0.82
         tw(flash, 0.3, {BackgroundTransparency = 1}):Play()
     end)
 end
 
--- ─── MAIN PANEL ───────────────────────────────────
-
+-- MAIN PANEL
 local mainPanel = Instance.new("Frame")
 mainPanel.Name = "MainPanel"
 mainPanel.Size = UDim2.new(0, 490, 0, 400)
@@ -646,7 +615,6 @@ mainPanel.ZIndex = 2
 mainPanel.Parent = ScreenGui
 addCorner(mainPanel, 14)
 
--- Outer glow border (ember)
 local panelStroke = Instance.new("UIStroke")
 panelStroke.Color = C.ember
 panelStroke.Thickness = 1.5
@@ -654,7 +622,6 @@ panelStroke.Transparency = 0.25
 panelStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 panelStroke.Parent = mainPanel
 
--- Deep radial gradient on panel bg
 local panelGradient = Instance.new("UIGradient")
 panelGradient.Color = ColorSequence.new({
     ColorSequenceKeypoint.new(0.0,  C.manor),
@@ -664,7 +631,6 @@ panelGradient.Color = ColorSequence.new({
 panelGradient.Rotation = 135
 panelGradient.Parent = mainPanel
 
--- Atmospheric fog overlay (subtle purple vignette top-right)
 local fogOverlay = Instance.new("Frame")
 fogOverlay.Size = UDim2.new(1, 0, 0.4, 0)
 fogOverlay.Position = UDim2.new(0, 0, 0, 0)
@@ -675,11 +641,7 @@ fogOverlay.ZIndex = 1
 fogOverlay.Parent = mainPanel
 addCorner(fogOverlay, 14)
 local fogGrad = Instance.new("UIGradient")
-fogGrad.Transparency = NumberSequence.new({
-    NumberSequenceKeypoint.new(0, 0.5),
-    NumberSequenceKeypoint.new(0.5, 0.7),
-    NumberSequenceKeypoint.new(1, 1),
-})
+fogGrad.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.5), NumberSequenceKeypoint.new(0.5, 0.7), NumberSequenceKeypoint.new(1, 1) })
 fogGrad.Rotation = 180
 fogGrad.Parent = fogOverlay
 
@@ -687,8 +649,7 @@ local panelScale = Instance.new("UIScale")
 panelScale.Scale = 1
 panelScale.Parent = mainPanel
 
--- ─── HEADER ───────────────────────────────────────
-
+-- HEADER
 local header = Instance.new("Frame")
 header.Name = "Header"
 header.Size = UDim2.new(1, 0, 0, 54)
@@ -700,7 +661,6 @@ header.Active = true
 header.Parent = mainPanel
 addCorner(header, 14)
 
--- Header gradient (ember left -> arcane right)
 local headerGrad = Instance.new("UIGradient")
 headerGrad.Color = ColorSequence.new({
     ColorSequenceKeypoint.new(0.0,  Color3.fromRGB(45, 18, 8)),
@@ -710,7 +670,6 @@ headerGrad.Color = ColorSequence.new({
 headerGrad.Rotation = 0
 headerGrad.Parent = header
 
--- Bottom border line on header (ember glow strip)
 local headerLine = Instance.new("Frame")
 headerLine.Size = UDim2.new(1, 0, 0, 1)
 headerLine.Position = UDim2.new(0, 0, 1, -1)
@@ -719,17 +678,7 @@ headerLine.BackgroundTransparency = 0.4
 headerLine.BorderSizePixel = 0
 headerLine.ZIndex = 11
 headerLine.Parent = header
-local hlGrad = Instance.new("UIGradient")
-hlGrad.Transparency = NumberSequence.new({
-    NumberSequenceKeypoint.new(0.0,  1),
-    NumberSequenceKeypoint.new(0.15, 0),
-    NumberSequenceKeypoint.new(0.85, 0),
-    NumberSequenceKeypoint.new(1.0,  1),
-})
-hlGrad.Rotation = 0
-hlGrad.Parent = headerLine
 
--- Pumpkin icon
 local pumpkinIcon = Instance.new("TextLabel")
 pumpkinIcon.Size = UDim2.new(0, 36, 0, 36)
 pumpkinIcon.Position = UDim2.new(0, 12, 0.5, -18)
@@ -739,7 +688,6 @@ pumpkinIcon.TextSize = 22
 pumpkinIcon.ZIndex = 12
 pumpkinIcon.Parent = header
 
--- Title text
 local titleLabel = Instance.new("TextLabel")
 titleLabel.Size = UDim2.new(0, 240, 0, 22)
 titleLabel.Position = UDim2.new(0, 50, 0, 9)
@@ -753,15 +701,9 @@ titleLabel.ZIndex = 12
 titleLabel.Parent = header
 
 local titleGrad = Instance.new("UIGradient")
-titleGrad.Color = ColorSequence.new({
-    ColorSequenceKeypoint.new(0.0,  C.spark),
-    ColorSequenceKeypoint.new(0.5,  C.flame),
-    ColorSequenceKeypoint.new(1.0,  C.ember),
-})
-titleGrad.Rotation = 0
+titleGrad.Color = ColorSequence.new({ ColorSequenceKeypoint.new(0, C.spark), ColorSequenceKeypoint.new(0.5, C.flame), ColorSequenceKeypoint.new(1, C.ember) })
 titleGrad.Parent = titleLabel
 
--- Sub-title / version tag
 local versionLabel = Instance.new("TextLabel")
 versionLabel.Size = UDim2.new(0, 240, 0, 14)
 versionLabel.Position = UDim2.new(0, 51, 0, 31)
@@ -774,7 +716,6 @@ versionLabel.TextXAlignment = Enum.TextXAlignment.Left
 versionLabel.ZIndex = 12
 versionLabel.Parent = header
 
--- Close button
 local closeBtn = Instance.new("TextButton")
 closeBtn.Size = UDim2.new(0, 30, 0, 30)
 closeBtn.Position = UDim2.new(1, -42, 0.5, -15)
@@ -790,32 +731,28 @@ closeBtn.Parent = header
 addCorner(closeBtn, 8)
 addGlowStroke(closeBtn, C.blood, nil, 1, 0.3)
 
-closeBtn.MouseEnter:Connect(function()
-    tw(closeBtn, 0.15, {BackgroundColor3 = Color3.fromRGB(140, 25, 25)}):Play()
-end)
-closeBtn.MouseLeave:Connect(function()
-    tw(closeBtn, 0.15, {BackgroundColor3 = Color3.fromRGB(90, 18, 18)}):Play()
-end)
+closeBtn.MouseEnter:Connect(function() tw(closeBtn, 0.15, {BackgroundColor3 = Color3.fromRGB(140, 25, 25)}):Play() end)
+closeBtn.MouseLeave:Connect(function() tw(closeBtn, 0.15, {BackgroundColor3 = Color3.fromRGB(90, 18, 18)}):Play() end)
 
--- ─── REOPEN BUTTON (floating pumpkin) ─────────────
-
+-- REOPEN BUTTON (FIXED TRANSPARENCY)
 local reopenBtn = Instance.new("TextButton")
-reopenBtn.Size = UDim2.new(0, 46, 0, 46)
-reopenBtn.Position = UDim2.new(0.5, -23, 0.5, -23)
+reopenBtn.Size = UDim2.new(0, 40, 0, 40)
+reopenBtn.Position = UDim2.new(0.5, -20, 0.5, -20)
 reopenBtn.BackgroundColor3 = C.manor
-reopenBtn.BackgroundTransparency = 0.05
+reopenBtn.BackgroundTransparency = 0.6 -- Much more transparent
 reopenBtn.Text = "🎃"
-reopenBtn.TextSize = 22
+reopenBtn.TextSize = 20
+reopenBtn.TextTransparency = 0.4 -- Faint text
 reopenBtn.AutoButtonColor = false
 reopenBtn.Visible = true
 reopenBtn.ZIndex = 50
 reopenBtn.Parent = ScreenGui
-addCorner(reopenBtn, 23)
+addCorner(reopenBtn, 20)
 
 local reopenStroke = Instance.new("UIStroke")
 reopenStroke.Color = C.ember
-reopenStroke.Thickness = 2
-reopenStroke.Transparency = 0.2
+reopenStroke.Thickness = 1.5
+reopenStroke.Transparency = 0.7 -- Faint border
 reopenStroke.Parent = reopenBtn
 
 local reopenScale = Instance.new("UIScale")
@@ -823,40 +760,22 @@ reopenScale.Scale = 1
 reopenScale.Parent = reopenBtn
 
 reopenBtn.MouseEnter:Connect(function()
-    tw(reopenBtn, 0.15, {BackgroundColor3 = C.crypt}):Play()
-    tw(reopenStroke, 0.15, {Transparency = 0}):Play()
-end)
-reopenBtn.MouseLeave:Connect(function()
-    tw(reopenBtn, 0.15, {BackgroundColor3 = C.manor}):Play()
+    tw(reopenBtn, 0.15, {BackgroundTransparency = 0.2, TextTransparency = 0}):Play()
     tw(reopenStroke, 0.15, {Transparency = 0.2}):Play()
 end)
-
--- Idle ember pulse on reopen button
-task.spawn(function()
-    while true do
-        tw(reopenStroke, 1.2, {Transparency = 0.0}, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut):Play()
-        task.wait(1.2)
-        tw(reopenStroke, 1.2, {Transparency = 0.5}, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut):Play()
-        task.wait(1.2)
-    end
+reopenBtn.MouseLeave:Connect(function()
+    tw(reopenBtn, 0.15, {BackgroundTransparency = 0.6, TextTransparency = 0.4}):Play()
+    tw(reopenStroke, 0.15, {Transparency = 0.7}):Play()
 end)
 
 local hasBeenClosed = false
-
 local function syncReopenToPanel()
     local px, psz, rsz = mainPanel.Position, mainPanel.Size, reopenBtn.Size
-    reopenBtn.Position = UDim2.new(
-        px.X.Scale, px.X.Offset + (psz.X.Offset - rsz.X.Offset) / 2,
-        px.Y.Scale, px.Y.Offset + (psz.Y.Offset - rsz.Y.Offset) / 2
-    )
+    reopenBtn.Position = UDim2.new(px.X.Scale, px.X.Offset + (psz.X.Offset - rsz.X.Offset) / 2, px.Y.Scale, px.Y.Offset + (psz.Y.Offset - rsz.Y.Offset) / 2)
 end
-
 local function syncPanelToReopen()
     local rx, rsz, psz = reopenBtn.Position, reopenBtn.Size, mainPanel.Size
-    mainPanel.Position = UDim2.new(
-        rx.X.Scale, rx.X.Offset - (psz.X.Offset - rsz.X.Offset) / 2,
-        rx.Y.Scale, rx.Y.Offset - (psz.Y.Offset - rsz.Y.Offset) / 2
-    )
+    mainPanel.Position = UDim2.new(rx.X.Scale, rx.X.Offset - (psz.X.Offset - rsz.X.Offset) / 2, rx.Y.Scale, rx.Y.Offset - (psz.Y.Offset - rsz.Y.Offset) / 2)
 end
 
 local function openPanel()
@@ -883,8 +802,7 @@ end
 closeBtn.MouseButton1Click:Connect(closePanel)
 reopenBtn.MouseButton1Click:Connect(openPanel)
 
--- ─── SIDEBAR ──────────────────────────────────────
-
+-- SIDEBAR
 local sidebar = Instance.new("Frame")
 sidebar.Name = "Sidebar"
 sidebar.Size = UDim2.new(0, 112, 1, -54)
@@ -895,14 +813,10 @@ sidebar.ZIndex = 5
 sidebar.Parent = mainPanel
 
 local sidebarGrad = Instance.new("UIGradient")
-sidebarGrad.Color = ColorSequence.new({
-    ColorSequenceKeypoint.new(0.0,  C.tomb),
-    ColorSequenceKeypoint.new(1.0,  C.void),
-})
+sidebarGrad.Color = ColorSequence.new({ ColorSequenceKeypoint.new(0.0, C.tomb), ColorSequenceKeypoint.new(1.0, C.void) })
 sidebarGrad.Rotation = 90
 sidebarGrad.Parent = sidebar
 
--- Right border line (ember)
 local sidebarBorder = Instance.new("Frame")
 sidebarBorder.Size = UDim2.new(0, 1, 1, 0)
 sidebarBorder.Position = UDim2.new(1, -1, 0, 0)
@@ -915,8 +829,7 @@ sidebarBorder.Parent = sidebar
 addListLayout(sidebar, 4)
 addPadding(sidebar, 8, 8, 6, 6)
 
--- ─── CONTENT AREA ─────────────────────────────────
-
+-- CONTENT AREA
 local contentArea = Instance.new("Frame")
 contentArea.Name = "ContentArea"
 contentArea.Size = UDim2.new(1, -112, 1, -54)
@@ -928,10 +841,8 @@ contentArea.Parent = mainPanel
 local pages    = {}
 local sideBtns = {}
 
--- ─── PAGE & SIDEBAR BUTTON BUILDER ────────────────
-
+-- BUILDERS
 local function addPage(name, icon)
-    -- Scroll page
     local page = Instance.new("ScrollingFrame")
     page.Name = name .. "_page"
     page.Size = UDim2.new(1, -10, 1, -10)
@@ -950,7 +861,6 @@ local function addPage(name, icon)
     addPadding(page, 4, 12, 4, 4)
     pages[name] = page
 
-    -- Sidebar tab button
     local sb = Instance.new("TextButton")
     sb.Name = name .. "_tab"
     sb.Size = UDim2.new(1, 0, 0, 36)
@@ -962,24 +872,16 @@ local function addPage(name, icon)
     sb.Parent = sidebar
     addCorner(sb, 7)
 
-    -- Tab background gradient
     local sbGrad = Instance.new("UIGradient")
-    sbGrad.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0.0, C.crypt),
-        ColorSequenceKeypoint.new(1.0, C.tomb),
-    })
-    sbGrad.Rotation = 0
+    sbGrad.Color = ColorSequence.new({ ColorSequenceKeypoint.new(0.0, C.crypt), ColorSequenceKeypoint.new(1.0, C.tomb) })
     sbGrad.Parent = sb
 
-    -- Tab border (inactive = subtle arcane, active = ember)
     local sbStroke = Instance.new("UIStroke")
     sbStroke.Color = C.arcane
     sbStroke.Thickness = 1
     sbStroke.Transparency = 0.6
-    sbStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
     sbStroke.Parent = sb
 
-    -- Active indicator bar (left edge, hidden when inactive)
     local indicator = Instance.new("Frame")
     indicator.Size = UDim2.new(0, 3, 0.65, 0)
     indicator.Position = UDim2.new(0, 0, 0.175, 0)
@@ -990,7 +892,6 @@ local function addPage(name, icon)
     indicator.Parent = sb
     addCorner(indicator, 2)
 
-    -- Icon
     local sbIcon = Instance.new("TextLabel")
     sbIcon.Size = UDim2.new(0, 22, 1, 0)
     sbIcon.Position = UDim2.new(0, 6, 0, 0)
@@ -1002,7 +903,6 @@ local function addPage(name, icon)
     sbIcon.ZIndex = 8
     sbIcon.Parent = sb
 
-    -- Label
     local sbText = Instance.new("TextLabel")
     sbText.Size = UDim2.new(1, -32, 1, 0)
     sbText.Position = UDim2.new(0, 30, 0, 0)
@@ -1021,14 +921,12 @@ local function addPage(name, icon)
         for pn, pg in pairs(pages) do pg.Visible = (pn == name) end
         for bn, bd in pairs(sideBtns) do
             if bn == name then
-                -- Active state: ember glow
                 tw(bd.btn, 0.18, {BackgroundColor3 = C.coal, BackgroundTransparency = 0}):Play()
                 tw(bd.stroke, 0.18, {Color = C.ember, Transparency = 0.1}):Play()
                 tw(bd.text, 0.18, {TextColor3 = C.spark}):Play()
                 tw(bd.icon, 0.18, {TextColor3 = C.flame}):Play()
                 tw(bd.bar, 0.18, {BackgroundTransparency = 0}):Play()
             else
-                -- Inactive state: recede
                 tw(bd.btn, 0.18, {BackgroundColor3 = C.grave, BackgroundTransparency = 0.25}):Play()
                 tw(bd.stroke, 0.18, {Color = C.arcane, Transparency = 0.6}):Play()
                 tw(bd.text, 0.18, {TextColor3 = C.ash}):Play()
@@ -1038,25 +936,13 @@ local function addPage(name, icon)
         end
     end
 
-    sb.MouseButton1Click:Connect(function()
-        setActive()
-        playSound("rbxassetid://12221976")
-    end)
-    sb.MouseEnter:Connect(function()
-        if pages[name].Visible then return end
-        tw(sb, 0.12, {BackgroundColor3 = C.crypt, BackgroundTransparency = 0.1}):Play()
-    end)
-    sb.MouseLeave:Connect(function()
-        if pages[name].Visible then return end
-        tw(sb, 0.12, {BackgroundColor3 = C.grave, BackgroundTransparency = 0.25}):Play()
-    end)
+    sb.MouseButton1Click:Connect(function() setActive(); playSound("rbxassetid://12221976") end)
+    sb.MouseEnter:Connect(function() if not pages[name].Visible then tw(sb, 0.12, {BackgroundColor3 = C.crypt, BackgroundTransparency = 0.1}):Play() end end)
+    sb.MouseLeave:Connect(function() if not pages[name].Visible then tw(sb, 0.12, {BackgroundColor3 = C.grave, BackgroundTransparency = 0.25}):Play() end end)
 
     return page
 end
 
--- ─── ROW BUILDERS (Studio Quality) ───────────────
-
--- Shared card base
 local function makeCard(parent, height)
     local card = Instance.new("Frame")
     card.Size = UDim2.new(1, 0, 0, height or 42)
@@ -1067,30 +953,22 @@ local function makeCard(parent, height)
     card.Parent = parent
     addCorner(card, 9)
 
-    -- Card inner gradient (depth)
     local cg = Instance.new("UIGradient")
-    cg.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0.0, C.crypt),
-        ColorSequenceKeypoint.new(1.0, C.manor),
-    })
-    cg.Rotation = 90
+    cg.Color = ColorSequence.new({ ColorSequenceKeypoint.new(0.0, C.crypt), ColorSequenceKeypoint.new(1.0, C.manor) })
     cg.Parent = card
 
     local cs = Instance.new("UIStroke")
     cs.Color = C.arcane
     cs.Thickness = 1
     cs.Transparency = 0.55
-    cs.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
     cs.Parent = card
 
     return card, cs
 end
 
--- Toggle row (studio-quality switch)
 local function addToggleRow(page, labelText, callback)
     local card, cardStroke = makeCard(page, 42)
 
-    -- Label
     local label = Instance.new("TextLabel")
     label.Size = UDim2.new(1, -70, 1, 0)
     label.Position = UDim2.new(0, 12, 0, 0)
@@ -1103,7 +981,6 @@ local function addToggleRow(page, labelText, callback)
     label.ZIndex = 8
     label.Parent = card
 
-    -- Switch track
     local track = Instance.new("Frame")
     track.Size = UDim2.new(0, 40, 0, 20)
     track.Position = UDim2.new(1, -52, 0.5, -10)
@@ -1114,16 +991,6 @@ local function addToggleRow(page, labelText, callback)
     addCorner(track, 10)
     local trackStroke = addGlowStroke(track, C.dust, nil, 1, 0.3)
 
-    -- Inner track gradient
-    local trackGrad = Instance.new("UIGradient")
-    trackGrad.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0, Color3.fromRGB(15, 8, 22)),
-        ColorSequenceKeypoint.new(1, Color3.fromRGB(22, 14, 32)),
-    })
-    trackGrad.Rotation = 90
-    trackGrad.Parent = track
-
-    -- Knob
     local knob = Instance.new("Frame")
     knob.Size = UDim2.new(0, 14, 0, 14)
     knob.Position = UDim2.new(0, 3, 0.5, -7)
@@ -1143,14 +1010,12 @@ local function addToggleRow(page, labelText, callback)
             tw(trackStroke, 0.18, {Color = C.toxic, Transparency = 0.1}):Play()
             tw(knobStroke, 0.18, {Color = C.toxic, Transparency = 0.2}):Play()
             tw(cardStroke, 0.18, {Color = C.toxicDark, Transparency = 0.3}):Play()
-            tw(label, 0.18, {TextColor3 = C.bone}):Play()
         else
             tw(track, 0.18, {BackgroundColor3 = Color3.fromRGB(20, 12, 30)}):Play()
             tw(knob, 0.18, {Position = UDim2.new(0, 3, 0.5, -7), BackgroundColor3 = C.ash}):Play()
             tw(trackStroke, 0.18, {Color = C.dust, Transparency = 0.3}):Play()
             tw(knobStroke, 0.18, {Color = C.dust, Transparency = 0.4}):Play()
             tw(cardStroke, 0.18, {Color = C.arcane, Transparency = 0.55}):Play()
-            tw(label, 0.18, {TextColor3 = C.bone}):Play()
         end
     end
 
@@ -1161,38 +1026,16 @@ local function addToggleRow(page, labelText, callback)
     hitBtn.ZIndex = 10
     hitBtn.Parent = card
 
-    hitBtn.MouseButton1Down:Connect(function()
-        tw(card, 0.08, {BackgroundTransparency = 0}):Play()
-    end)
-    hitBtn.MouseButton1Up:Connect(function()
-        tw(card, 0.12, {BackgroundTransparency = 0.06}):Play()
-    end)
-    hitBtn.MouseLeave:Connect(function()
-        tw(card, 0.12, {BackgroundTransparency = 0.06}):Play()
-    end)
     hitBtn.MouseButton1Click:Connect(function()
         isOn = not isOn
         updateSwitch()
         playSound("rbxassetid://12221976")
         if callback then callback(isOn) end
     end)
-    hitBtn.MouseEnter:Connect(function()
-        tw(card, 0.12, {BackgroundColor3 = C.crypt}):Play()
-    end)
-    hitBtn.MouseLeave:Connect(function()
-        tw(card, 0.12, {BackgroundColor3 = C.manor}):Play()
-    end)
 
-    return {
-        set = function(v)
-            isOn = v
-            updateSwitch()
-            if callback then callback(v) end
-        end
-    }
+    return {set = function(v) isOn = v updateSwitch() if callback then callback(v) end end}
 end
 
--- Value row (+ / − stepper)
 local function addValueRow(page, labelText, initVal, minVal, maxVal, step, onChange)
     local card = makeCard(page, 42)
 
@@ -1208,7 +1051,6 @@ local function addValueRow(page, labelText, initVal, minVal, maxVal, step, onCha
     label.ZIndex = 8
     label.Parent = card
 
-    -- Value display pill
     local valuePill = Instance.new("Frame")
     valuePill.Size = UDim2.new(0, 42, 0, 26)
     valuePill.Position = UDim2.new(0.5, -21, 0.5, -13)
@@ -1246,11 +1088,6 @@ local function addValueRow(page, labelText, initVal, minVal, maxVal, step, onCha
         btn.Parent = card
         addCorner(btn, 7)
         addGlowStroke(btn, C.arcane, nil, 1, 0.4)
-
-        btn.MouseEnter:Connect(function() tw(btn, 0.1, {BackgroundColor3 = C.crypt, TextColor3 = C.spark}):Play() end)
-        btn.MouseLeave:Connect(function() tw(btn, 0.1, {BackgroundColor3 = C.tomb, TextColor3 = C.flame}):Play() end)
-        btn.MouseButton1Down:Connect(function() tw(btn, 0.07, {BackgroundColor3 = C.coal}):Play() end)
-        btn.MouseButton1Up:Connect(function() tw(btn, 0.1, {BackgroundColor3 = C.tomb}):Play() end)
         return btn
     end
 
@@ -1260,22 +1097,17 @@ local function addValueRow(page, labelText, initVal, minVal, maxVal, step, onCha
     minusBtn.MouseButton1Click:Connect(function()
         cur = math.clamp(cur - step, minVal, maxVal)
         valueText.Text = tostring(cur)
-        tw(valueText, 0.1, {TextColor3 = C.ember}):Play()
-        task.delay(0.15, function() tw(valueText, 0.15, {TextColor3 = C.flame}):Play() end)
         if onChange then onChange(cur) end
     end)
     plusBtn.MouseButton1Click:Connect(function()
         cur = math.clamp(cur + step, minVal, maxVal)
         valueText.Text = tostring(cur)
-        tw(valueText, 0.1, {TextColor3 = C.spark}):Play()
-        task.delay(0.15, function() tw(valueText, 0.15, {TextColor3 = C.flame}):Play() end)
         if onChange then onChange(cur) end
     end)
 
     return {setValue = function(v) cur = math.clamp(v, minVal, maxVal); valueText.Text = tostring(cur) end}
 end
 
--- Button row (ember CTA)
 local function addButtonRow(page, labelText, callback)
     local btn = Instance.new("TextButton")
     btn.Size = UDim2.new(1, 0, 0, 38)
@@ -1291,37 +1123,18 @@ local function addButtonRow(page, labelText, callback)
     addCorner(btn, 9)
 
     local bGrad = Instance.new("UIGradient")
-    bGrad.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0.0, Color3.fromRGB(80, 30, 8)),
-        ColorSequenceKeypoint.new(1.0, Color3.fromRGB(40, 14, 4)),
-    })
-    bGrad.Rotation = 90
+    bGrad.Color = ColorSequence.new({ ColorSequenceKeypoint.new(0, Color3.fromRGB(80, 30, 8)), ColorSequenceKeypoint.new(1, Color3.fromRGB(40, 14, 4)) })
     bGrad.Parent = btn
 
     local bStroke = addGlowStroke(btn, C.ember, nil, 1, 0.35)
     addClickRipple(btn, btn)
 
-    btn.MouseEnter:Connect(function()
-        tw(btn, 0.15, {BackgroundColor3 = C.ember, TextColor3 = C.void}):Play()
-        tw(bStroke, 0.15, {Transparency = 0}):Play()
-    end)
-    btn.MouseLeave:Connect(function()
-        tw(btn, 0.15, {BackgroundColor3 = C.coal, TextColor3 = C.flame}):Play()
-        tw(bStroke, 0.15, {Transparency = 0.35}):Play()
-    end)
-    btn.MouseButton1Down:Connect(function()
-        tw(btn, 0.07, {BackgroundColor3 = C.spark}):Play()
-    end)
-    btn.MouseButton1Up:Connect(function()
-        tw(btn, 0.1, {BackgroundColor3 = C.coal}):Play()
-    end)
     btn.MouseButton1Click:Connect(function()
         playSound("rbxassetid://12221976")
         if callback then callback() end
     end)
 end
 
--- Section divider label
 local function addSectionLabel(page, text)
     local lbl = Instance.new("TextLabel")
     lbl.Size = UDim2.new(1, 0, 0, 18)
@@ -1333,24 +1146,15 @@ local function addSectionLabel(page, text)
     lbl.TextXAlignment = Enum.TextXAlignment.Left
     lbl.ZIndex = 7
     lbl.Parent = page
-
-    -- Gradient on section label (ember -> transparent)
     local sg = Instance.new("UIGradient")
-    sg.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0.0, C.flame),
-        ColorSequenceKeypoint.new(0.5, C.ember),
-        ColorSequenceKeypoint.new(1.0, C.coal),
-    })
-    sg.Rotation = 0
+    sg.Color = ColorSequence.new({ ColorSequenceKeypoint.new(0.0, C.flame), ColorSequenceKeypoint.new(0.5, C.ember), ColorSequenceKeypoint.new(1.0, C.coal) })
     sg.Parent = lbl
 end
 
--- ─── BUILD PAGES ──────────────────────────────────
+-- ═══════════ BUILD PAGES ═══════════
 
 -- KEY PAGE
 local keyPage = addPage("Key", "🔑")
-
--- Key input box
 local keyInputCard = Instance.new("Frame")
 keyInputCard.Size = UDim2.new(1, 0, 0, 42)
 keyInputCard.BackgroundColor3 = C.manor
@@ -1377,7 +1181,6 @@ keyInput.Visible = not keyVerified
 keyInput.Parent = keyInputCard
 addPadding(keyInput, 0, 0, 12, 12)
 
--- Get key button
 local getKeyBtn = Instance.new("TextButton")
 getKeyBtn.Size = UDim2.new(1, 0, 0, 38)
 getKeyBtn.BackgroundColor3 = Color3.fromRGB(30, 35, 80)
@@ -1391,20 +1194,7 @@ getKeyBtn.ZIndex = 8
 getKeyBtn.Visible = not keyVerified
 getKeyBtn.Parent = keyPage
 addCorner(getKeyBtn, 9)
-addGlowStroke(getKeyBtn, Color3.fromRGB(60, 90, 200), nil, 1, 0.4)
 
-local discordGrad = Instance.new("UIGradient")
-discordGrad.Color = ColorSequence.new({
-    ColorSequenceKeypoint.new(0, Color3.fromRGB(45, 50, 120)),
-    ColorSequenceKeypoint.new(1, Color3.fromRGB(25, 28, 65)),
-})
-discordGrad.Rotation = 90
-discordGrad.Parent = getKeyBtn
-
-getKeyBtn.MouseEnter:Connect(function() tw(getKeyBtn, 0.15, {BackgroundColor3 = Color3.fromRGB(50, 60, 140), TextColor3 = Color3.fromRGB(180, 200, 255)}):Play() end)
-getKeyBtn.MouseLeave:Connect(function() tw(getKeyBtn, 0.15, {BackgroundColor3 = Color3.fromRGB(30, 35, 80), TextColor3 = Color3.fromRGB(120, 160, 255)}):Play() end)
-
--- Activated banner
 local activatedCard = Instance.new("Frame")
 activatedCard.Size = UDim2.new(1, 0, 0, 48)
 activatedCard.BackgroundColor3 = Color3.fromRGB(12, 35, 18)
@@ -1415,14 +1205,6 @@ activatedCard.Visible = keyVerified
 activatedCard.Parent = keyPage
 addCorner(activatedCard, 9)
 addGlowStroke(activatedCard, C.toxic, nil, 1.5, 0.2)
-
-local activatedGrad = Instance.new("UIGradient")
-activatedGrad.Color = ColorSequence.new({
-    ColorSequenceKeypoint.new(0, Color3.fromRGB(18, 55, 28)),
-    ColorSequenceKeypoint.new(1, Color3.fromRGB(10, 30, 15)),
-})
-activatedGrad.Rotation = 90
-activatedGrad.Parent = activatedCard
 
 local activatedLabel = Instance.new("TextLabel")
 activatedLabel.Size = UDim2.new(1, 0, 1, 0)
@@ -1448,18 +1230,13 @@ keyInput.FocusLost:Connect(function(entered)
         pcall(function() writefile(KEY_FILE, keyInput.Text) end)
         keyInput.Text = ""
         keyInputCard.Visible = false
-        keyInput.Visible = false
         getKeyBtn.Visible = false
         activatedCard.Visible = true
-        activatedLabel.Visible = true
         playSound("rbxassetid://12221976")
         notify("Unlocked", "OP features now active", 3)
     else
         keyInput.Text = ""
-        keyInput.PlaceholderText = "Invalid key — try again"
-        tw(keyInputCard, 0.1, {BackgroundColor3 = Color3.fromRGB(60, 12, 12)}):Play()
-        task.delay(0.4, function() tw(keyInputCard, 0.3, {BackgroundColor3 = C.manor}):Play() end)
-        playSound("rbxassetid://12221976")
+        notify("Invalid Key", "Check Discord for valid key", 3)
     end
 end)
 
@@ -1470,13 +1247,9 @@ addValueRow(mainPage, "Size", 10, 1, 50, 5, function(v)
     hitboxSize = v
     if hitboxEnabled then applyHitboxesToAllPlayers() end
 end)
-addToggleRow(mainPage, "Enable Hitbox", function(enabled)
-    toggleHitboxes(enabled)
-end)
+addToggleRow(mainPage, "Enable Hitbox", function(enabled) toggleHitboxes(enabled) end)
 addSectionLabel(mainPage, "Utility")
-addToggleRow(mainPage, "Invisible (Backup)", function(enabled)
-    if enabled then startInvisible() else stopInvisible() end
-end)
+addToggleRow(mainPage, "Invisible (Backup)", function(enabled) if enabled then startInvisible() else stopInvisible() end end)
 
 -- COMBAT PAGE
 local combatPage = addPage("Combat", "⚔")
@@ -1484,11 +1257,7 @@ addSectionLabel(combatPage, "Arena")
 
 local opGodSpawnToggle
 opGodSpawnToggle = addToggleRow(combatPage, "OP God Spawn", function(enabled)
-    if enabled and not keyVerified then
-        notify("Locked", "Enter key first", 3)
-        opGodSpawnToggle.set(false)
-        return
-    end
+    if enabled and not keyVerified then notify("Locked", "Enter key first", 3); opGodSpawnToggle.set(false); return end
     opGodSpawnOn = enabled
     if enabled then teleportToArena(true); notify("OP Spawn", "At arena — aura running", 3) end
 end)
@@ -1502,11 +1271,7 @@ end)
 addSectionLabel(combatPage, "Aura")
 local killAuraToggle
 killAuraToggle = addToggleRow(combatPage, "Kill Aura", function(enabled)
-    if enabled and not keyVerified then
-        notify("Locked", "Enter key first", 3)
-        killAuraToggle.set(false)
-        return
-    end
+    if enabled and not keyVerified then notify("Locked", "Enter key first", 3); killAuraToggle.set(false); return end
     killAuraOn = enabled
     if enabled then
         if not FlingRE or not SpawnerRE then findRemotes() end
@@ -1516,7 +1281,6 @@ end)
 
 addSectionLabel(combatPage, "Target Lock")
 
--- Target Player Card (studio quality)
 local targetCard = Instance.new("Frame")
 targetCard.Size = UDim2.new(1, 0, 0, 72)
 targetCard.BackgroundColor3 = C.manor
@@ -1525,18 +1289,8 @@ targetCard.BorderSizePixel = 0
 targetCard.ZIndex = 8
 targetCard.Parent = combatPage
 addCorner(targetCard, 10)
-
-local tcGrad = Instance.new("UIGradient")
-tcGrad.Color = ColorSequence.new({
-    ColorSequenceKeypoint.new(0, C.crypt),
-    ColorSequenceKeypoint.new(1, C.manor),
-})
-tcGrad.Rotation = 135
-tcGrad.Parent = targetCard
-
 local tcStroke = addGlowStroke(targetCard, C.arcane, nil, 1, 0.45)
 
--- Avatar
 local avatarBg = Instance.new("Frame")
 avatarBg.Size = UDim2.new(0, 52, 0, 52)
 avatarBg.Position = UDim2.new(0, 10, 0.5, -26)
@@ -1580,7 +1334,6 @@ targetDisplayName.TextXAlignment = Enum.TextXAlignment.Left
 targetDisplayName.ZIndex = 9
 targetDisplayName.Parent = targetCard
 
--- Search box
 local searchCard = Instance.new("Frame")
 searchCard.Size = UDim2.new(1, 0, 0, 38)
 searchCard.BackgroundColor3 = C.manor
@@ -1589,7 +1342,7 @@ searchCard.BorderSizePixel = 0
 searchCard.ZIndex = 8
 searchCard.Parent = combatPage
 addCorner(searchCard, 9)
-addGlowStroke(searchCard, C.arcane, nil, 1, 0.4)
+local scStroke = addGlowStroke(searchCard, C.arcane, nil, 1, 0.4)
 
 local searchBox = Instance.new("TextBox")
 searchBox.Size = UDim2.new(1, -12, 1, 0)
@@ -1604,15 +1357,6 @@ searchBox.TextSize = 12
 searchBox.ClearTextOnFocus = false
 searchBox.ZIndex = 9
 searchBox.Parent = searchCard
-
-searchBox.Focused:Connect(function()
-    tw(searchCard, 0.15, {BackgroundColor3 = C.crypt}):Play()
-    tw(searchCard:FindFirstChildWhichIsA("UIStroke"), 0.15, {Color = C.ember, Transparency = 0.2}):Play()
-end)
-searchBox.InputEnded:Connect(function()
-    tw(searchCard, 0.15, {BackgroundColor3 = C.manor}):Play()
-    tw(searchCard:FindFirstChildWhichIsA("UIStroke"), 0.15, {Color = C.arcane, Transparency = 0.4}):Play()
-end)
 
 local targetLockToggle
 searchBox.FocusLost:Connect(function(enterPressed)
@@ -1630,24 +1374,12 @@ searchBox.FocusLost:Connect(function(enterPressed)
         notify("Target Found", found.Name, 2)
     else
         notify("Not Found", "No player with that name.", 3)
-        tw(searchCard:FindFirstChildWhichIsA("UIStroke"), 0.1, {Color = C.deathRed}):Play()
-        task.delay(0.5, function()
-            tw(searchCard:FindFirstChildWhichIsA("UIStroke"), 0.2, {Color = C.arcane, Transparency = 0.4}):Play()
-        end)
     end
 end)
 
-targetLockToggle = addToggleRow(combatPage, "Enable Target Lock", function(enabled)
-    if enabled and not keyVerified then
-        notify("Locked", "Enter key first", 3)
-        targetLockToggle.set(false)
-        return
-    end
-    if enabled and (targetName == "" or not targetName) then
-        notify("Error", "Search a player first!", 2)
-        targetLockToggle.set(false)
-        return
-    end
+targetLockToggle = addToggleRow(combatPage, "Enable Target Lock (Camera)", function(enabled)
+    if enabled and not keyVerified then notify("Locked", "Enter key first", 3); targetLockToggle.set(false); return end
+    if enabled and (targetName == "" or not targetName) then notify("Error", "Search a player first!", 2); targetLockToggle.set(false); return end
     targetLockOn = enabled
     if not enabled then
         local char = lp.Character
@@ -1660,20 +1392,38 @@ targetLockToggle = addToggleRow(combatPage, "Enable Target Lock", function(enabl
     end
 end)
 
+-- Auto Sheriff (Added Back)
+addSectionLabel(combatPage, "Auto Sheriff")
+local sheriffToggle
+sheriffToggle = addToggleRow(combatPage, "Auto Sheriff (Spawn & Shoot)", function(enabled)
+    if enabled and not keyVerified then notify("Locked", "Enter key first", 3); sheriffToggle.set(false); return end
+    if enabled and not target then notify("Error", "Search a player first!", 2); sheriffToggle.set(false); return end
+    
+    sheriffActive = enabled
+    if enabled then
+        killAuraOn = false
+        opGodSpawnOn = false
+        targetLockOn = false
+        
+        notify("Sheriff", "Spawning & Shooting " .. target.Name, 3)
+        if not SpawnerRE then findRemotes() end
+        if SpawnerRE then pcall(function() SpawnerRE:FireServer() end) end
+    else
+        notify("Sheriff", "Returning to Arena Spawn", 3)
+        teleportToArena(true)
+    end
+end)
+
 -- MOVEMENT PAGE
 local movePage = addPage("Move", "🦅")
 addSectionLabel(movePage, "Flight")
-addToggleRow(movePage, "Fly V3", function(enabled)
-    if enabled then startFlyV3() else stopFlyV3() end
-end)
+addToggleRow(movePage, "Fly V3", function(enabled) if enabled then startFlyV3() else stopFlyV3() end end)
 addValueRow(movePage, "Speed", 1, 1, 10, 1, function(v)
     flyV3Speed = v
     if flyV3Active then stopFlyV3(); task.wait(0.1); startFlyV3() end
 end)
 
--- Up / Down controls
 local udCard = makeCard(movePage, 42)
-
 local udLabel = Instance.new("TextLabel")
 udLabel.Size = UDim2.new(0, 80, 1, 0)
 udLabel.Position = UDim2.new(0, 12, 0, 0)
@@ -1701,7 +1451,6 @@ local function makeFlightBtn(symbol, color, xPos, holdFn)
     btn.Parent = udCard
     addCorner(btn, 7)
     addGlowStroke(btn, color, nil, 1, 0.3)
-
     btn.MouseButton1Down:Connect(function() holdFn(true); tw(btn, 0.08, {BackgroundTransparency = 0}):Play() end)
     btn.MouseButton1Up:Connect(function() holdFn(false); tw(btn, 0.1, {BackgroundTransparency = 0.1}):Play() end)
     btn.MouseLeave:Connect(function() holdFn(false); tw(btn, 0.1, {BackgroundTransparency = 0.1}):Play() end)
@@ -1712,10 +1461,8 @@ makeFlightBtn("↑ Up",   C.toxic,    UDim2.new(0.5, -88, 0.5, -14), function(v)
 makeFlightBtn("↓ Down", C.ember,    UDim2.new(0.5,   8, 0.5, -14), function(v) flyV3DownHeld = v end)
 
 UserInputService.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.Touch
-    or input.UserInputType == Enum.UserInputType.MouseButton1 then
-        flyV3UpHeld = false
-        flyV3DownHeld = false
+    if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+        flyV3UpHeld = false; flyV3DownHeld = false
     end
 end)
 
@@ -1728,23 +1475,18 @@ addToggleRow(movePage, "Super Power", function(enabled)
         if hum then hum.WalkSpeed = 16; hum.JumpPower = 50 end
     end
 end)
-addToggleRow(movePage, "Infinite Jump", function(enabled)
-    getgenv().infiniteJumpEnabled = enabled
-end)
+addToggleRow(movePage, "Infinite Jump", function(enabled) getgenv().infiniteJumpEnabled = enabled end)
 
 -- MISC PAGE
 local miscPage = addPage("Misc", "⚙")
 addSectionLabel(miscPage, "Performance")
-addButtonRow(miscPage, "AntiLag  —  Potato Graphics", function()
-    applyPotatoGraphics()
-end)
+addButtonRow(miscPage, "AntiLag  —  Potato Graphics", function() applyPotatoGraphics() end)
 addSectionLabel(miscPage, "Protection")
 addButtonRow(miscPage, "AntiKick", function()
     loadstring(game:HttpGet("https://raw.githubusercontent.com/OBFhm5650lol/AntickLol/refs/heads/main/Anticklol"))()
 end)
 
--- ─── ACTIVATE DEFAULT TAB ─────────────────────────
-
+-- ACTIVATE DEFAULT TAB
 local defaultTab = "Main"
 pages[defaultTab].Visible = true
 do
@@ -1770,9 +1512,7 @@ StandaloneGui.IgnoreGuiInset = true
 pcall(function() StandaloneGui.Parent = CoreGui end)
 if not StandaloneGui.Parent then StandaloneGui.Parent = lp:WaitForChild("PlayerGui") end
 
--- Premium pill builder
 local function createStudioPill(labelText, iconText, pos)
-    -- Outer container
     local pill = Instance.new("Frame")
     pill.Size = UDim2.new(0, 108, 0, 34)
     pill.Position = pos
@@ -1784,23 +1524,16 @@ local function createStudioPill(labelText, iconText, pos)
     pill.Parent = StandaloneGui
     addCorner(pill, 17)
 
-    -- Pill gradient
     local pGrad = Instance.new("UIGradient")
-    pGrad.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0, C.crypt),
-        ColorSequenceKeypoint.new(1, C.manor),
-    })
-    pGrad.Rotation = 135
+    pGrad.Color = ColorSequence.new({ ColorSequenceKeypoint.new(0, C.crypt), ColorSequenceKeypoint.new(1, C.manor) })
     pGrad.Parent = pill
 
-    -- Stroke (starts blood-red = OFF)
     local pillStroke = Instance.new("UIStroke")
     pillStroke.Color = C.blood
     pillStroke.Thickness = 1.5
     pillStroke.Transparency = 0.2
     pillStroke.Parent = pill
 
-    -- Left icon circle
     local iconBg = Instance.new("Frame")
     iconBg.Size = UDim2.new(0, 26, 0, 26)
     iconBg.Position = UDim2.new(0, 4, 0.5, -13)
@@ -1819,7 +1552,6 @@ local function createStudioPill(labelText, iconText, pos)
     iconLabel.ZIndex = 42
     iconLabel.Parent = iconBg
 
-    -- Label
     local textLabel = Instance.new("TextLabel")
     textLabel.Size = UDim2.new(1, -46, 1, 0)
     textLabel.Position = UDim2.new(0, 34, 0, 0)
@@ -1832,7 +1564,6 @@ local function createStudioPill(labelText, iconText, pos)
     textLabel.ZIndex = 41
     textLabel.Parent = pill
 
-    -- Status dot (right edge)
     local dot = Instance.new("Frame")
     dot.Size = UDim2.new(0, 6, 0, 6)
     dot.Position = UDim2.new(1, -10, 0.5, -3)
@@ -1842,7 +1573,6 @@ local function createStudioPill(labelText, iconText, pos)
     dot.Parent = pill
     addCorner(dot, 3)
 
-    -- Clickable overlay
     local hitBtn = Instance.new("TextButton")
     hitBtn.Size = UDim2.new(1, 0, 1, 0)
     hitBtn.BackgroundTransparency = 1
@@ -1850,20 +1580,8 @@ local function createStudioPill(labelText, iconText, pos)
     hitBtn.ZIndex = 43
     hitBtn.Parent = pill
 
-    hitBtn.MouseButton1Down:Connect(function()
-        tw(pill, 0.08, {BackgroundTransparency = 0}):Play()
-    end)
-    hitBtn.MouseButton1Up:Connect(function()
-        tw(pill, 0.12, {BackgroundTransparency = 0.04}):Play()
-    end)
-    hitBtn.MouseLeave:Connect(function()
-        tw(pill, 0.12, {BackgroundTransparency = 0.04}):Play()
-    end)
-    hitBtn.MouseEnter:Connect(function()
-        tw(pill, 0.12, {BackgroundColor3 = C.crypt}):Play()
-    end)
-    hitBtn.MouseLeave:Connect(function()
-        tw(pill, 0.12, {BackgroundColor3 = C.manor}):Play()
+    hitBtn.MouseButton1Click:Connect(function()
+        playSound("rbxassetid://12221976")
     end)
 
     local function setOn()
@@ -1883,28 +1601,21 @@ local function createStudioPill(labelText, iconText, pos)
     return hitBtn, setOn, setOff
 end
 
--- ─── ANTI FLING PILL ──────────────────────────────
+-- ANTI FLING
 local noFallEnabled = false
 local noFallConnection
-
 local function executeACR(char, hum, hrp)
     if not (char and hum and hrp) then return end
     pcall(function()
-        hrp.Anchored = true
-        hrp.AssemblyLinearVelocity = Vector3.zero
-        hrp.AssemblyAngularVelocity = Vector3.zero
-        hum.PlatformStand = false
-        hum.Sit = false
-        local currentPos = hrp.Position
-        local lookVector = hrp.CFrame.LookVector
+        hrp.Anchored = true; hrp.AssemblyLinearVelocity = Vector3.zero; hrp.AssemblyAngularVelocity = Vector3.zero
+        hum.PlatformStand = false; hum.Sit = false
+        local currentPos = hrp.Position; local lookVector = hrp.CFrame.LookVector
         local flatLook = Vector3.new(lookVector.X, 0, lookVector.Z).Unit
         if flatLook.Magnitude < 0.1 then flatLook = Vector3.new(0, 0, -1) end
         local newPos = currentPos + Vector3.new(0, 2.5, 0)
         hrp.CFrame = CFrame.new(newPos, newPos + flatLook)
         hum:ChangeState(Enum.HumanoidStateType.Freefall)
-        task.wait(0.05)
-        hrp.Anchored = false
-        hum.Jump = true
+        task.wait(0.05); hrp.Anchored = false; hum.Jump = true
     end)
 end
 
@@ -1912,28 +1623,19 @@ local aFlingHit, aFlingOn, aFlingOff = createStudioPill("A-Fling", "💀", UDim2
 
 local function toggleAntiFling(enabled)
     noFallEnabled = enabled
-    local char = lp.Character
-    local hum = char and char:FindFirstChildOfClass("Humanoid")
-    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    local char = lp.Character; local hum = char and char:FindFirstChildOfClass("Humanoid"); local hrp = char and char:FindFirstChild("HumanoidRootPart")
     if enabled then
         aFlingOn()
         executeACR(char, hum, hrp)
-        pcall(function()
-            hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
-            hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
-        end)
+        pcall(function() hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false); hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false) end)
         if not noFallConnection then
             noFallConnection = RunService.Heartbeat:Connect(function()
                 pcall(function()
                     local c = lp.Character; if not c then return end
-                    local r = c:FindFirstChild("HumanoidRootPart")
-                    local h = c:FindFirstChildOfClass("Humanoid")
+                    local r = c:FindFirstChild("HumanoidRootPart"); local h = c:FindFirstChildOfClass("Humanoid")
                     if r and h then
-                        local lv = r.AssemblyLinearVelocity
-                        local av = r.AssemblyAngularVelocity
-                        if Vector3.new(lv.X, 0, lv.Z).Magnitude > 150 or av.Magnitude > 75 then
-                            executeACR(c, h, r)
-                        end
+                        local lv = r.AssemblyLinearVelocity; local av = r.AssemblyAngularVelocity
+                        if Vector3.new(lv.X, 0, lv.Z).Magnitude > 150 or av.Magnitude > 75 then executeACR(c, h, r) end
                         if h.PlatformStand then h.PlatformStand = false; h.Jump = true end
                     end
                 end)
@@ -1942,22 +1644,14 @@ local function toggleAntiFling(enabled)
     else
         aFlingOff()
         if noFallConnection then noFallConnection:Disconnect(); noFallConnection = nil end
-        pcall(function()
-            local c = lp.Character
-            local h = c and c:FindFirstChildOfClass("Humanoid")
-            if h then
-                h:SetStateEnabled(Enum.HumanoidStateType.FallingDown, true)
-                h:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, true)
-            end
-        end)
+        pcall(function() hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, true); hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, true) end)
         executeACR(char, hum, hrp)
     end
 end
 
 aFlingHit.MouseButton1Click:Connect(function() toggleAntiFling(not noFallEnabled) end)
 
--- ─── INVISIBLE PILL ───────────────────────────────
-
+-- INVISIBLE
 local invisHit, invisOn, invisOff = createStudioPill("Invisible", "👻", UDim2.new(0, 64, 0, 253))
 
 invisHit.MouseButton1Click:Connect(function()
@@ -1972,34 +1666,19 @@ invisHit.MouseButton1Click:Connect(function()
     end
 end)
 
--- ─── DRAG LOGIC (header-locked, camera-safe) ──────
-
+-- DRAG LOGIC
 local dragging, dragStart, startPos
-
 header.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.Touch
-    or input.UserInputType == Enum.UserInputType.MouseButton1 then
-        dragging = true
-        dragStart = input.Position
-        startPos = mainPanel.Position
-        input.Changed:Connect(function()
-            if input.UserInputState == Enum.UserInputState.End then
-                dragging = false
-            end
-        end)
+    if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = true; dragStart = input.Position; startPos = mainPanel.Position
+        input.Changed:Connect(function() if input.UserInputState == Enum.UserInputState.End then dragging = false end end)
     end
 end)
 
 UserInputService.InputChanged:Connect(function(input)
-    if dragging and (
-        input.UserInputType == Enum.UserInputType.Touch
-     or input.UserInputType == Enum.UserInputType.MouseMovement
-    ) then
+    if dragging and (input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseMovement) then
         local delta = input.Position - dragStart
-        mainPanel.Position = UDim2.new(
-            startPos.X.Scale, startPos.X.Offset + delta.X,
-            startPos.Y.Scale, startPos.Y.Offset + delta.Y
-        )
+        mainPanel.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
     end
 end)
 
@@ -2038,12 +1717,7 @@ RunService.Heartbeat:Connect(function()
     if hum.Sit then hum.Sit = false; hum.SeatPart = nil end
     stripMount(char)
     if (hrp.Position - ARENA_POS).Magnitude > 150 then
-        pcall(function()
-            hum.Sit = false; hum.SeatPart = nil
-            hrp.Anchored = true; hrp.CFrame = CFrame.new(ARENA_TELEPORT)
-            hrp.AssemblyLinearVelocity = Vector3.zero; hrp.AssemblyAngularVelocity = Vector3.zero
-            task.wait(0.1); hrp.Anchored = false
-        end)
+        pcall(function() hum.Sit = false; hum.SeatPart = nil; hrp.Anchored = true; hrp.CFrame = CFrame.new(ARENA_TELEPORT); hrp.AssemblyLinearVelocity = Vector3.zero; hrp.AssemblyAngularVelocity = Vector3.zero; task.wait(0.1); hrp.Anchored = false end)
     end
     local now = tick()
     if now - lastOpAuraHit < auraDelay then return end
@@ -2074,6 +1748,40 @@ RunService.Heartbeat:Connect(function()
         local myChar = lp.Character
         local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
         if tRoot and myRoot then myRoot.CFrame = tRoot.CFrame * CFrame.new(0, 2, 3) end
+    end
+end)
+
+-- Auto Sheriff Loop
+RunService.Heartbeat:Connect(function()
+    if not sheriffActive or not target then return end
+    local char = lp.Character
+    if not char then return end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not hum or hum.Health <= 0 then return end
+    
+    local tool = char:FindFirstChildOfClass("Tool")
+    if not tool or not (tool.Name:lower():find("gun") or tool.Name:lower():find("sheriff") or tool.Name:lower():find("shotgun")) then
+        local bp = lp:FindFirstChild("Backpack")
+        if bp then
+            local gun = bp:FindFirstChild("Shotgun") or bp:FindFirstChild("Gun") or bp:FindFirstChild("Sheriff")
+            if gun then hum:EquipTool(gun) end
+        end
+        return
+    end
+    
+    if target.Character and target.Character:FindFirstChild("Head") then
+        -- Brief camera snap to aim, then restore
+        local oldCF = workspace.CurrentCamera.CFrame
+        workspace.CurrentCamera.CFrame = CFrame.new(workspace.CurrentCamera.CFrame.Position, target.Character.Head.Position)
+        pcall(function()
+            tool:Activate()
+            if getconnections then
+                local conns = getconnections(tool.Activated)
+                if conns then for _, c in ipairs(conns) do c:Fire() end end
+            end
+        end)
+        task.wait()
+        workspace.CurrentCamera.CFrame = oldCF
     end
 end)
 
@@ -2129,9 +1837,7 @@ RunService.Heartbeat:Connect(function()
                     if not hrp:FindFirstChild("OriginalSize") then
                         local o = Instance.new("Vector3Value"); o.Name = "OriginalSize"; o.Value = hrp.Size; o.Parent = hrp
                     end
-                    hrp.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
-                    hrp.Transparency = hitboxTransparency
-                    hrp.CanCollide = false
+                    hrp.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize); hrp.Transparency = hitboxTransparency; hrp.CanCollide = false
                 end
             end
         end
@@ -2141,13 +1847,12 @@ end)
 -- Infinite Jump
 UserInputService.JumpRequest:Connect(function()
     if getgenv().superPowerEnabled or getgenv().infiniteJumpEnabled then
-        local char = lp.Character
-        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        local char = lp.Character; local hum = char and char:FindFirstChildOfClass("Humanoid")
         if hum then hum:ChangeState(Enum.HumanoidStateType.Jumping) end
     end
 end)
 
--- ─── OPEN ANIMATION ───────────────────────────────
+-- OPEN ANIMATION
 task.defer(function()
     task.wait(0.2)
     reopenBtn.Visible = false
@@ -2156,5 +1861,5 @@ task.defer(function()
     tw(panelScale, 0.38, {Scale = 1}, Enum.EasingStyle.Back, Enum.EasingDirection.Out):Play()
 end)
 
-print("🎃 Undocall's Hub v36 | Studio Halloween Edition loaded.")
+print("🎃 Undocall's Hub v36 | Studio Halloween Edition (Fixed) loaded.")
 print("Discord: " .. KEY_LINK)
