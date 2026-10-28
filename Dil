@@ -1,4 +1,4 @@
--- ═══════════ UNODOCALL'S HUB — v45.2 (FIXED FLING + CUSTOM SPAWN) ═══════════
+-- ═══════════ UNODOCALL'S HUB — v45.3 (FREE ROAM FIX) ═══════════
 local StarterGui = game:GetService("StarterGui")
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -101,6 +101,7 @@ local spawningDebounce = false
 -- CUSTOM SPAWN STATE
 local customSpawnEnabled = false
 local customSpawnCFrame = nil
+local opSpawnTeleported = false  -- one-shot teleport flag
 
 getgenv().superPowerEnabled = false
 getgenv().infiniteJumpEnabled = false
@@ -434,7 +435,7 @@ local hC = Instance.new("UICorner"); hC.CornerRadius = UDim.new(0, 12); hC.Paren
 
 local hTitle = Instance.new("TextLabel")
 hTitle.Size = UDim2.new(0, 300, 1, 0); hTitle.Position = UDim2.new(0, 14, 0, 0)
-hTitle.BackgroundTransparency = 1; hTitle.Text = "Undocall's Hub (v45.2)"
+hTitle.BackgroundTransparency = 1; hTitle.Text = "Undocall's Hub (v45.3)"
 hTitle.TextColor3 = COL.text; hTitle.Font = Enum.Font.GothamBold; hTitle.TextSize = 16; hTitle.TextXAlignment = Enum.TextXAlignment.Left; hTitle.Parent = header
 
 local closeBtn = Instance.new("TextButton")
@@ -622,8 +623,14 @@ local combatPage = addPage("Combat")
 
 local opGodSpawnToggle = addToggleRow(combatPage, "OP God Spawn", function(enabled)
     if enabled and not keyVerified then notify("Locked", "Enter key first", 3); opGodSpawnToggle.set(false); return end
-    if enabled then opGodSpawnOn = true; teleportToArena(true); notify("OP Spawn", "At arena, auto aura running", 3)
-    else opGodSpawnOn = false end
+    if enabled then
+        opGodSpawnOn = true
+        opSpawnTeleported = false  -- arm one-shot teleport
+        teleportToArena(true)
+        notify("OP Spawn", "At arena, auto aura running", 3)
+    else
+        opGodSpawnOn = false
+    end
 end)
 
 addButtonRow(combatPage, "Force Teleport to Arena", function()
@@ -952,16 +959,14 @@ UserInputService.InputChanged:Connect(function(input)
     end
 end)
 
--- ═══════════ SHERIFF LOOP (FIXED TOOL LOOKUP) ═══════════
+-- ═══════════ SHERIFF LOOP ═══════════
 task.spawn(function()
     while task.wait(0.15) do
         if not sheriffActive or not target then continue end
-
         local char = lp.Character
         if not char then continue end
         local hum = char:FindFirstChildOfClass("Humanoid")
         if not hum or hum.Health <= 0 then continue end
-
         local tChar = target.Character
         if tChar then
             local tHRP = tChar:FindFirstChild("HumanoidRootPart")
@@ -970,8 +975,6 @@ task.spawn(function()
                 myHRP.CFrame = tHRP.CFrame * CFrame.new(0, 3, 0)
             end
         end
-
-        -- ranged-tool lookup (loose match)
         local tool = char:FindFirstChild("Shotgun")
         if not tool then
             local bp = lp:FindFirstChild("Backpack")
@@ -991,27 +994,23 @@ task.spawn(function()
                 end
             end
         end
-
         if tool and tool.Parent == lp.Backpack then
             hum:EquipTool(tool)
             task.wait(0.15)
             tool = char:FindFirstChild(tool.Name) or tool
         end
-
         if not tool then continue end
-
         if tChar and tChar:FindFirstChild("Head") then
             workspace.CurrentCamera.CFrame = CFrame.new(
                 workspace.CurrentCamera.CFrame.Position,
                 tChar.Head.Position
             )
         end
-
         pcall(function() tool:Activate() end)
     end
 end)
 
--- ═══════════ KILL AURA (FIXED: sends Player, not Name) ═══════════
+-- ═══════════ KILL AURA (sends Player, not Name) ═══════════
 RunService.Heartbeat:Connect(function()
     if not killAuraOn or not keyVerified or not FlingRE then return end
     local now = tick()
@@ -1033,7 +1032,7 @@ RunService.Heartbeat:Connect(function()
     if nearest then pcall(function() FlingRE:FireServer(nearest) end) end
 end)
 
--- ═══════════ OP GOD SPAWN (FIXED: sends Player, not Name) ═══════════
+-- ═══════════ OP GOD SPAWN — ONE-SHOT TELEPORT, FREE ROAM AFTER ═══════════
 RunService.Heartbeat:Connect(function()
     if not opGodSpawnOn or not keyVerified or not FlingRE then return end
     local char = lp.Character
@@ -1043,18 +1042,17 @@ RunService.Heartbeat:Connect(function()
     if hum.Sit then hum.Sit = false; hum.SeatPart = nil end
     stripMount(char)
 
-    -- custom spawn has priority if set
-    if customSpawnEnabled and customSpawnCFrame then
-        if (hrp.Position - customSpawnCFrame.Position).Magnitude > 150 then
-            pcall(function()
-                hrp.Anchored = true; hrp.CFrame = customSpawnCFrame
-                hrp.AssemblyLinearVelocity = Vector3.zero; hrp.AssemblyAngularVelocity = Vector3.zero
-                task.wait(0.1); hrp.Anchored = false
-            end)
+    -- ONE-SHOT: teleport on first heartbeat after spawn only
+    if not opSpawnTeleported then
+        opSpawnTeleported = true
+        local targetCF
+        if customSpawnEnabled and customSpawnCFrame then
+            targetCF = customSpawnCFrame
+        else
+            targetCF = CFrame.new(ARENA_TELEPORT)
         end
-    elseif (hrp.Position - ARENA_POS).Magnitude > 150 then
         pcall(function()
-            hrp.Anchored = true; hrp.CFrame = CFrame.new(ARENA_TELEPORT)
+            hrp.Anchored = true; hrp.CFrame = targetCF
             hrp.AssemblyLinearVelocity = Vector3.zero; hrp.AssemblyAngularVelocity = Vector3.zero
             task.wait(0.1); hrp.Anchored = false
         end)
@@ -1109,7 +1107,7 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
--- ═══════════ RESPAWN (CUSTOM SPAWN PRIORITY) ═══════════
+-- ═══════════ RESPAWN (RESETS ONE-SHOT FLAG) ═══════════
 lp.CharacterAdded:Connect(function(char)
     task.wait(0.7)
     pcall(function()
@@ -1118,6 +1116,8 @@ lp.CharacterAdded:Connect(function(char)
         if char:FindFirstChild("Animate") then char.Animate.Disabled = false end
     end)
     flyV3Active = false; flyV3UpHeld = false; flyV3DownHeld = false
+    opSpawnTeleported = false  -- RESET: next life gets one teleport
+
     if invisibleEnabled then
         invisibleEnabled = false; invisibleParts = {}
         if invisibleConnection then invisibleConnection:Disconnect(); invisibleConnection = nil end
@@ -1126,7 +1126,7 @@ lp.CharacterAdded:Connect(function(char)
         TweenService:Create(invisStroke, TweenInfo.new(0.2), {Color = COL.red}):Play()
     end
 
-    -- CUSTOM SPAWN: teleport to user's saved location
+    -- CUSTOM SPAWN: single teleport after respawn (no loop, no leash)
     if customSpawnEnabled and customSpawnCFrame then
         task.spawn(function()
             task.wait(0.3)
@@ -1143,6 +1143,7 @@ lp.CharacterAdded:Connect(function(char)
                     hrp.Anchored = false
                 end)
             end
+            opSpawnTeleported = true
         end)
     end
 
@@ -1176,5 +1177,5 @@ UserInputService.JumpRequest:Connect(function()
     end
 end)
 
-print("Undocall's Hub v45.2 loaded. Fling fixed, custom spawn added.")
+print("Undocall's Hub v45.3 loaded. Free roam enabled, one-shot spawn.")
 print("Discord: " .. KEY_LINK)
