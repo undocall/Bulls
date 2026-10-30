@@ -1,4 +1,4 @@
--- ═══════════ UNODOCALL'S HUB — v45.3 (FREE ROAM FIX) ═══════════
+-- ═══════════ UNODOCALL'S HUB — v45.4 (GOD SPAWN FIGHT-PHASE FIX) ═══════════
 local StarterGui = game:GetService("StarterGui")
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -101,7 +101,7 @@ local spawningDebounce = false
 -- CUSTOM SPAWN STATE
 local customSpawnEnabled = false
 local customSpawnCFrame = nil
-local opSpawnTeleported = false  -- one-shot teleport flag
+local opSpawnTeleported = false
 
 getgenv().superPowerEnabled = false
 getgenv().infiniteJumpEnabled = false
@@ -435,7 +435,7 @@ local hC = Instance.new("UICorner"); hC.CornerRadius = UDim.new(0, 12); hC.Paren
 
 local hTitle = Instance.new("TextLabel")
 hTitle.Size = UDim2.new(0, 300, 1, 0); hTitle.Position = UDim2.new(0, 14, 0, 0)
-hTitle.BackgroundTransparency = 1; hTitle.Text = "Undocall's Hub (v45.3)"
+hTitle.BackgroundTransparency = 1; hTitle.Text = "Undocall's Hub (v45.4)"
 hTitle.TextColor3 = COL.text; hTitle.Font = Enum.Font.GothamBold; hTitle.TextSize = 16; hTitle.TextXAlignment = Enum.TextXAlignment.Left; hTitle.Parent = header
 
 local closeBtn = Instance.new("TextButton")
@@ -621,13 +621,16 @@ addToggleRow(mainPage, "Invisible (Backup)", function(enabled) if enabled then s
 
 local combatPage = addPage("Combat")
 
+-- ═══════════ OP GOD SPAWN — FIXED: fires SpawnerRE to enter fight phase ═══════════
 local opGodSpawnToggle = addToggleRow(combatPage, "OP God Spawn", function(enabled)
     if enabled and not keyVerified then notify("Locked", "Enter key first", 3); opGodSpawnToggle.set(false); return end
     if enabled then
         opGodSpawnOn = true
-        opSpawnTeleported = false  -- arm one-shot teleport
+        opSpawnTeleported = false
+        if not SpawnerRE then findRemotes() end
+        if SpawnerRE then pcall(function() SpawnerRE:FireServer() end) end -- ENTER FIGHT PHASE
         teleportToArena(true)
-        notify("OP Spawn", "At arena, auto aura running", 3)
+        notify("OP Spawn", "Entered fight phase at arena", 3)
     else
         opGodSpawnOn = false
     end
@@ -1010,7 +1013,7 @@ task.spawn(function()
     end
 end)
 
--- ═══════════ KILL AURA (sends Player, not Name) ═══════════
+-- ═══════════ KILL AURA ═══════════
 RunService.Heartbeat:Connect(function()
     if not killAuraOn or not keyVerified or not FlingRE then return end
     local now = tick()
@@ -1032,9 +1035,9 @@ RunService.Heartbeat:Connect(function()
     if nearest then pcall(function() FlingRE:FireServer(nearest) end) end
 end)
 
--- ═══════════ OP GOD SPAWN — ONE-SHOT TELEPORT, FREE ROAM AFTER ═══════════
+-- ═══════════ OP GOD SPAWN LOOP ═══════════
 RunService.Heartbeat:Connect(function()
-    if not opGodSpawnOn or not keyVerified or not FlingRE then return end
+    if not opGodSpawnOn or not keyVerified then return end
     local char = lp.Character
     local hrp = char and char:FindFirstChild("HumanoidRootPart")
     local hum = char and char:FindFirstChildOfClass("Humanoid")
@@ -1042,7 +1045,7 @@ RunService.Heartbeat:Connect(function()
     if hum.Sit then hum.Sit = false; hum.SeatPart = nil end
     stripMount(char)
 
-    -- ONE-SHOT: teleport on first heartbeat after spawn only
+    -- ONE-SHOT teleport
     if not opSpawnTeleported then
         opSpawnTeleported = true
         local targetCF
@@ -1058,6 +1061,7 @@ RunService.Heartbeat:Connect(function()
         end)
     end
 
+    if not FlingRE then return end
     local now = tick()
     if now - lastOpAuraHit < auraDelay then return end
     lastOpAuraHit = now
@@ -1107,7 +1111,7 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
--- ═══════════ RESPAWN (RESETS ONE-SHOT FLAG) ═══════════
+-- ═══════════ RESPAWN (FIRES SPAWNER + RESETS ONE-SHOT) ═══════════
 lp.CharacterAdded:Connect(function(char)
     task.wait(0.7)
     pcall(function()
@@ -1116,7 +1120,7 @@ lp.CharacterAdded:Connect(function(char)
         if char:FindFirstChild("Animate") then char.Animate.Disabled = false end
     end)
     flyV3Active = false; flyV3UpHeld = false; flyV3DownHeld = false
-    opSpawnTeleported = false  -- RESET: next life gets one teleport
+    opSpawnTeleported = false
 
     if invisibleEnabled then
         invisibleEnabled = false; invisibleParts = {}
@@ -1126,10 +1130,11 @@ lp.CharacterAdded:Connect(function(char)
         TweenService:Create(invisStroke, TweenInfo.new(0.2), {Color = COL.red}):Play()
     end
 
-    -- CUSTOM SPAWN: single teleport after respawn (no loop, no leash)
     if customSpawnEnabled and customSpawnCFrame then
         task.spawn(function()
             task.wait(0.3)
+            if not SpawnerRE then findRemotes() end
+            if SpawnerRE then pcall(function() SpawnerRE:FireServer() end) end -- RE-ENTER FIGHT PHASE
             local c = lp.Character
             local hrp = c and c:FindFirstChild("HumanoidRootPart")
             local hum = c and c:FindFirstChildOfClass("Humanoid")
@@ -1158,9 +1163,18 @@ lp.CharacterAdded:Connect(function(char)
             task.wait(2); spawningDebounce = false
         end)
     end
+
+    -- OP God Spawn: fire SpawnerRE first, then teleport
     if opGodSpawnOn and not customSpawnEnabled then
-        task.spawn(function() task.wait(1); teleportToArena(true); for i = 1, 60 do task.wait(0.05); stripMount(char) end end)
+        task.spawn(function()
+            task.wait(1)
+            if not SpawnerRE then findRemotes() end
+            if SpawnerRE then pcall(function() SpawnerRE:FireServer() end) end -- RE-ENTER FIGHT PHASE
+            teleportToArena(true)
+            for i = 1, 60 do task.wait(0.05); stripMount(char) end
+        end)
     end
+
     if sheriffActive then
         task.spawn(function()
             task.wait(1)
@@ -1177,5 +1191,5 @@ UserInputService.JumpRequest:Connect(function()
     end
 end)
 
-print("Undocall's Hub v45.3 loaded. Free roam enabled, one-shot spawn.")
+print("Undocall's Hub v45.4 loaded. God Spawn fight-phase fix applied.")
 print("Discord: " .. KEY_LINK)
