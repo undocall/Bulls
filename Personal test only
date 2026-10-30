@@ -1,4 +1,4 @@
--- ═══════════ UNODOCALL'S HUB — v49 (1-CLICK VOID TRICK) ═══════════
+-- ═══════════ UNODOCALL'S HUB — v50 (HYPER-SPEED VOID TRICK) ═══════════
 local StarterGui = game:GetService("StarterGui")
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -377,7 +377,7 @@ local function teleportToArena(force)
     return true, "ok"
 end
 
--- ═══════════ VOID TRICK LOGIC ═══════════
+-- ═══════════ HYPER-SPEED VOID TRICK LOGIC ═══════════
 local function executeVoidTrick()
     if voidTrickActive then return end
     voidTrickActive = true
@@ -388,12 +388,13 @@ local function executeVoidTrick()
     if killAuraToggle and killAuraToggle.set then killAuraToggle.set(true) end
     if not noFallEnabled and aFlingBtn then aFlingBtn.MouseButton1Click() end
 
-    notify("VOID TRICK", "Dropping into void...", 2)
+    notify("VOID TRICK", "Speed-running void...", 2)
     
+    -- Fire the first teleport to the void
     local char = lp.Character
     local hrp = char and char:FindFirstChild("HumanoidRootPart")
     if hrp then
-        hrp.CFrame = CFrame.new(0, -1000, 0) -- Teleport into void
+        hrp.CFrame = CFrame.new(0, -1000, 0)
     end
 end
 
@@ -439,7 +440,7 @@ local hC = Instance.new("UICorner"); hC.CornerRadius = UDim.new(0, 12); hC.Paren
 
 local hTitle = Instance.new("TextLabel")
 hTitle.Size = UDim2.new(0, 300, 1, 0); hTitle.Position = UDim2.new(0, 14, 0, 0)
-hTitle.BackgroundTransparency = 1; hTitle.Text = "Undocall's Hub (v49)"
+hTitle.BackgroundTransparency = 1; hTitle.Text = "Undocall's Hub (v50)"
 hTitle.TextColor3 = COL.text; hTitle.Font = Enum.Font.GothamBold; hTitle.TextSize = 16; hTitle.TextXAlignment = Enum.TextXAlignment.Left; hTitle.Parent = header
 
 local closeBtn = Instance.new("TextButton")
@@ -633,7 +634,7 @@ addToggleRow(mainPage, "Invisible (Backup)", function(enabled) if enabled then s
 local combatPage = addPage("Combat")
 
 -- 🟢 THE ONE-CLICK VOID TRICK BUTTON
-addButtonRow(combatPage, "⚡ 1-CLICK VOID TRICK", function()
+addButtonRow(combatPage, "⚡ 1-CLICK SPEEDRUN VOID TRICK", function()
     if not keyVerified then notify("Locked", "Enter key first", 3); return end
     executeVoidTrick()
 end)
@@ -1068,25 +1069,26 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
--- ═══════════ RESPAWN (VOID TRICK CATCHER) ═══════════
+-- ═══════════ HYPER-SPEED VOID TRICK RESPAWN CATCHER ═══════════
 lp.CharacterAdded:Connect(function(char)
     if voidTrickActive then
         voidCounter = voidCounter + 1
+        
         if voidCounter <= 3 then
-            -- Loop back into void
+            -- Rapid Fire Void Teleport
             task.spawn(function()
-                task.wait(0.5)
-                local hrp = char:WaitForChild("HumanoidRootPart", 2)
+                task.wait(0.1) -- Wait just enough for HRP to load
+                local hrp = char:WaitForChild("HumanoidRootPart", 1)
                 if hrp then
                     hrp.CFrame = CFrame.new(0, -1000, 0) 
                 end
             end)
         else
-            -- Final respawn: Unkillable
+            -- 4th Spawn: Break the server leash
             voidTrickActive = false
             task.spawn(function()
-                task.wait(0.5)
-                local hrp = char:WaitForChild("HumanoidRootPart", 2)
+                task.wait(0.1) 
+                local hrp = char:WaitForChild("HumanoidRootPart", 1)
                 if hrp then
                     stripMount(char)
                     hrp.CFrame = CFrame.new(ARENA_TELEPORT)
@@ -1101,7 +1103,7 @@ lp.CharacterAdded:Connect(function(char)
         end
     end
 
-    task.wait(0.7)
+    task.wait(0.5)
     pcall(function()
         local hum = char:FindFirstChildOfClass("Humanoid")
         if hum then hum.PlatformStand = false; enableAllHumanoidStates(hum) end
@@ -1126,5 +1128,5 @@ UserInputService.JumpRequest:Connect(function()
     end
 end)
 
-print("Undocall's Hub v49 loaded. Void Trick active.")
+print("Undocall's Hub v50 loaded. Hyper-Speed Void Trick active.")
 print("Discord: " .. KEY_LINK)
