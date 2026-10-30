@@ -47,7 +47,7 @@ local ok, err = pcall(function()
 end)
 if not ok or not uiLibrary then error("Failed to load UI library") end
 
-uiLibrary:SetTitle("Hitblox (v5.2 Jump-Fixed)")
+uiLibrary:SetTitle("Hitblox (v5.3 Instant-Arm)")
 uiLibrary:SetIcon("http://www.roblox.com/asset/?id=91738788645337")
 uiLibrary:SetTheme("HighContrast")
 
@@ -191,140 +191,106 @@ end)
 uiLibrary:AddToggle("Expand Hitbox", toggleHitboxes, false)
 
 -- ═══════════ JUMP INPUT TRACKER ═══════════
--- If he pressed jump recently, anti-fling backs off completely.
 local lastJumpPress = 0
 UserInputService.JumpRequest:Connect(function()
     lastJumpPress = tick()
 end)
 
--- ═══════════ SMART ANTI-FLING — JUMP-SAFE 80% ═══════════
--- Key fixes vs previous version:
--- 1. NEVER touches Y velocity (that's your jump direction)
--- 2. Only clears horizontal XZ when actually fling-level (>150)
--- 3. Single recovery per grace-arming event, NOT every tick
--- 4. Backs off entirely for 0.6s after any jump press
+-- ═══════════ SMART ANTI-FLING — INSTANT ARM, 80% GRACE ═══════════
+-- Detects real fling instantly (velocity >100 OR knock state), no counter needed.
+-- 80% dice roll on grace. Jump safety only delays velocity clearing, never arming.
 task.spawn(function()
-    local fallCounter   = 0
     local graceUntil    = 0
     local cooldownUntil = 0
-    local nextThreshold = math.random(2, 3)
-    local lastFallTime  = 0
     local lastRecover   = 0
+    local lastArm       = 0
 
-    local FALL_WINDOW    = 4.0
-    local FALL_DEBOUNCE  = 0.6
     local GRACE_DURATION = 20.0
-    local COOLDOWN_MIN   = 10.0
-    local COOLDOWN_MAX   = 20.0
-    local SKIP_CHANCE    = 0.20
-    local FLING_HORIZ    = 150
-    local FAST_VELOCITY  = 250
-    local FAST_WINDOW    = 1.2
+    local COOLDOWN_MIN   = 8.0
+    local COOLDOWN_MAX   = 15.0
+    local SKIP_CHANCE    = 0.20          -- 80% grace
+    local FLING_HORIZ    = 100           -- real fling speed (jump = ~50-70)
+    local FLING_ANGULAR  = 60            -- real fling spin
     local RECOVER_GAP    = 0.8
-    local JUMP_BACKOFF   = 0.6
+    local ARM_GAP        = 1.2           -- min 1.2s between arm attempts
+    local JUMP_BACKOFF   = 0.4
 
-    local fastUntil = 0
-
-    local function resetCounter()
-        fallCounter   = 0
-        nextThreshold = math.random(2, 3)
+    local function isKnocked(hum)
+        local s = hum:GetState()
+        return hum.PlatformStand
+            or hum.Sit
+            or s == Enum.HumanoidStateType.FallingDown
+            or s == Enum.HumanoidStateType.Ragdoll
+            or s == Enum.HumanoidStateType.GettingUp
+            or s == Enum.HumanoidStateType.PlatformStanding
     end
 
     while true do
-        task.wait(0.06)
+        task.wait(0.05)
         if not getgenv().smartAntiFlingEnabled then
-            resetCounter() ; graceUntil = 0 ; cooldownUntil = 0
-            fastUntil = 0 ; lastRecover = 0
+            graceUntil = 0 ; cooldownUntil = 0 ; lastRecover = 0 ; lastArm = 0
             continue
         end
 
         local char = localPlayer.Character
-        if not char then resetCounter() ; continue end
+        if not char then continue end
 
         local hrp = char:FindFirstChild("HumanoidRootPart")
         local hum = char:FindFirstChildOfClass("Humanoid")
-        if not (hrp and hum) then continue end
+        if not (hrp and hum) or hum.Health <= 0 then continue end
 
-        local now   = tick()
-        local state = hum:GetState()
-        local v     = hrp.AssemblyLinearVelocity
-        local av    = hrp.AssemblyAngularVelocity
+        local now = tick()
+        local v   = hrp.AssemblyLinearVelocity
+        local av  = hrp.AssemblyAngularVelocity
+        local hMag = math.sqrt(v.X * v.X + v.Z * v.Z)
+        local aMag = av.Magnitude
 
         local recentlyJumped = (now - lastJumpPress) < JUMP_BACKOFF
-
-        -- only real fling speed (>250) arms grace auto-path
-        if v.Magnitude > FAST_VELOCITY then
-            fastUntil = now + FAST_WINDOW
-        end
-
-        -- only TRUE ragdoll counts as fall (not jump landing)
-        local trueRagdoll = state == Enum.HumanoidStateType.FallingDown
-            or state == Enum.HumanoidStateType.Ragdoll
-
-        local freshFall = trueRagdoll
-            and (not recentlyJumped)
-            and (now - lastFallTime) > FALL_DEBOUNCE
-
-        if freshFall then
-            lastFallTime = now
-            fallCounter  = fallCounter + 1
-        end
+        local knocked = isKnocked(hum)
+        local realFling = (hMag > FLING_HORIZ) or (aMag > FLING_ANGULAR) or (knocked and not recentlyJumped)
 
         local inGrace    = now < graceUntil
         local inCooldown = now < cooldownUntil
 
-        -- GRACE RECOVERY: single-shot, horizontal only, Y preserved
-        if inGrace and not recentlyJumped and (now - lastRecover) > RECOVER_GAP then
-            local horizMag = math.sqrt(v.X * v.X + v.Z * v.Z)
-            local flingSignal = horizMag > FLING_HORIZ or trueRagdoll
-            if flingSignal then
+        -- ARM grace the instant a real fling is detected (no counter)
+        if realFling and not inGrace and not inCooldown and (now - lastArm) > ARM_GAP then
+            lastArm = now
+            if math.random() > SKIP_CHANCE then
+                graceUntil = now + GRACE_DURATION
+            else
+                cooldownUntil = now + math.random(COOLDOWN_MIN, COOLDOWN_MAX)
+            end
+        end
+
+        -- While in grace: recover single-shot, horizontal-only, Y preserved
+        if inGrace and (now - lastRecover) > RECOVER_GAP then
+            if hMag > FLING_HORIZ or aMag > FLING_ANGULAR or knocked then
                 lastRecover = now
                 pcall(function()
-                    -- kill horizontal only, preserve Y (jump)
+                    -- kill horizontal, PRESERVE Y (jump)
                     hrp.AssemblyLinearVelocity = Vector3.new(0, v.Y, 0)
-                    -- only clear spin if it's absurd
-                    if av.Magnitude > 100 then
+                    if aMag > 40 then
                         hrp.AssemblyAngularVelocity = Vector3.zero
                     end
-                    -- only force out of ragdoll, never lift position
-                    if trueRagdoll then
+                    -- only exit knock if truly knocked and grounded, never force mid-air
+                    if knocked and hum.FloorMaterial ~= Enum.Material.Air then
                         hum.PlatformStand = false
                         hum.Sit = false
-                        hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+                        hum:ChangeState(Enum.HumanoidStateType.Running)
                     end
                 end)
             end
         end
 
-        -- arm grace (dice roll)
-        if fallCounter >= nextThreshold and not inGrace and not inCooldown
-            and not recentlyJumped then
-            local flingSignal = now < fastUntil
-            if not flingSignal and math.random() < SKIP_CHANCE then
-                cooldownUntil = now + math.random(COOLDOWN_MIN, COOLDOWN_MAX)
-                resetCounter()
-            else
-                graceUntil    = now + GRACE_DURATION
-                fallCounter   = 0
-                nextThreshold = math.random(2, 3)
-            end
-        end
-
-        -- expire grace → cooldown
-        if not inGrace and not inCooldown and graceUntil > 0 and now >= graceUntil then
+        -- Expire grace → cooldown
+        if inGrace and now >= graceUntil then
             cooldownUntil = now + math.random(COOLDOWN_MIN, COOLDOWN_MAX)
-            graceUntil    = 0
-            resetCounter()
-        end
-
-        -- stale fall counter reset
-        if fallCounter > 0 and (now - lastFallTime) > FALL_WINDOW then
-            resetCounter()
+            graceUntil = 0
         end
     end
 end)
 
-uiLibrary:AddToggle("Smart Anti-Fling (80% Jump-Safe)", function(enabled)
+uiLibrary:AddToggle("Smart Anti-Fling (80% Instant-Arm)", function(enabled)
     getgenv().smartAntiFlingEnabled = enabled
     playSound("rbxassetid://12221976")
 end, false)
