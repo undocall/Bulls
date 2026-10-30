@@ -1,4 +1,4 @@
--- ═══════════ UNODOCALL'S HUB — v47 (FAST TRICK AUTOMATION) ═══════════
+-- ═══════════ UNODOCALL'S HUB — v48 (FAST TRICK + AUTO KILL AURA) ═══════════
 local StarterGui = game:GetService("StarterGui")
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -14,9 +14,7 @@ local ARENA_POS      = Vector3.new(-760, 11.5, 2040)
 local ARENA_TELEPORT = Vector3.new(-760, 14, 2040)
 local LOBBY_MAX_Z    = 100
 
--- FAST TRICK STATE
 local fastTrickActive = false
-local fastTrickRespawn = false
 
 local function isEnemy(player)
     if player == lp then return false end
@@ -98,6 +96,9 @@ local spawningDebounce = false
 local customSpawnEnabled = false
 local customSpawnCFrame = nil
 local opSpawnTeleported = false
+
+local noFallEnabled = false
+local noFallConnection
 
 getgenv().superPowerEnabled = false
 getgenv().infiniteJumpEnabled = false
@@ -337,10 +338,6 @@ local function smartFind(input)
         if p.Name:lower():sub(1, #input) == input then return p end
         if p.DisplayName:lower():sub(1, #input) == input then return p end
     end
-    for _, p in ipairs(Players:GetPlayers()) do
-        if p.Name:lower():find(input, 1, true) then return p end
-        if p.DisplayName:lower():find(input, 1, true) then return p end
-    end
     return nil
 end
 
@@ -383,29 +380,47 @@ end
 local function executeFastTrick()
     if fastTrickActive then return end
     fastTrickActive = true
-    fastTrickRespawn = true
+    
+    -- 1. Force Kill Aura ON
+    killAuraOn = true
+    if killAuraToggle and killAuraToggle.set then killAuraToggle.set(true) end
+    
+    -- 2. Force Anti-Fling ON (so you don't die again)
+    if not noFallEnabled then
+        noFallEnabled = true
+        if aFlingBtn then aFlingBtn.MouseButton1Click() end -- Simulate click to update UI
+    end
+
     notify("FAST TRICK", "Spawning bull...", 2)
     
     task.spawn(function()
-        -- 1. Spawn Bull
+        -- 3. Spawn Bull
         if not SpawnerRE then findRemotes() end
         if SpawnerRE then pcall(function() SpawnerRE:FireServer() end) end
         
-        -- 2. Wait for sit
-        local t = 0
-        while t < 1.0 do
-            task.wait(0.02)
-            t = t + 0.02
+        -- 4. Wait for the server to actually sit you on the bull
+        local seated = false
+        local timeout = 0
+        while not seated and timeout < 2.0 do
+            task.wait(0.05)
+            timeout = timeout + 0.05
             local char = lp.Character
             local hum = char and char:FindFirstChildOfClass("Humanoid")
-            if hum and hum.Sit then break end
+            if hum and hum.Sit then
+                seated = true
+            end
         end
         
-        -- 3. Kill self instantly
-        task.wait(0.1)
-        local char = lp.Character
-        local hum = char and char:FindFirstChildOfClass("Humanoid")
-        if hum then hum.Health = 0 end
+        -- 5. Kill self
+        if seated then
+            task.wait(0.1)
+            local char = lp.Character
+            local hum = char and char:FindFirstChildOfClass("Humanoid")
+            if hum then hum.Health = 0 end
+        else
+            fastTrickActive = false
+            notify("FAST TRICK", "Failed to sit. Try again.", 3)
+        end
     end)
 end
 
@@ -451,7 +466,7 @@ local hC = Instance.new("UICorner"); hC.CornerRadius = UDim.new(0, 12); hC.Paren
 
 local hTitle = Instance.new("TextLabel")
 hTitle.Size = UDim2.new(0, 300, 1, 0); hTitle.Position = UDim2.new(0, 14, 0, 0)
-hTitle.BackgroundTransparency = 1; hTitle.Text = "Undocall's Hub (v47)"
+hTitle.BackgroundTransparency = 1; hTitle.Text = "Undocall's Hub (v48)"
 hTitle.TextColor3 = COL.text; hTitle.Font = Enum.Font.GothamBold; hTitle.TextSize = 16; hTitle.TextXAlignment = Enum.TextXAlignment.Left; hTitle.Parent = header
 
 local closeBtn = Instance.new("TextButton")
@@ -573,7 +588,14 @@ local function addToggleRow(page, name, callback)
         isOn = not isOn; updateVisual(); playSound("rbxassetid://12221976")
         if callback then callback(isOn) end
     end)
-    return {set = function(v) isOn = v updateVisual() if callback then callback(v) end end}
+    return {set = function(v) 
+        if isOn ~= v then
+            isOn = v
+            updateVisual() 
+            if callback then callback(v) 
+            end
+        end
+    end}
 end
 
 local function addButtonRow(page, name, callback)
@@ -852,8 +874,6 @@ local function createPill(name, icon, pos)
 end
 
 local aFlingBtn, aFlingStroke, aFlingText, aFlingDot = createPill("A-Fling", "🛡️", UDim2.new(0, 65, 0, 203))
-local noFallEnabled = false
-local noFallConnection
 
 local function executeACR(char, hum, hrp)
     if not (char and hum and hrp) then return end
@@ -1075,25 +1095,24 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
--- ═══════════ RESPAWN (THE GLITCH CATCHER) ═══════════
+-- ═══════════ RESPAWN (GLITCH CATCHER) ═══════════
 lp.CharacterAdded:Connect(function(char)
-    -- FAST TRICK: If active, instantly strip mount + teleport
     if fastTrickActive then
         task.spawn(function()
-            task.wait(0.05) -- Catch it exactly on spawn
-            local hrp = char:FindFirstChild("HumanoidRootPart")
-            local hum = char:FindFirstChildOfClass("Humanoid")
+            local hrp = char:WaitForChild("HumanoidRootPart", 2)
+            local hum = char:WaitForChild("Humanoid", 2)
             if hrp and hum then
+                task.wait(0.15) -- Let the game try to seat you
                 stripMount(char)
                 hrp.CFrame = CFrame.new(ARENA_TELEPORT)
                 task.wait(0.1)
                 stripMount(char)
                 hrp.CFrame = CFrame.new(ARENA_TELEPORT)
-                task.wait(0.1)
-                stripMount(char)
             end
             fastTrickActive = false
-            notify("FAST TRICK", "UNKILLABLE & AT ARENA", 3)
+            notify("FAST TRICK", "UNKILLABLE + KILL AURA ON", 3)
+            opGodSpawnOn = true
+            opSpawnTeleported = true
         end)
     end
 
@@ -1104,7 +1123,7 @@ lp.CharacterAdded:Connect(function(char)
         if char:FindFirstChild("Animate") then char.Animate.Disabled = false end
     end)
     flyV3Active = false; flyV3UpHeld = false; flyV3DownHeld = false
-    opSpawnTeleported = false
+    if not fastTrickActive then opSpawnTeleported = false end
 
     if invisibleEnabled then
         invisibleEnabled = false; invisibleParts = {}
@@ -1112,48 +1131,6 @@ lp.CharacterAdded:Connect(function(char)
         TweenService:Create(invisText, TweenInfo.new(0.2), {TextColor3 = COL.red}):Play()
         TweenService:Create(invisDot, TweenInfo.new(0.2), {BackgroundColor3 = COL.red}):Play()
         TweenService:Create(invisStroke, TweenInfo.new(0.2), {Color = COL.red}):Play()
-    end
-
-    if customSpawnEnabled and customSpawnCFrame then
-        task.spawn(function()
-            task.wait(0.3)
-            local c = lp.Character
-            local hrp = c and c:FindFirstChild("HumanoidRootPart")
-            local hum = c and c:FindFirstChildOfClass("Humanoid")
-            if hrp and hum and hum.Health > 0 then
-                pcall(function()
-                    hrp.Anchored = true
-                    hrp.CFrame = customSpawnCFrame
-                    hrp.AssemblyLinearVelocity = Vector3.zero
-                    hrp.AssemblyAngularVelocity = Vector3.zero
-                    task.wait(0.1)
-                    hrp.Anchored = false
-                end)
-            end
-            opSpawnTeleported = true
-        end)
-    end
-
-    if killAuraOn and keyVerified and not spawningDebounce and not customSpawnEnabled then
-        spawningDebounce = true
-        task.spawn(function()
-            task.wait(0.5)
-            local root = char:FindFirstChild("HumanoidRootPart")
-            if root and root.Position.Z < LOBBY_MAX_Z then
-                pcall(function() if not SpawnerRE then findRemotes() end; if SpawnerRE then SpawnerRE:FireServer() end end)
-            end
-            task.wait(2); spawningDebounce = false
-        end)
-    end
-    if opGodSpawnOn and not customSpawnEnabled then
-        task.spawn(function() task.wait(1); teleportToArena(true); for i = 1, 60 do task.wait(0.05); stripMount(char) end end)
-    end
-    if sheriffActive then
-        task.spawn(function()
-            task.wait(1)
-            if not SpawnerRE then findRemotes() end
-            if SpawnerRE then pcall(function() SpawnerRE:FireServer() end) end
-        end)
     end
 end)
 
@@ -1164,5 +1141,5 @@ UserInputService.JumpRequest:Connect(function()
     end
 end)
 
-print("Undocall's Hub v47 loaded. Fast Trick installed.")
+print("Undocall's Hub v48 loaded. Fast Trick active.")
 print("Discord: " .. KEY_LINK)
