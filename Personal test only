@@ -1,4 +1,4 @@
--- ═══════════ UNODOCALL'S HUB — v45.6 (BULL TELEPORT FIX) ═══════════
+-- ═══════════ UNODOCALL'S HUB — v45.7 (SERVER VALIDATION BYPASS) ═══════════
 local StarterGui = game:GetService("StarterGui")
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -356,28 +356,6 @@ local function smartFind(input)
     return nil
 end
 
--- 🟢 NEW: FINDS THE PLAYER'S BULL IN THE WORKSPACE
-local function findMyBull()
-    local bestBull, minDist = nil, math.huge
-    for _, obj in ipairs(workspace:GetChildren()) do
-        if obj:IsA("Model") and (obj.Name:lower():find("bull") or obj:FindFirstChildOfClass("VehicleSeat")) then
-            local root = obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")
-            if root then
-                local seat = obj:FindFirstChildWhichIsA("VehicleSeat")
-                if seat and seat.Occupant == lp.Character:FindFirstChildOfClass("Humanoid") then
-                    return obj
-                end
-                local d = (root.Position - Vector3.new(-293, -3, 27)).Magnitude
-                if d < minDist then
-                    minDist = d
-                    bestBull = obj
-                end
-            end
-        end
-    end
-    return bestBull
-end
-
 local function stripMount(character)
     if not character then return end
     for _, d in ipairs(character:GetDescendants()) do
@@ -455,7 +433,7 @@ local hC = Instance.new("UICorner"); hC.CornerRadius = UDim.new(0, 12); hC.Paren
 
 local hTitle = Instance.new("TextLabel")
 hTitle.Size = UDim2.new(0, 300, 1, 0); hTitle.Position = UDim2.new(0, 14, 0, 0)
-hTitle.BackgroundTransparency = 1; hTitle.Text = "Undocall's Hub (v45.6)"
+hTitle.BackgroundTransparency = 1; hTitle.Text = "Undocall's Hub (v45.7)"
 hTitle.TextColor3 = COL.text; hTitle.Font = Enum.Font.GothamBold; hTitle.TextSize = 16; hTitle.TextXAlignment = Enum.TextXAlignment.Left; hTitle.Parent = header
 
 local closeBtn = Instance.new("TextButton")
@@ -1051,7 +1029,7 @@ RunService.Heartbeat:Connect(function()
     if nearest then pcall(function() FlingRE:FireServer(nearest) end) end
 end)
 
--- ═══════════ OP GOD SPAWN LOOP (MOVES BULL + KILLS) ═══════════
+-- ═══════════ OP GOD SPAWN LOOP (SPAWNS BULL AT ARENA) ═══════════
 RunService.Heartbeat:Connect(function()
     if not opGodSpawnOn or not keyVerified then return end
     local char = lp.Character
@@ -1059,11 +1037,7 @@ RunService.Heartbeat:Connect(function()
     local hum = char and char:FindFirstChildOfClass("Humanoid")
     if not (hrp and hum) or hum.Health <= 0 or invisibleEnabled then return end
 
-    -- rip bull off = flying/unseated, but keeps the bull near you
-    if hum.Sit then hum.Sit = false; hum.SeatPart = nil end
-    stripMount(char)
-
-    -- ONE-SHOT teleport (moves both player and bull)
+    -- ONE-SHOT teleport
     if not opSpawnTeleported then
         opSpawnTeleported = true
         local targetCF
@@ -1077,19 +1051,18 @@ RunService.Heartbeat:Connect(function()
             hrp.AssemblyLinearVelocity = Vector3.zero; hrp.AssemblyAngularVelocity = Vector3.zero
             task.wait(0.1); hrp.Anchored = false
         end)
+        
+        -- Force the game to spawn the bull AT THE ARENA.
+        if not SpawnerRE then findRemotes() end
+        if SpawnerRE then pcall(function() SpawnerRE:FireServer() end) end
+        task.wait(0.3) -- Give the bull time to appear here
     end
 
-    -- NEW: Find the bull and teleport it right under you to trick the server
-    local myBull = findMyBull()
-    if myBull then
-        local bRoot = myBull.PrimaryPart or myBull:FindFirstChildWhichIsA("BasePart")
-        if bRoot and (bRoot.Position - hrp.Position).Magnitude > 50 then
-            pcall(function()
-                myBull:PivotTo(hrp.CFrame * CFrame.new(0, -3, 0))
-            end)
-        end
-    end
+    -- Rip yourself off the bull so you are floating/unkillable
+    if hum.Sit then hum.Sit = false; hum.SeatPart = nil end
+    stripMount(char)
 
+    -- Kill everyone around you
     if not FlingRE then return end
     local now = tick()
     if now - lastOpAuraHit < auraDelay then return end
@@ -1190,6 +1163,7 @@ lp.CharacterAdded:Connect(function(char)
             task.wait(2); spawningDebounce = false
         end)
     end
+
     if opGodSpawnOn and not customSpawnEnabled then
         task.spawn(function() task.wait(1); teleportToArena(true); for i = 1, 60 do task.wait(0.05); stripMount(char) end end)
     end
@@ -1209,5 +1183,5 @@ UserInputService.JumpRequest:Connect(function()
     end
 end)
 
-print("Undocall's Hub v45.6 loaded. God spawn now moves bull for validation.")
+print("Undocall's Hub v45.7 loaded. God spawn validation bypass.")
 print("Discord: " .. KEY_LINK)
