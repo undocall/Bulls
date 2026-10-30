@@ -1,4 +1,4 @@
--- ═══════════ UNODOCALL'S HUB — v45.7 (SERVER VALIDATION BYPASS) ═══════════
+-- ═══════════ UNODOCALL'S HUB — v45.8 (AGGRESSIVE DETACH + FLY) ═══════════
 local StarterGui = game:GetService("StarterGui")
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -356,19 +356,20 @@ local function smartFind(input)
     return nil
 end
 
-local function stripMount(character)
+local function hardStripMount(character)
     if not character then return end
-    for _, d in ipairs(character:GetDescendants()) do
-        if d:IsA("Weld") or d:IsA("WeldConstraint") or d:IsA("Motor6D") then
-            local p0, p1 = d.Part0, d.Part1
-            if p0 and p1 then
-                local n0, n1 = p0.Name:lower(), p1.Name:lower()
-                if n0:find("seat") or n1:find("seat") or n0:find("bull") or n1:find("bull") then pcall(function() d:Destroy() end) end
+    local hum = character:FindFirstChildOfClass("Humanoid")
+    if hum then hum.Sit = false; hum.SeatPart = nil end
+    for _, v in ipairs(character:GetDescendants()) do
+        if v:IsA("Weld") or v:IsA("WeldConstraint") or v:IsA("Motor6D") then
+            if v.Part0 and v.Part1 then
+                local n0, n1 = v.Part0.Name:lower(), v.Part1.Name:lower()
+                if n0:find("seat") or n1:find("seat") or n0:find("bull") or n1:find("bull") then
+                    pcall(function() v:Destroy() end)
+                end
             end
         end
     end
-    local hum = character:FindFirstChildOfClass("Humanoid")
-    if hum and hum.Sit then hum.Sit = false; hum.SeatPart = nil; hum.Jump = true end
 end
 
 local function teleportToArena(force)
@@ -379,7 +380,7 @@ local function teleportToArena(force)
     if not hrp or not hum then return false, "no root" end
     if hum.Health <= 0 then return false, "dead" end
     pcall(function() hum.Sit = false; hum.SeatPart = nil; hum.PlatformStand = false end)
-    stripMount(char)
+    hardStripMount(char)
     task.wait(0.1)
     pcall(function()
         hrp.Anchored = true; hrp.CFrame = CFrame.new(ARENA_TELEPORT)
@@ -387,7 +388,7 @@ local function teleportToArena(force)
     end)
     task.wait(0.15)
     pcall(function() hrp.Anchored = false; hrp.CFrame = CFrame.new(ARENA_TELEPORT) end)
-    task.spawn(function() for i = 1, 20 do task.wait(0.05); stripMount(char) end end)
+    task.spawn(function() for i = 1, 20 do task.wait(0.05); hardStripMount(char) end end)
     return true, "ok"
 end
 
@@ -433,7 +434,7 @@ local hC = Instance.new("UICorner"); hC.CornerRadius = UDim.new(0, 12); hC.Paren
 
 local hTitle = Instance.new("TextLabel")
 hTitle.Size = UDim2.new(0, 300, 1, 0); hTitle.Position = UDim2.new(0, 14, 0, 0)
-hTitle.BackgroundTransparency = 1; hTitle.Text = "Undocall's Hub (v45.7)"
+hTitle.BackgroundTransparency = 1; hTitle.Text = "Undocall's Hub (v45.8)"
 hTitle.TextColor3 = COL.text; hTitle.Font = Enum.Font.GothamBold; hTitle.TextSize = 16; hTitle.TextXAlignment = Enum.TextXAlignment.Left; hTitle.Parent = header
 
 local closeBtn = Instance.new("TextButton")
@@ -624,7 +625,7 @@ local opGodSpawnToggle = addToggleRow(combatPage, "OP God Spawn", function(enabl
     if enabled then
         opGodSpawnOn = true
         opSpawnTeleported = false
-        notify("OP Spawn", "Arena teleport, bullless, aura ON", 3)
+        notify("OP Spawn", "Forcing fly + unkillable aura", 3)
     else
         opGodSpawnOn = false
     end
@@ -1029,7 +1030,7 @@ RunService.Heartbeat:Connect(function()
     if nearest then pcall(function() FlingRE:FireServer(nearest) end) end
 end)
 
--- ═══════════ OP GOD SPAWN LOOP (SPAWNS BULL AT ARENA) ═══════════
+-- ═══════════ OP GOD SPAWN LOOP (AGGRESSIVE UNSEAT + FLY) ═══════════
 RunService.Heartbeat:Connect(function()
     if not opGodSpawnOn or not keyVerified then return end
     local char = lp.Character
@@ -1037,32 +1038,39 @@ RunService.Heartbeat:Connect(function()
     local hum = char and char:FindFirstChildOfClass("Humanoid")
     if not (hrp and hum) or hum.Health <= 0 or invisibleEnabled then return end
 
-    -- ONE-SHOT teleport
+    -- 1. ONE-SHOT: Teleport to arena, spawn bull
     if not opSpawnTeleported then
         opSpawnTeleported = true
-        local targetCF
-        if customSpawnEnabled and customSpawnCFrame then
-            targetCF = customSpawnCFrame
-        else
-            targetCF = CFrame.new(ARENA_TELEPORT)
-        end
+        local targetCF = (customSpawnEnabled and customSpawnCFrame) or CFrame.new(ARENA_TELEPORT)
+        
         pcall(function()
             hrp.Anchored = true; hrp.CFrame = targetCF
             hrp.AssemblyLinearVelocity = Vector3.zero; hrp.AssemblyAngularVelocity = Vector3.zero
             task.wait(0.1); hrp.Anchored = false
         end)
         
-        -- Force the game to spawn the bull AT THE ARENA.
         if not SpawnerRE then findRemotes() end
         if SpawnerRE then pcall(function() SpawnerRE:FireServer() end) end
-        task.wait(0.3) -- Give the bull time to appear here
+        task.wait(0.3) -- wait for bull to spawn and attempt to seat us
     end
 
-    -- Rip yourself off the bull so you are floating/unkillable
+    -- 2. AGGRESSIVE UNSEAT every single frame
     if hum.Sit then hum.Sit = false; hum.SeatPart = nil end
-    stripMount(char)
+    hardStripMount(char)
 
-    -- Kill everyone around you
+    -- 3. Force Player to Fly (PlatformStand) so we don't fall
+    if not hum.PlatformStand then
+        hum.PlatformStand = true
+        if char:FindFirstChild("Animate") then char.Animate.Disabled = true end
+    end
+
+    -- 4. Zero out velocity to hover in place above the bull
+    hrp.AssemblyAngularVelocity = Vector3.zero
+    if hrp.AssemblyLinearVelocity.Magnitude < 2 then
+        hrp.AssemblyLinearVelocity = Vector3.zero
+    end
+
+    -- 5. Kill Aura
     if not FlingRE then return end
     local now = tick()
     if now - lastOpAuraHit < auraDelay then return end
@@ -1165,7 +1173,7 @@ lp.CharacterAdded:Connect(function(char)
     end
 
     if opGodSpawnOn and not customSpawnEnabled then
-        task.spawn(function() task.wait(1); teleportToArena(true); for i = 1, 60 do task.wait(0.05); stripMount(char) end end)
+        task.spawn(function() task.wait(1); teleportToArena(true); for i = 1, 60 do task.wait(0.05); hardStripMount(char) end end)
     end
     if sheriffActive then
         task.spawn(function()
@@ -1183,5 +1191,5 @@ UserInputService.JumpRequest:Connect(function()
     end
 end)
 
-print("Undocall's Hub v45.7 loaded. God spawn validation bypass.")
+print("Undocall's Hub v45.8 loaded. God spawn aggressive fly.")
 print("Discord: " .. KEY_LINK)
