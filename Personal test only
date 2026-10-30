@@ -1,4 +1,4 @@
--- ═══════════ UNODOCALL'S HUB — v45.5 (GOD SPAWN OG EXPLOIT) ═══════════
+-- ═══════════ UNODOCALL'S HUB — v45.6 (BULL TELEPORT FIX) ═══════════
 local StarterGui = game:GetService("StarterGui")
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -101,7 +101,6 @@ local spawningDebounce = false
 local customSpawnEnabled = false
 local customSpawnCFrame = nil
 local opSpawnTeleported = false
-local opSpawnRetries = 0
 
 getgenv().superPowerEnabled = false
 getgenv().infiniteJumpEnabled = false
@@ -357,6 +356,28 @@ local function smartFind(input)
     return nil
 end
 
+-- 🟢 NEW: FINDS THE PLAYER'S BULL IN THE WORKSPACE
+local function findMyBull()
+    local bestBull, minDist = nil, math.huge
+    for _, obj in ipairs(workspace:GetChildren()) do
+        if obj:IsA("Model") and (obj.Name:lower():find("bull") or obj:FindFirstChildOfClass("VehicleSeat")) then
+            local root = obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")
+            if root then
+                local seat = obj:FindFirstChildWhichIsA("VehicleSeat")
+                if seat and seat.Occupant == lp.Character:FindFirstChildOfClass("Humanoid") then
+                    return obj
+                end
+                local d = (root.Position - Vector3.new(-293, -3, 27)).Magnitude
+                if d < minDist then
+                    minDist = d
+                    bestBull = obj
+                end
+            end
+        end
+    end
+    return bestBull
+end
+
 local function stripMount(character)
     if not character then return end
     for _, d in ipairs(character:GetDescendants()) do
@@ -379,7 +400,6 @@ local function teleportToArena(force)
     local hum = char:FindFirstChildOfClass("Humanoid")
     if not hrp or not hum then return false, "no root" end
     if hum.Health <= 0 then return false, "dead" end
-    if not force and hrp.Position.Z < LOBBY_MAX_Z then return false, "in lobby" end
     pcall(function() hum.Sit = false; hum.SeatPart = nil; hum.PlatformStand = false end)
     stripMount(char)
     task.wait(0.1)
@@ -435,7 +455,7 @@ local hC = Instance.new("UICorner"); hC.CornerRadius = UDim.new(0, 12); hC.Paren
 
 local hTitle = Instance.new("TextLabel")
 hTitle.Size = UDim2.new(0, 300, 1, 0); hTitle.Position = UDim2.new(0, 14, 0, 0)
-hTitle.BackgroundTransparency = 1; hTitle.Text = "Undocall's Hub (v45.5)"
+hTitle.BackgroundTransparency = 1; hTitle.Text = "Undocall's Hub (v45.6)"
 hTitle.TextColor3 = COL.text; hTitle.Font = Enum.Font.GothamBold; hTitle.TextSize = 16; hTitle.TextXAlignment = Enum.TextXAlignment.Left; hTitle.Parent = header
 
 local closeBtn = Instance.new("TextButton")
@@ -621,13 +641,11 @@ addToggleRow(mainPage, "Invisible (Backup)", function(enabled) if enabled then s
 
 local combatPage = addPage("Combat")
 
--- ═══════════ OP GOD SPAWN — NO SPAWNERRE, NO BULL, AURA KILLS ═══════════
 local opGodSpawnToggle = addToggleRow(combatPage, "OP God Spawn", function(enabled)
     if enabled and not keyVerified then notify("Locked", "Enter key first", 3); opGodSpawnToggle.set(false); return end
     if enabled then
         opGodSpawnOn = true
         opSpawnTeleported = false
-        opSpawnRetries = 0
         notify("OP Spawn", "Arena teleport, bullless, aura ON", 3)
     else
         opGodSpawnOn = false
@@ -1033,7 +1051,7 @@ RunService.Heartbeat:Connect(function()
     if nearest then pcall(function() FlingRE:FireServer(nearest) end) end
 end)
 
--- ═══════════ OP GOD SPAWN LOOP — NO SPAWNERRE, NO BULL, AURA ONLY ═══════════
+-- ═══════════ OP GOD SPAWN LOOP (MOVES BULL + KILLS) ═══════════
 RunService.Heartbeat:Connect(function()
     if not opGodSpawnOn or not keyVerified then return end
     local char = lp.Character
@@ -1041,33 +1059,35 @@ RunService.Heartbeat:Connect(function()
     local hum = char and char:FindFirstChildOfClass("Humanoid")
     if not (hrp and hum) or hum.Health <= 0 or invisibleEnabled then return end
 
-    -- rip bull off every tick = not riding = unkillable
+    -- rip bull off = flying/unseated, but keeps the bull near you
     if hum.Sit then hum.Sit = false; hum.SeatPart = nil end
     stripMount(char)
 
-    -- one-shot teleport with retry
+    -- ONE-SHOT teleport (moves both player and bull)
     if not opSpawnTeleported then
-        local targetCF = (customSpawnEnabled and customSpawnCFrame) or CFrame.new(ARENA_TELEPORT)
-        local dist = (hrp.Position - targetCF.Position).Magnitude
-        if dist < 30 then
-            opSpawnTeleported = true
-            opSpawnRetries = 0
-        elseif opSpawnRetries < 3 then
-            opSpawnRetries = opSpawnRetries + 1
-            pcall(function()
-                hrp.Anchored = true
-                hrp.CFrame = targetCF
-                hrp.AssemblyLinearVelocity = Vector3.zero
-                hrp.AssemblyAngularVelocity = Vector3.zero
-                task.wait(0.08)
-                hrp.Anchored = false
-                hrp.CFrame = targetCF
-            end)
+        opSpawnTeleported = true
+        local targetCF
+        if customSpawnEnabled and customSpawnCFrame then
+            targetCF = customSpawnCFrame
         else
-            opSpawnTeleported = true
-            opSpawnRetries = 0
+            targetCF = CFrame.new(ARENA_TELEPORT)
         end
-        return
+        pcall(function()
+            hrp.Anchored = true; hrp.CFrame = targetCF
+            hrp.AssemblyLinearVelocity = Vector3.zero; hrp.AssemblyAngularVelocity = Vector3.zero
+            task.wait(0.1); hrp.Anchored = false
+        end)
+    end
+
+    -- NEW: Find the bull and teleport it right under you to trick the server
+    local myBull = findMyBull()
+    if myBull then
+        local bRoot = myBull.PrimaryPart or myBull:FindFirstChildWhichIsA("BasePart")
+        if bRoot and (bRoot.Position - hrp.Position).Magnitude > 50 then
+            pcall(function()
+                myBull:PivotTo(hrp.CFrame * CFrame.new(0, -3, 0))
+            end)
+        end
     end
 
     if not FlingRE then return end
@@ -1120,7 +1140,7 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
--- ═══════════ RESPAWN — RESET FLAG ONLY, NO SPAWNERRE ═══════════
+-- ═══════════ RESPAWN ═══════════
 lp.CharacterAdded:Connect(function(char)
     task.wait(0.7)
     pcall(function()
@@ -1130,7 +1150,6 @@ lp.CharacterAdded:Connect(function(char)
     end)
     flyV3Active = false; flyV3UpHeld = false; flyV3DownHeld = false
     opSpawnTeleported = false
-    opSpawnRetries = 0
 
     if invisibleEnabled then
         invisibleEnabled = false; invisibleParts = {}
@@ -1171,13 +1190,9 @@ lp.CharacterAdded:Connect(function(char)
             task.wait(2); spawningDebounce = false
         end)
     end
-
-    -- OP God Spawn respawn: no SpawnerRE, loop will teleport next tick
     if opGodSpawnOn and not customSpawnEnabled then
-        opSpawnTeleported = false
-        opSpawnRetries = 0
+        task.spawn(function() task.wait(1); teleportToArena(true); for i = 1, 60 do task.wait(0.05); stripMount(char) end end)
     end
-
     if sheriffActive then
         task.spawn(function()
             task.wait(1)
@@ -1194,5 +1209,5 @@ UserInputService.JumpRequest:Connect(function()
     end
 end)
 
-print("Undocall's Hub v45.5 loaded. God spawn = arena, bullless, aura only.")
+print("Undocall's Hub v45.6 loaded. God spawn now moves bull for validation.")
 print("Discord: " .. KEY_LINK)
