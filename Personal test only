@@ -1,4 +1,4 @@
--- ═══════════ UNODOCALL'S HUB — v48 (FAST TRICK + AUTO KILL AURA) ═══════════
+-- ═══════════ UNODOCALL'S HUB — v49 (1-CLICK VOID TRICK) ═══════════
 local StarterGui = game:GetService("StarterGui")
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -14,7 +14,8 @@ local ARENA_POS      = Vector3.new(-760, 11.5, 2040)
 local ARENA_TELEPORT = Vector3.new(-760, 14, 2040)
 local LOBBY_MAX_Z    = 100
 
-local fastTrickActive = false
+local voidTrickActive = false
+local voidCounter = 0
 
 local function isEnemy(player)
     if player == lp then return false end
@@ -376,52 +377,24 @@ local function teleportToArena(force)
     return true, "ok"
 end
 
--- ═══════════ FAST TRICK LOGIC ═══════════
-local function executeFastTrick()
-    if fastTrickActive then return end
-    fastTrickActive = true
+-- ═══════════ VOID TRICK LOGIC ═══════════
+local function executeVoidTrick()
+    if voidTrickActive then return end
+    voidTrickActive = true
+    voidCounter = 0
     
-    -- 1. Force Kill Aura ON
+    -- Force features ON
     killAuraOn = true
     if killAuraToggle and killAuraToggle.set then killAuraToggle.set(true) end
-    
-    -- 2. Force Anti-Fling ON (so you don't die again)
-    if not noFallEnabled then
-        noFallEnabled = true
-        if aFlingBtn then aFlingBtn.MouseButton1Click() end -- Simulate click to update UI
-    end
+    if not noFallEnabled and aFlingBtn then aFlingBtn.MouseButton1Click() end
 
-    notify("FAST TRICK", "Spawning bull...", 2)
+    notify("VOID TRICK", "Dropping into void...", 2)
     
-    task.spawn(function()
-        -- 3. Spawn Bull
-        if not SpawnerRE then findRemotes() end
-        if SpawnerRE then pcall(function() SpawnerRE:FireServer() end) end
-        
-        -- 4. Wait for the server to actually sit you on the bull
-        local seated = false
-        local timeout = 0
-        while not seated and timeout < 2.0 do
-            task.wait(0.05)
-            timeout = timeout + 0.05
-            local char = lp.Character
-            local hum = char and char:FindFirstChildOfClass("Humanoid")
-            if hum and hum.Sit then
-                seated = true
-            end
-        end
-        
-        -- 5. Kill self
-        if seated then
-            task.wait(0.1)
-            local char = lp.Character
-            local hum = char and char:FindFirstChildOfClass("Humanoid")
-            if hum then hum.Health = 0 end
-        else
-            fastTrickActive = false
-            notify("FAST TRICK", "Failed to sit. Try again.", 3)
-        end
-    end)
+    local char = lp.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    if hrp then
+        hrp.CFrame = CFrame.new(0, -1000, 0) -- Teleport into void
+    end
 end
 
 -- ═══════════ GUI ═══════════
@@ -466,7 +439,7 @@ local hC = Instance.new("UICorner"); hC.CornerRadius = UDim.new(0, 12); hC.Paren
 
 local hTitle = Instance.new("TextLabel")
 hTitle.Size = UDim2.new(0, 300, 1, 0); hTitle.Position = UDim2.new(0, 14, 0, 0)
-hTitle.BackgroundTransparency = 1; hTitle.Text = "Undocall's Hub (v48)"
+hTitle.BackgroundTransparency = 1; hTitle.Text = "Undocall's Hub (v49)"
 hTitle.TextColor3 = COL.text; hTitle.Font = Enum.Font.GothamBold; hTitle.TextSize = 16; hTitle.TextXAlignment = Enum.TextXAlignment.Left; hTitle.Parent = header
 
 local closeBtn = Instance.new("TextButton")
@@ -659,10 +632,10 @@ addToggleRow(mainPage, "Invisible (Backup)", function(enabled) if enabled then s
 
 local combatPage = addPage("Combat")
 
--- 🟢 THE ONE-CLICK FAST TRICK BUTTON
-addButtonRow(combatPage, "⚡ ONE-CLICK FAST TRICK", function()
+-- 🟢 THE ONE-CLICK VOID TRICK BUTTON
+addButtonRow(combatPage, "⚡ 1-CLICK VOID TRICK", function()
     if not keyVerified then notify("Locked", "Enter key first", 3); return end
-    executeFastTrick()
+    executeVoidTrick()
 end)
 
 local opGodSpawnToggle = addToggleRow(combatPage, "OP God Spawn", function(enabled)
@@ -1095,25 +1068,37 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
--- ═══════════ RESPAWN (GLITCH CATCHER) ═══════════
+-- ═══════════ RESPAWN (VOID TRICK CATCHER) ═══════════
 lp.CharacterAdded:Connect(function(char)
-    if fastTrickActive then
-        task.spawn(function()
-            local hrp = char:WaitForChild("HumanoidRootPart", 2)
-            local hum = char:WaitForChild("Humanoid", 2)
-            if hrp and hum then
-                task.wait(0.15) -- Let the game try to seat you
-                stripMount(char)
-                hrp.CFrame = CFrame.new(ARENA_TELEPORT)
-                task.wait(0.1)
-                stripMount(char)
-                hrp.CFrame = CFrame.new(ARENA_TELEPORT)
-            end
-            fastTrickActive = false
-            notify("FAST TRICK", "UNKILLABLE + KILL AURA ON", 3)
-            opGodSpawnOn = true
-            opSpawnTeleported = true
-        end)
+    if voidTrickActive then
+        voidCounter = voidCounter + 1
+        if voidCounter <= 3 then
+            -- Loop back into void
+            task.spawn(function()
+                task.wait(0.5)
+                local hrp = char:WaitForChild("HumanoidRootPart", 2)
+                if hrp then
+                    hrp.CFrame = CFrame.new(0, -1000, 0) 
+                end
+            end)
+        else
+            -- Final respawn: Unkillable
+            voidTrickActive = false
+            task.spawn(function()
+                task.wait(0.5)
+                local hrp = char:WaitForChild("HumanoidRootPart", 2)
+                if hrp then
+                    stripMount(char)
+                    hrp.CFrame = CFrame.new(ARENA_TELEPORT)
+                    task.wait(0.1)
+                    stripMount(char)
+                    hrp.CFrame = CFrame.new(ARENA_TELEPORT)
+                end
+                notify("VOID TRICK", "UNKILLABLE + KILL AURA ON", 3)
+                opGodSpawnOn = true
+                opSpawnTeleported = true
+            end)
+        end
     end
 
     task.wait(0.7)
@@ -1123,7 +1108,7 @@ lp.CharacterAdded:Connect(function(char)
         if char:FindFirstChild("Animate") then char.Animate.Disabled = false end
     end)
     flyV3Active = false; flyV3UpHeld = false; flyV3DownHeld = false
-    if not fastTrickActive then opSpawnTeleported = false end
+    if not voidTrickActive then opSpawnTeleported = false end
 
     if invisibleEnabled then
         invisibleEnabled = false; invisibleParts = {}
@@ -1141,5 +1126,5 @@ UserInputService.JumpRequest:Connect(function()
     end
 end)
 
-print("Undocall's Hub v48 loaded. Fast Trick active.")
+print("Undocall's Hub v49 loaded. Void Trick active.")
 print("Discord: " .. KEY_LINK)
