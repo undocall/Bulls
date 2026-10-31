@@ -47,7 +47,7 @@ local ok, err = pcall(function()
 end)
 if not ok or not uiLibrary then error("Failed to load UI library") end
 
-uiLibrary:SetTitle("Hitblox (v5.6 Smooth)")
+uiLibrary:SetTitle("Hitblox (v5.7 Smooth)")
 uiLibrary:SetIcon("http://www.roblox.com/asset/?id=91738788645337")
 uiLibrary:SetTheme("HighContrast")
 
@@ -190,82 +190,76 @@ end)
 
 uiLibrary:AddToggle("Expand Hitbox", toggleHitboxes, false)
 
--- ═══════════ SMART ANTI-FLING — 2 TO 5 LIMIT (SMOOTH) ═══════════
--- Only zeros velocity if the player is ACTUALLY flying fast (>80)
--- Will not interrupt walking or jumping.
+-- ═══════════ SMOOTH ANTI-FLING (FALL LIMIT 2-5) ═══════════
 task.spawn(function()
     local fallCount = 0
-    local lastFallTime = 0
-    local permanentImmune = false
-    local randomTarget = math.random(2, 5)
-    local lastRecover = 0
+    local maxFalls = math.random(2, 5)
+    local isImmune = false
+    local lastFall = 0
 
-    while true do
-        task.wait(0.1) -- Slightly slower loop = less physics fighting = no lag
-        
+    while task.wait(0.1) do
         if not getgenv().smartAntiFlingEnabled then
             fallCount = 0
-            permanentImmune = false
-            randomTarget = math.random(2, 5)
+            isImmune = false
+            maxFalls = math.random(2, 5)
             continue
         end
 
         local char = localPlayer.Character
-        if not char then continue end
-
-        local hrp = char:FindFirstChild("HumanoidRootPart")
-        local hum = char:FindFirstChildOfClass("Humanoid")
-        if not (hrp and hum) or hum.Health <= 0 then continue end
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        if not hrp or not hum or hum.Health <= 0 then continue end
 
         local state = hum:GetState()
-        local isKnocked = hum.PlatformStand or hum.Sit
-            or state == Enum.HumanoidStateType.FallingDown
-            or state == Enum.HumanoidStateType.Ragdoll
-            or state == Enum.HumanoidStateType.GettingUp
-            or state == Enum.HumanoidStateType.PlatformStanding
-
+        local isRagdolled = state == Enum.HumanoidStateType.Ragdoll or state == Enum.HumanoidStateType.FallingDown or hum.PlatformStand
         local now = tick()
-        
-        -- Count knockdowns
-        if isKnocked and (now - lastFallTime) > 2.0 then
-            lastFallTime = now
-            fallCount = fallCount + 1
-            if fallCount >= randomTarget then
-                permanentImmune = true
+
+        -- Count the falls
+        if isRagdolled and (now - lastFall) > 2 then
+            lastFall = now
+            if not isImmune then
+                fallCount = fallCount + 1
+                if fallCount >= maxFalls then
+                    isImmune = true
+                    -- Once immune, disable these states permanently
+                    pcall(function()
+                        hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
+                        hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
+                        hum:SetStateEnabled(Enum.HumanoidStateType.PlatformStanding, false)
+                    end)
+                end
             end
         end
 
-        -- Recovery / Immunity Logic
-        if (permanentImmune or isKnocked) and (now - lastRecover) > 0.2 then
-            lastRecover = now
-            pcall(function()
-                local v = hrp.AssemblyLinearVelocity
-                local speed = math.sqrt(v.X * v.X + v.Z * v.Z)
-                
-                -- 🟢 ONLY STOP THEM IF THEY ARE FLYING (Fling Speed = 80+)
-                -- Normal walking is 16. Jumping is ~50. This lets you jump freely.
-                if speed > 80 then
-                    hrp.AssemblyLinearVelocity = Vector3.new(0, v.Y, 0)
-                end
-                
-                -- Only clear spin if it's extreme
-                if hrp.AssemblyAngularVelocity.Magnitude > 20 then
-                    hrp.AssemblyAngularVelocity = Vector3.zero
-                end
-                
-                -- Only force upright if they are on the ground (not mid-jump)
-                if isKnocked and hum.FloorMaterial ~= Enum.Material.Air then
-                    if hum.PlatformStand then hum.PlatformStand = false end
-                    if hum.Sit then hum.Sit = false end
-                    hum:ChangeState(Enum.HumanoidStateType.Running)
-                end
-            end)
+        -- 🟢 FLING PREVENTION (Only active if spinning out of control)
+        local av = hrp.AssemblyAngularVelocity
+        local lv = hrp.AssemblyLinearVelocity
+
+        if av.Magnitude > 50 or (isImmune and lv.Magnitude > 100) then
+            -- Kill the spin, but PRESERVE forward/upward walking momentum
+            hrp.AssemblyAngularVelocity = Vector3.zero
+            
+            -- Only stop horizontal speed if it's a massive fling, keep the Y (jump/fall)
+            if lv.Magnitude > 80 then
+                hrp.AssemblyLinearVelocity = Vector3.new(0, lv.Y, 0)
+            end
         end
     end
 end)
 
 uiLibrary:AddToggle("Smart Anti-Fling (2-5 Limit)", function(enabled)
     getgenv().smartAntiFlingEnabled = enabled
+    if not enabled then
+        local char = localPlayer.Character
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        if hum then
+            pcall(function()
+                hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, true)
+                hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, true)
+                hum:SetStateEnabled(Enum.HumanoidStateType.PlatformStanding, true)
+            end)
+        end
+    end
     playSound("rbxassetid://12221976")
 end, false)
 
