@@ -47,7 +47,7 @@ local ok, err = pcall(function()
 end)
 if not ok or not uiLibrary then error("Failed to load UI library") end
 
-uiLibrary:SetTitle("Hitblox (v5.5 Fall-Limit)")
+uiLibrary:SetTitle("Hitblox (v5.6 Smooth)")
 uiLibrary:SetIcon("http://www.roblox.com/asset/?id=91738788645337")
 uiLibrary:SetTheme("HighContrast")
 
@@ -190,8 +190,9 @@ end)
 
 uiLibrary:AddToggle("Expand Hitbox", toggleHitboxes, false)
 
--- ═══════════ SMART ANTI-FLING — 2 TO 5 FALL LIMIT ═══════════
--- Lets you fall 2-5 times, then locks you upright permanently
+-- ═══════════ SMART ANTI-FLING — 2 TO 5 LIMIT (SMOOTH) ═══════════
+-- Only zeros velocity if the player is ACTUALLY flying fast (>80)
+-- Will not interrupt walking or jumping.
 task.spawn(function()
     local fallCount = 0
     local lastFallTime = 0
@@ -200,9 +201,8 @@ task.spawn(function()
     local lastRecover = 0
 
     while true do
-        task.wait(0.05)
+        task.wait(0.1) -- Slightly slower loop = less physics fighting = no lag
         
-        -- Reset everything if toggled off
         if not getgenv().smartAntiFlingEnabled then
             fallCount = 0
             permanentImmune = false
@@ -226,51 +226,40 @@ task.spawn(function()
 
         local now = tick()
         
-        -- Count each knockdown
+        -- Count knockdowns
         if isKnocked and (now - lastFallTime) > 2.0 then
             lastFallTime = now
             fallCount = fallCount + 1
-            
-            -- Once target reached (2-5), lock immunity
             if fallCount >= randomTarget then
                 permanentImmune = true
             end
         end
 
-        if permanentImmune then
-            -- Permanently glue them upright
-            if (now - lastRecover) > 0.3 then
-                lastRecover = now
-                pcall(function()
-                    hrp.AssemblyAngularVelocity = Vector3.zero
-                    local v = hrp.AssemblyLinearVelocity
+        -- Recovery / Immunity Logic
+        if (permanentImmune or isKnocked) and (now - lastRecover) > 0.2 then
+            lastRecover = now
+            pcall(function()
+                local v = hrp.AssemblyLinearVelocity
+                local speed = math.sqrt(v.X * v.X + v.Z * v.Z)
+                
+                -- 🟢 ONLY STOP THEM IF THEY ARE FLYING (Fling Speed = 80+)
+                -- Normal walking is 16. Jumping is ~50. This lets you jump freely.
+                if speed > 80 then
                     hrp.AssemblyLinearVelocity = Vector3.new(0, v.Y, 0)
-                    if isKnocked then
-                        hum.PlatformStand = false
-                        hum.Sit = false
-                        if hum.FloorMaterial ~= Enum.Material.Air then
-                            hum:ChangeState(Enum.HumanoidStateType.Running)
-                        end
-                    end
-                end)
-            end
-        elseif isKnocked then
-            -- Normal anti-fling recovery (helps them get up faster)
-            if (now - lastRecover) > 0.3 then
-                lastRecover = now
-                pcall(function()
+                end
+                
+                -- Only clear spin if it's extreme
+                if hrp.AssemblyAngularVelocity.Magnitude > 20 then
                     hrp.AssemblyAngularVelocity = Vector3.zero
-                    local v = hrp.AssemblyLinearVelocity
-                    if v.Magnitude > 50 then
-                        hrp.AssemblyLinearVelocity = Vector3.new(0, v.Y, 0)
-                    end
-                    if hum.FloorMaterial ~= Enum.Material.Air then
-                        hum.PlatformStand = false
-                        hum.Sit = false
-                        hum:ChangeState(Enum.HumanoidStateType.Running)
-                    end
-                end)
-            end
+                end
+                
+                -- Only force upright if they are on the ground (not mid-jump)
+                if isKnocked and hum.FloorMaterial ~= Enum.Material.Air then
+                    if hum.PlatformStand then hum.PlatformStand = false end
+                    if hum.Sit then hum.Sit = false end
+                    hum:ChangeState(Enum.HumanoidStateType.Running)
+                end
+            end)
         end
     end
 end)
