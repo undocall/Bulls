@@ -47,7 +47,7 @@ local ok, err = pcall(function()
 end)
 if not ok or not uiLibrary then error("Failed to load UI library") end
 
-uiLibrary:SetTitle("Hitblox (v5.3 Instant-Arm)")
+uiLibrary:SetTitle("Hitblox (v5.5 Fall-Limit)")
 uiLibrary:SetIcon("http://www.roblox.com/asset/?id=91738788645337")
 uiLibrary:SetTheme("HighContrast")
 
@@ -178,7 +178,7 @@ end
 for _, p in ipairs(Players:GetPlayers()) do trackPlayer(p) end
 Players.PlayerAdded:Connect(trackPlayer)
 
--- UI buttons
+-- UI Buttons
 hitboxIncreaseButton = uiLibrary:AddButton("(Hitbox +)", function()
     hitboxSize = math.clamp(hitboxSize + 5, 1, 50)
     if hitboxEnabled then applyHitboxesToAllPlayers() end
@@ -190,45 +190,23 @@ end)
 
 uiLibrary:AddToggle("Expand Hitbox", toggleHitboxes, false)
 
--- ═══════════ JUMP INPUT TRACKER ═══════════
-local lastJumpPress = 0
-UserInputService.JumpRequest:Connect(function()
-    lastJumpPress = tick()
-end)
-
--- ═══════════ SMART ANTI-FLING — INSTANT ARM, 80% GRACE ═══════════
--- Detects real fling instantly (velocity >100 OR knock state), no counter needed.
--- 80% dice roll on grace. Jump safety only delays velocity clearing, never arming.
+-- ═══════════ SMART ANTI-FLING — 2 TO 5 FALL LIMIT ═══════════
+-- Lets you fall 2-5 times, then locks you upright permanently
 task.spawn(function()
-    local graceUntil    = 0
-    local cooldownUntil = 0
-    local lastRecover   = 0
-    local lastArm       = 0
-
-    local GRACE_DURATION = 20.0
-    local COOLDOWN_MIN   = 8.0
-    local COOLDOWN_MAX   = 15.0
-    local SKIP_CHANCE    = 0.20          -- 80% grace
-    local FLING_HORIZ    = 100           -- real fling speed (jump = ~50-70)
-    local FLING_ANGULAR  = 60            -- real fling spin
-    local RECOVER_GAP    = 0.8
-    local ARM_GAP        = 1.2           -- min 1.2s between arm attempts
-    local JUMP_BACKOFF   = 0.4
-
-    local function isKnocked(hum)
-        local s = hum:GetState()
-        return hum.PlatformStand
-            or hum.Sit
-            or s == Enum.HumanoidStateType.FallingDown
-            or s == Enum.HumanoidStateType.Ragdoll
-            or s == Enum.HumanoidStateType.GettingUp
-            or s == Enum.HumanoidStateType.PlatformStanding
-    end
+    local fallCount = 0
+    local lastFallTime = 0
+    local permanentImmune = false
+    local randomTarget = math.random(2, 5)
+    local lastRecover = 0
 
     while true do
         task.wait(0.05)
+        
+        -- Reset everything if toggled off
         if not getgenv().smartAntiFlingEnabled then
-            graceUntil = 0 ; cooldownUntil = 0 ; lastRecover = 0 ; lastArm = 0
+            fallCount = 0
+            permanentImmune = false
+            randomTarget = math.random(2, 5)
             continue
         end
 
@@ -239,41 +217,54 @@ task.spawn(function()
         local hum = char:FindFirstChildOfClass("Humanoid")
         if not (hrp and hum) or hum.Health <= 0 then continue end
 
+        local state = hum:GetState()
+        local isKnocked = hum.PlatformStand or hum.Sit
+            or state == Enum.HumanoidStateType.FallingDown
+            or state == Enum.HumanoidStateType.Ragdoll
+            or state == Enum.HumanoidStateType.GettingUp
+            or state == Enum.HumanoidStateType.PlatformStanding
+
         local now = tick()
-        local v   = hrp.AssemblyLinearVelocity
-        local av  = hrp.AssemblyAngularVelocity
-        local hMag = math.sqrt(v.X * v.X + v.Z * v.Z)
-        local aMag = av.Magnitude
-
-        local recentlyJumped = (now - lastJumpPress) < JUMP_BACKOFF
-        local knocked = isKnocked(hum)
-        local realFling = (hMag > FLING_HORIZ) or (aMag > FLING_ANGULAR) or (knocked and not recentlyJumped)
-
-        local inGrace    = now < graceUntil
-        local inCooldown = now < cooldownUntil
-
-        -- ARM grace the instant a real fling is detected (no counter)
-        if realFling and not inGrace and not inCooldown and (now - lastArm) > ARM_GAP then
-            lastArm = now
-            if math.random() > SKIP_CHANCE then
-                graceUntil = now + GRACE_DURATION
-            else
-                cooldownUntil = now + math.random(COOLDOWN_MIN, COOLDOWN_MAX)
+        
+        -- Count each knockdown
+        if isKnocked and (now - lastFallTime) > 2.0 then
+            lastFallTime = now
+            fallCount = fallCount + 1
+            
+            -- Once target reached (2-5), lock immunity
+            if fallCount >= randomTarget then
+                permanentImmune = true
             end
         end
 
-        -- While in grace: recover single-shot, horizontal-only, Y preserved
-        if inGrace and (now - lastRecover) > RECOVER_GAP then
-            if hMag > FLING_HORIZ or aMag > FLING_ANGULAR or knocked then
+        if permanentImmune then
+            -- Permanently glue them upright
+            if (now - lastRecover) > 0.3 then
                 lastRecover = now
                 pcall(function()
-                    -- kill horizontal, PRESERVE Y (jump)
+                    hrp.AssemblyAngularVelocity = Vector3.zero
+                    local v = hrp.AssemblyLinearVelocity
                     hrp.AssemblyLinearVelocity = Vector3.new(0, v.Y, 0)
-                    if aMag > 40 then
-                        hrp.AssemblyAngularVelocity = Vector3.zero
+                    if isKnocked then
+                        hum.PlatformStand = false
+                        hum.Sit = false
+                        if hum.FloorMaterial ~= Enum.Material.Air then
+                            hum:ChangeState(Enum.HumanoidStateType.Running)
+                        end
                     end
-                    -- only exit knock if truly knocked and grounded, never force mid-air
-                    if knocked and hum.FloorMaterial ~= Enum.Material.Air then
+                end)
+            end
+        elseif isKnocked then
+            -- Normal anti-fling recovery (helps them get up faster)
+            if (now - lastRecover) > 0.3 then
+                lastRecover = now
+                pcall(function()
+                    hrp.AssemblyAngularVelocity = Vector3.zero
+                    local v = hrp.AssemblyLinearVelocity
+                    if v.Magnitude > 50 then
+                        hrp.AssemblyLinearVelocity = Vector3.new(0, v.Y, 0)
+                    end
+                    if hum.FloorMaterial ~= Enum.Material.Air then
                         hum.PlatformStand = false
                         hum.Sit = false
                         hum:ChangeState(Enum.HumanoidStateType.Running)
@@ -281,21 +272,15 @@ task.spawn(function()
                 end)
             end
         end
-
-        -- Expire grace → cooldown
-        if inGrace and now >= graceUntil then
-            cooldownUntil = now + math.random(COOLDOWN_MIN, COOLDOWN_MAX)
-            graceUntil = 0
-        end
     end
 end)
 
-uiLibrary:AddToggle("Smart Anti-Fling (80% Instant-Arm)", function(enabled)
+uiLibrary:AddToggle("Smart Anti-Fling (2-5 Limit)", function(enabled)
     getgenv().smartAntiFlingEnabled = enabled
     playSound("rbxassetid://12221976")
 end, false)
 
--- Toggle button
+-- Toggle button (UI Hide/Show)
 if CoreGui:FindFirstChild("HitbloxToggleGui") then
     CoreGui.HitbloxToggleGui:Destroy()
 end
