@@ -13,7 +13,7 @@ while not localPlayer do
     localPlayer = Players.LocalPlayer
 end
 
--- Flags
+-- Flags & State
 getgenv().smartAntiFlingEnabled = false
 
 local function isEnemy(player)
@@ -47,7 +47,7 @@ local ok, err = pcall(function()
 end)
 if not ok or not uiLibrary then error("Failed to load UI library") end
 
-uiLibrary:SetTitle("Hitblox (v5.7 Smooth)")
+uiLibrary:SetTitle("Hitblox (v6.0 Cycle)")
 uiLibrary:SetIcon("http://www.roblox.com/asset/?id=91738788645337")
 uiLibrary:SetTheme("HighContrast")
 
@@ -190,18 +190,22 @@ end)
 
 uiLibrary:AddToggle("Expand Hitbox", toggleHitboxes, false)
 
--- ═══════════ SMOOTH ANTI-FLING (FALL LIMIT 2-5) ═══════════
+-- ═══════════ SMOOTH ANTI-FLING (CYCLE RESET) ═══════════
 task.spawn(function()
     local fallCount = 0
     local maxFalls = math.random(2, 5)
     local isImmune = false
+    local immuneStart = 0
     local lastFall = 0
+    local currentHum = nil
+    
+    local IMMUNITY_DURATION = 10 -- Seconds to stay upright before allowing falls again
 
     while task.wait(0.1) do
         if not getgenv().smartAntiFlingEnabled then
             fallCount = 0
             isImmune = false
-            maxFalls = math.random(2, 5)
+            currentHum = nil
             continue
         end
 
@@ -210,18 +214,39 @@ task.spawn(function()
         local hum = char and char:FindFirstChildOfClass("Humanoid")
         if not hrp or not hum or hum.Health <= 0 then continue end
 
-        local state = hum:GetState()
-        local isRagdolled = state == Enum.HumanoidStateType.Ragdoll or state == Enum.HumanoidStateType.FallingDown or hum.PlatformStand
+        -- Reset cycle if respawned
+        if hum ~= currentHum then
+            currentHum = hum
+            fallCount = 0
+            maxFalls = math.random(2, 5)
+            isImmune = false
+        end
+
         local now = tick()
 
-        -- Count the falls
-        if isRagdolled and (now - lastFall) > 2 then
+        -- 🟢 IN-GAME CYCLE RESET
+        if isImmune and (now - immuneStart > IMMUNITY_DURATION) then
+            isImmune = false
+            fallCount = 0
+            maxFalls = math.random(2, 5)
+            pcall(function()
+                hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, true)
+                hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, true)
+                hum:SetStateEnabled(Enum.HumanoidStateType.PlatformStanding, true)
+            end)
+        end
+
+        local state = hum:GetState()
+        local isRagdolled = state == Enum.HumanoidStateType.Ragdoll or state == Enum.HumanoidStateType.FallingDown or hum.PlatformStand
+
+        -- Count falls & apply immunity state
+        if isRagdolled and (now - lastFall) > 1.5 then
             lastFall = now
             if not isImmune then
                 fallCount = fallCount + 1
                 if fallCount >= maxFalls then
                     isImmune = true
-                    -- Once immune, disable these states permanently
+                    immuneStart = now
                     pcall(function()
                         hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
                         hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
@@ -231,23 +256,20 @@ task.spawn(function()
             end
         end
 
-        -- 🟢 FLING PREVENTION (Only active if spinning out of control)
+        -- Smooth physics correction (Only stops flings, keeps walking normal)
         local av = hrp.AssemblyAngularVelocity
         local lv = hrp.AssemblyLinearVelocity
 
-        if av.Magnitude > 50 or (isImmune and lv.Magnitude > 100) then
-            -- Kill the spin, but PRESERVE forward/upward walking momentum
-            hrp.AssemblyAngularVelocity = Vector3.zero
-            
-            -- Only stop horizontal speed if it's a massive fling, keep the Y (jump/fall)
-            if lv.Magnitude > 80 then
+        if isImmune then
+            if av.Magnitude > 40 or lv.Magnitude > 80 then
+                hrp.AssemblyAngularVelocity = Vector3.zero
                 hrp.AssemblyLinearVelocity = Vector3.new(0, lv.Y, 0)
             end
         end
     end
 end)
 
-uiLibrary:AddToggle("Smart Anti-Fling (2-5 Limit)", function(enabled)
+uiLibrary:AddToggle("Smart Anti-Fling (Cycle Mode)", function(enabled)
     getgenv().smartAntiFlingEnabled = enabled
     if not enabled then
         local char = localPlayer.Character
