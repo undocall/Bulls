@@ -47,7 +47,7 @@ local ok, err = pcall(function()
 end)
 if not ok or not uiLibrary then error("Failed to load UI library") end
 
-uiLibrary:SetTitle("Hitblox (v6.0 Cycle)")
+uiLibrary:SetTitle("Hitblox (v6.1 Fixed)")
 uiLibrary:SetIcon("http://www.roblox.com/asset/?id=91738788645337")
 uiLibrary:SetTheme("HighContrast")
 
@@ -190,7 +190,7 @@ end)
 
 uiLibrary:AddToggle("Expand Hitbox", toggleHitboxes, false)
 
--- ═══════════ SMOOTH ANTI-FLING (CYCLE RESET) ═══════════
+-- ═══════════ SMOOTH ANTI-FLING (CYCLE RESET - FIXED) ═══════════
 task.spawn(function()
     local fallCount = 0
     local maxFalls = math.random(2, 5)
@@ -256,14 +256,35 @@ task.spawn(function()
             end
         end
 
-        -- Smooth physics correction (Only stops flings, keeps walking normal)
-        local av = hrp.AssemblyAngularVelocity
-        local lv = hrp.AssemblyLinearVelocity
-
+        -- 🟢 SMOOTH PHYSICS & STUCK-STATE RECOVERY
         if isImmune then
+            local av = hrp.AssemblyAngularVelocity
+            local lv = hrp.AssemblyLinearVelocity
+
+            -- If spinning fast or moving horizontally too fast
             if av.Magnitude > 40 or lv.Magnitude > 80 then
+                -- Kill the spin
                 hrp.AssemblyAngularVelocity = Vector3.zero
-                hrp.AssemblyLinearVelocity = Vector3.new(0, lv.Y, 0)
+                
+                -- Kill horizontal speed, but CAP the upward Y velocity so we don't fly
+                local safeY = lv.Y
+                if safeY > 10 then safeY = 0 end -- Stop upward fling
+                hrp.AssemblyLinearVelocity = Vector3.new(0, safeY, 0)
+            end
+
+            -- Force out of PlatformStand so we don't become a solid rock
+            if hum.PlatformStand or hum.Sit then
+                hum.PlatformStand = false
+                hum.Sit = false
+            end
+
+            -- If we are stuck in a dead state, force us back to running/freefall
+            if state == Enum.HumanoidStateType.Physics or state == Enum.HumanoidStateType.Ragdoll or state == Enum.HumanoidStateType.PlatformStanding then
+                if hum.FloorMaterial ~= Enum.Material.Air then
+                    hum:ChangeState(Enum.HumanoidStateType.Running)
+                else
+                    hum:ChangeState(Enum.HumanoidStateType.Freefall)
+                end
             end
         end
     end
