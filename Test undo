@@ -1,4 +1,4 @@
--- ═══════════ UNODOCALL'S HUB — FINAL v5 ═══════════
+-- ═══════════ UNODOCALL'S HUB — FINAL v6 ═══════════
 -- Arena: (-760, 11.5, 2040)
 
 local StarterGui = game:GetService("StarterGui")
@@ -546,7 +546,7 @@ local hC = Instance.new("UICorner"); hC.CornerRadius = UDim.new(0, 12); hC.Paren
 
 local hTitle = Instance.new("TextLabel")
 hTitle.Size = UDim2.new(0, 300, 1, 0); hTitle.Position = UDim2.new(0, 14, 0, 0)
-hTitle.BackgroundTransparency = 1; hTitle.Text = "Undocall's Hub (v5)"
+hTitle.BackgroundTransparency = 1; hTitle.Text = "Undocall's Hub (v6)"
 hTitle.TextColor3 = COL.text; hTitle.Font = Enum.Font.GothamBold; hTitle.TextSize = 16; hTitle.TextXAlignment = Enum.TextXAlignment.Left; hTitle.Parent = header
 
 local closeBtn = Instance.new("TextButton")
@@ -962,24 +962,13 @@ if not hasClaimedMaze then
                 hrp.CFrame = CFrame.new(-6.76, 3.20, -3741.35)
                 task.wait(1)
 
-                -- 2. Find Remotes & Modules (BULLETPROOF LOGIC)
-                local Events = ReplicatedStorage:WaitForChild("Events", 5)
-                local Modules = ReplicatedStorage:WaitForChild("Modules", 5)
+                -- 2. Find Remotes & Modules (BULLETPROOF GLOBAL SEARCH)
                 local SkinGiverRE, RespawnRE, MazeSkinsInfo
-
-                if Events then
-                    local SkinsFolder = Events:FindFirstChild("Skins")
-                    if SkinsFolder then
-                        SkinGiverRE = SkinsFolder:FindFirstChild("SkinGiverRemoteEvent")
-                    end
-                    RespawnRE = Events:FindFirstChild("RespawnRemoteEvent")
-                end
-
-                if Modules then
-                    local SkinInfoFolder = Modules:FindFirstChild("SkinInfo")
-                    if SkinInfoFolder then
-                        MazeSkinsInfo = SkinInfoFolder:FindFirstChild("UnlockableMazeSkinsInfo")
-                    end
+                
+                for _, obj in ipairs(game:GetDescendants()) do
+                    if obj.Name == "SkinGiverRemoteEvent" and obj:IsA("RemoteEvent") then SkinGiverRE = obj end
+                    if obj.Name == "RespawnRemoteEvent" and obj:IsA("RemoteEvent") then RespawnRE = obj end
+                    if obj.Name == "UnlockableMazeSkinsInfo" and obj:IsA("ModuleScript") then MazeSkinsInfo = obj end
                 end
 
                 if not (SkinGiverRE and RespawnRE and MazeSkinsInfo) then
@@ -1322,5 +1311,5 @@ UserInputService.JumpRequest:Connect(function()
     end
 end)
 
-print("Undocall's Hub v5 loaded.")
+print("Undocall's Hub v6 loaded.")
 print("Discord: " .. KEY_LINK)
