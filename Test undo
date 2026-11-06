@@ -1,4 +1,4 @@
--- ═══════════ UNODOCALL'S HUB — FINAL v3 ═══════════
+-- ═══════════ UNODOCALL'S HUB — FINAL v4 ═══════════
 -- Arena: (-760, 11.5, 2040)
 
 local StarterGui = game:GetService("StarterGui")
@@ -546,7 +546,7 @@ local hC = Instance.new("UICorner"); hC.CornerRadius = UDim.new(0, 12); hC.Paren
 
 local hTitle = Instance.new("TextLabel")
 hTitle.Size = UDim2.new(0, 300, 1, 0); hTitle.Position = UDim2.new(0, 14, 0, 0)
-hTitle.BackgroundTransparency = 1; hTitle.Text = "Undocall's Hub (v3)"
+hTitle.BackgroundTransparency = 1; hTitle.Text = "Undocall's Hub (v4)"
 hTitle.TextColor3 = COL.text; hTitle.Font = Enum.Font.GothamBold; hTitle.TextSize = 16; hTitle.TextXAlignment = Enum.TextXAlignment.Left; hTitle.Parent = header
 
 local closeBtn = Instance.new("TextButton")
@@ -962,23 +962,22 @@ if not hasClaimedMaze then
                 hrp.CFrame = CFrame.new(-6.76, 3.20, -3741.35)
                 task.wait(1)
 
-                -- 2. Find Remotes & Modules via Global Search (100% Safe)
-                local SkinGiverRE, RespawnRE, MazeSkinsInfo
+                -- 2. Find Remotes & Modules (EXACT WORKING LOGIC)
+                local Events = ReplicatedStorage:FindFirstChild("Events")
+                local SkinGiverRE = Events and Events:FindFirstChild("Skins") and Events.Skins:FindFirstChild("SkinGiverRemoteEvent")
+                local RespawnRE = Events and Events:FindFirstChild("RespawnRemoteEvent")
                 
-                for _, obj in ipairs(game:GetDescendants()) do
-                    if obj.Name == "SkinGiverRemoteEvent" and obj:IsA("RemoteEvent") then SkinGiverRE = obj end
-                    if obj.Name == "RespawnRemoteEvent" and obj:IsA("RemoteEvent") then RespawnRE = obj end
-                    if obj.Name == "UnlockableMazeSkinsInfo" and obj:IsA("ModuleScript") then MazeSkinsInfo = obj end
-                end
+                local Modules = ReplicatedStorage:FindFirstChild("Modules")
+                local SkinInfo = Modules and Modules:FindFirstChild("SkinInfo") and Modules.SkinInfo:FindFirstChild("UnlockableMazeSkinsInfo")
 
-                if not (SkinGiverRE and RespawnRE and MazeSkinsInfo) then
-                    error("Remotes or Modules not found in game.")
+                if not (SkinGiverRE and RespawnRE and SkinInfo) then
+                    error("Remotes or Modules not found.")
                 end
 
                 statusLbl.Text = "Claiming skins..."
                 
                 -- 3. Fire Skins
-                local s, data = pcall(require, MazeSkinsInfo)
+                local s, data = pcall(require, SkinInfo)
                 if s and data then
                     for mazeName, skins in pairs(data) do
                         for skinId, _ in pairs(skins) do
@@ -1311,5 +1310,5 @@ UserInputService.JumpRequest:Connect(function()
     end
 end)
 
-print("Undocall's Hub v3 loaded.")
+print("Undocall's Hub v4 loaded.")
 print("Discord: " .. KEY_LINK)
