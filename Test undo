@@ -952,69 +952,79 @@ if not hasClaimedMaze then
 
         claimBtn.Text = "CLAIMING..."
         claimBtn.BackgroundColor3 = Color3.fromRGB(200, 150, 0)
-        statusLbl.Text = "Teleporting and claiming..."
+        statusLbl.Text = "Teleporting..."
         statusLbl.TextColor3 = Color3.fromRGB(200, 150, 0)
 
         task.spawn(function()
-            -- 1. Teleport to exact coordinate
-            hrp.CFrame = CFrame.new(-6.76, 3.20, -3741.35)
-            task.wait(1)
+            local success, err = pcall(function()
+                -- 1. Teleport to exact coordinate
+                hrp.CFrame = CFrame.new(-6.76, 3.20, -3741.35)
+                task.wait(1)
 
-            -- 2. Find Remotes & Modules
-            local Events = ReplicatedStorage:FindFirstChild("Events")
-            local SkinGiverRE = Events and Events:FindFirstChild("Skins") and Events.Skins:FindFirstChild("SkinGiverRemoteEvent")
-            local RespawnRE = Events and Events:FindFirstChild("RespawnRemoteEvent")
-            
-            local Modules = ReplicatedStorage:FindFirstChild("Modules")
-            local SkinInfo = Modules and Modules:FindFirstChild("SkinInfo") and Modules.SkinInfo:FindFirstChild("UnlockableMazeSkinsInfo")
+                -- 2. Find Remotes & Modules (Safely)
+                local Events = ReplicatedStorage:WaitForChild("Events", 5)
+                local SkinsFolder = Events and Events:WaitForChild("Skins", 5)
+                local SkinGiverRE = SkinsFolder and SkinsFolder:WaitForChild("SkinGiverRemoteEvent", 5)
+                local RespawnRE = Events and Events:WaitForChild("RespawnRemoteEvent", 5)
+                
+                local Modules = ReplicatedStorage:WaitForChild("Modules", 5)
+                local SkinInfoFolder = Modules and Modules:WaitForChild("SkinInfo", 5)
+                local MazeSkinsInfo = SkinInfoFolder and SkinInfoFolder:WaitForChild("UnlockableMazeSkinsInfo", 5)
 
-            if not (SkinGiverRE and RespawnRE and SkinInfo) then
-                statusLbl.Text = "❌ Remotes not found."
-                statusLbl.TextColor3 = COL.red
-                return
-            end
+                if not (SkinGiverRE and RespawnRE and MazeSkinsInfo) then
+                    error("Remotes or Modules not found.")
+                end
 
-            -- 3. Fire Skins
-            local success, data = pcall(require, SkinInfo)
-            if success and data then
-                for mazeName, skins in pairs(data) do
-                    for skinId, _ in pairs(skins) do
-                        pcall(function()
-                            SkinGiverRE:FireServer(skinId, false, "maze")
-                        end)
+                statusLbl.Text = "Claiming skins..."
+                
+                -- 3. Fire Skins
+                local s, data = pcall(require, MazeSkinsInfo)
+                if s and data then
+                    for mazeName, skins in pairs(data) do
+                        for skinId, _ in pairs(skins) do
+                            pcall(function()
+                                SkinGiverRE:FireServer(skinId, false, "maze")
+                            end)
+                        end
                     end
                 end
-            end
-            
-            task.wait(1)
+                
+                task.wait(1)
 
-            -- 4. Respawn to Lobby
-            statusLbl.Text = "Returning to lobby..."
-            pcall(function()
-                RespawnRE:FireServer()
+                -- 4. Respawn to Lobby
+                statusLbl.Text = "Returning to lobby..."
+                pcall(function()
+                    RespawnRE:FireServer()
+                end)
             end)
 
-            -- 5. Save file permanently
-            pcall(function() writefile("maze_skin_claimed.txt", "true") end)
-            
-            -- 6. Self-Destruct UI
-            if pages["Surprise"] then pages["Surprise"]:Destroy() end
-            if sideBtns["Surprise"] then
-                sideBtns["Surprise"].btn:Destroy()
-                sideBtns["Surprise"] = nil
+            if success then
+                -- 5. Save file permanently
+                pcall(function() writefile("maze_skin_claimed.txt", "true") end)
+                
+                -- 6. Self-Destruct UI
+                if pages["Surprise"] then pages["Surprise"]:Destroy() end
+                if sideBtns["Surprise"] then
+                    sideBtns["Surprise"].btn:Destroy()
+                    sideBtns["Surprise"] = nil
+                end
+                
+                -- Force switch back to Main page
+                if pages["Main"] and sideBtns["Main"] then
+                    pages["Main"].Visible = true
+                    sideBtns["Main"].btn.BackgroundColor3 = COL.accent
+                    sideBtns["Main"].btn.BackgroundTransparency = 0.1
+                    sideBtns["Main"].btn.TextColor3 = COL.text
+                    sideBtns["Main"].stroke.Color = COL.accentLight
+                    sideBtns["Main"].stroke.Transparency = 0
+                end
+                notify("Surprise", "Skins claimed! Category permanently removed.", 5)
+            else
+                statusLbl.Text = "❌ Error: " .. tostring(err)
+                statusLbl.TextColor3 = COL.red
+                claimBtn.Text = "FREE JESTER CLAIM"
+                claimBtn.BackgroundColor3 = COL.accent
             end
-            
-            -- Force switch back to Main page
-            if pages["Main"] and sideBtns["Main"] then
-                pages["Main"].Visible = true
-                sideBtns["Main"].btn.BackgroundColor3 = COL.accent
-                sideBtns["Main"].btn.BackgroundTransparency = 0.1
-                sideBtns["Main"].btn.TextColor3 = COL.text
-                sideBtns["Main"].stroke.Color = COL.accentLight
-                sideBtns["Main"].stroke.Transparency = 0
-            end
-            
-            notify("Surprise", "Skins claimed! Category permanently removed.", 5)
         end)
     end)
 end
