@@ -930,12 +930,13 @@ if not hasClaimedMaze then
     cbS.Parent = claimBtn
 
     local statusLbl = Instance.new("TextLabel", surprisePage)
-    statusLbl.Size = UDim2.new(1, 0, 0, 30)
+    statusLbl.Size = UDim2.new(1, 0, 0, 40)
     statusLbl.BackgroundTransparency = 1
     statusLbl.Text = "Must be inside maze to claim."
     statusLbl.TextColor3 = COL.textDim
     statusLbl.Font = Enum.Font.Gotham
     statusLbl.TextSize = 12
+    statusLbl.TextWrapped = true
     statusLbl.Parent = surprisePage
 
     claimBtn.MouseButton1Click:Connect(function()
@@ -952,7 +953,7 @@ if not hasClaimedMaze then
 
         claimBtn.Text = "CLAIMING..."
         claimBtn.BackgroundColor3 = Color3.fromRGB(200, 150, 0)
-        statusLbl.Text = "Teleporting..."
+        statusLbl.Text = "Teleporting to exit..."
         statusLbl.TextColor3 = Color3.fromRGB(200, 150, 0)
 
         task.spawn(function()
@@ -961,18 +962,17 @@ if not hasClaimedMaze then
                 hrp.CFrame = CFrame.new(-6.76, 3.20, -3741.35)
                 task.wait(1)
 
-                -- 2. Find Remotes & Modules (Safely)
-                local Events = ReplicatedStorage:WaitForChild("Events", 5)
-                local SkinsFolder = Events and Events:WaitForChild("Skins", 5)
-                local SkinGiverRE = SkinsFolder and SkinsFolder:WaitForChild("SkinGiverRemoteEvent", 5)
-                local RespawnRE = Events and Events:WaitForChild("RespawnRemoteEvent", 5)
+                -- 2. Find Remotes & Modules via Global Search (100% Safe)
+                local SkinGiverRE, RespawnRE, MazeSkinsInfo
                 
-                local Modules = ReplicatedStorage:WaitForChild("Modules", 5)
-                local SkinInfoFolder = Modules and Modules:WaitForChild("SkinInfo", 5)
-                local MazeSkinsInfo = SkinInfoFolder and SkinInfoFolder:WaitForChild("UnlockableMazeSkinsInfo", 5)
+                for _, obj in ipairs(game:GetDescendants()) do
+                    if obj.Name == "SkinGiverRemoteEvent" and obj:IsA("RemoteEvent") then SkinGiverRE = obj end
+                    if obj.Name == "RespawnRemoteEvent" and obj:IsA("RemoteEvent") then RespawnRE = obj end
+                    if obj.Name == "UnlockableMazeSkinsInfo" and obj:IsA("ModuleScript") then MazeSkinsInfo = obj end
+                end
 
                 if not (SkinGiverRE and RespawnRE and MazeSkinsInfo) then
-                    error("Remotes or Modules not found.")
+                    error("Remotes or Modules not found in game.")
                 end
 
                 statusLbl.Text = "Claiming skins..."
@@ -999,10 +999,10 @@ if not hasClaimedMaze then
             end)
 
             if success then
-                -- 5. Save file permanently
+                -- Save file permanently
                 pcall(function() writefile("maze_skin_claimed.txt", "true") end)
                 
-                -- 6. Self-Destruct UI
+                -- Self-Destruct UI
                 if pages["Surprise"] then pages["Surprise"]:Destroy() end
                 if sideBtns["Surprise"] then
                     sideBtns["Surprise"].btn:Destroy()
