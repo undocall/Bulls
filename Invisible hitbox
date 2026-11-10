@@ -237,6 +237,16 @@ task.spawn(function()
         end
 
         local state = hum:GetState()
+        
+        -- 🟢 FAST WAKE-UP FIX (Instantly gets you up if ragdolled on the floor)
+        if (state == Enum.HumanoidStateType.Ragdoll or state == Enum.HumanoidStateType.FallingDown) then
+            if hum.FloorMaterial ~= Enum.Material.Air and hrp.AssemblyLinearVelocity.Magnitude < 20 then
+                pcall(function()
+                    hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+                end)
+            end
+        end
+
         local isRagdolled = state == Enum.HumanoidStateType.Ragdoll or state == Enum.HumanoidStateType.FallingDown or hum.PlatformStand
 
         -- Count falls & apply immunity state
