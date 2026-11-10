@@ -238,13 +238,32 @@ task.spawn(function()
 
         local state = hum:GetState()
         
-        -- 🟢 FAST WAKE-UP FIX (Instantly gets you up if ragdolled on the floor)
-        if (state == Enum.HumanoidStateType.Ragdoll or state == Enum.HumanoidStateType.FallingDown) then
-            if hum.FloorMaterial ~= Enum.Material.Air and hrp.AssemblyLinearVelocity.Magnitude < 20 then
+        -- 🟢 FAST WAKE-UP FIX (Bypasses the 1.5s GettingUp animation)
+        if (state == Enum.HumanoidStateType.Ragdoll or state == Enum.HumanoidStateType.FallingDown or state == Enum.HumanoidStateType.Physics or hum.PlatformStand) then
+            if hum.FloorMaterial ~= Enum.Material.Air then
                 pcall(function()
-                    hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+                    -- Kill all sliding and spinning
+                    hrp.AssemblyLinearVelocity = Vector3.new(0, hrp.AssemblyLinearVelocity.Y, 0)
+                    hrp.AssemblyAngularVelocity = Vector3.zero
+                    
+                    -- Force the engine out of ragdoll
+                    hum.PlatformStand = false
+                    hum.Sit = false
+                    hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
+                    hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
+                    hum:SetStateEnabled(Enum.HumanoidStateType.Physics, false)
+                    
+                    -- Instantly snap to Running state
+                    hum:ChangeState(Enum.HumanoidStateType.Running)
                 end)
             end
+        else
+            -- Re-enable states so you can still fall normally in the future
+            pcall(function()
+                hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, true)
+                hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, true)
+                hum:SetStateEnabled(Enum.HumanoidStateType.Physics, true)
+            end)
         end
 
         local isRagdolled = state == Enum.HumanoidStateType.Ragdoll or state == Enum.HumanoidStateType.FallingDown or hum.PlatformStand
