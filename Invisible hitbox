@@ -193,7 +193,7 @@ uiLibrary:AddToggle("Expand Hitbox", toggleHitboxes, false)
 -- ═══════════ SMOOTH ANTI-FLING (v6.5 — PHYSICS FIXED) ═══════════
 task.spawn(function()
     local fallCount  = 0
-    local maxFalls   = math.random(3, 4)   -- 3-4 normal flings, then immunity
+    local maxFalls   = math.random(2, 3)   -- 2-3 normal flings, then immunity
     local isImmune   = false
     local immuneStart = 0
     local lastFall   = 0
@@ -223,7 +223,7 @@ task.spawn(function()
         if hum ~= currentHum then
             currentHum = hum
             fallCount  = 0
-            maxFalls   = math.random(3, 4)
+            maxFalls   = math.random(2, 3)
             isImmune   = false
         end
 
@@ -233,7 +233,7 @@ task.spawn(function()
         if isImmune and (now - immuneStart > IMMUNITY_DURATION) then
             isImmune  = false
             fallCount = 0
-            maxFalls  = math.random(3, 4)
+            maxFalls  = math.random(2, 3)
             print("[AntiFling] immunity expired — back to normal")
         end
 
