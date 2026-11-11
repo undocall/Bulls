@@ -47,7 +47,7 @@ local ok, err = pcall(function()
 end)
 if not ok or not uiLibrary then error("Failed to load UI library") end
 
-uiLibrary:SetTitle("Hitblox (v6.2 Fixed)")
+uiLibrary:SetTitle("Hitblox (v6.3 Cycle Fix)")
 uiLibrary:SetIcon("http://www.roblox.com/asset/?id=91738788645337")
 uiLibrary:SetTheme("HighContrast")
 
@@ -190,29 +190,35 @@ end)
 
 uiLibrary:AddToggle("Expand Hitbox", toggleHitboxes, false)
 
--- ═══════════ SMART ANTI-FLING (FIXED) ═══════════
+-- ═══════════ SMART ANTI-FLING (CYCLE MODE — REALISTIC) ═══════════
 task.spawn(function()
     local currentHum  = nil
+    local fallCount   = 0
+    local maxFalls    = math.random(3, 4)  -- how many flings happen "normally" first
     local isImmune    = false
     local immuneStart = 0
-    local lastFling   = 0
-    local fallCount   = 0
+    local immuneDur   = 2.5
+    local lastFall    = 0
 
-    local maxFalls        = 1     -- 1 = first real fling triggers immunity
-    local IMMUNITY_DUR    = 6     -- seconds immune before cycle resets
+    -- how long between counted flings (prevents one fling counting 10x)
+    local DETECT_COOLDOWN = 0.4
 
-    local ANGULAR_CAP     = 20
-    local HORIZ_CAP       = 60
-    local VERT_UP_CAP     = 150
-    local FLING_HORIZ     = 80
-    local FLING_VERT_UP   = 200
-    local FLING_ANGULAR   = 35
+    -- detection thresholds (must exceed these to count as a fling)
+    local FLING_HORIZ   = 65
+    local FLING_VERT    = 120
+    local FLING_ANGULAR = 25
+
+    -- caps while immune (realistic, not zeroed)
+    local CAP_HORIZ   = 55
+    local CAP_VERT    = 100
+    local CAP_ANGULAR = 15
 
     RunService.Heartbeat:Connect(function()
         if not getgenv().smartAntiFlingEnabled then
             currentHum = nil
             isImmune   = false
             fallCount  = 0
+            maxFalls   = math.random(3, 4)
             return
         end
 
@@ -221,62 +227,74 @@ task.spawn(function()
         local hum  = char and char:FindFirstChildOfClass("Humanoid")
         if not hrp or not hum or hum.Health <= 0 then return end
 
+        -- reset on respawn
         if hum ~= currentHum then
             currentHum = hum
             fallCount  = 0
+            maxFalls   = math.random(3, 4)
             isImmune   = false
         end
 
         local now = tick()
 
-        if isImmune and (now - immuneStart > IMMUNITY_DUR) then
+        -- immunity window expired → back to normal cycle
+        if isImmune and (now - immuneStart > immuneDur) then
             isImmune  = false
             fallCount = 0
+            maxFalls  = math.random(3, 4)
         end
 
-        local lv = hrp.AssemblyLinearVelocity
-        local av = hrp.AssemblyAngularVelocity
-        local horiz = Vector3.new(lv.X, 0, lv.Z).Magnitude
-
+        local lv     = hrp.AssemblyLinearVelocity
+        local av     = hrp.AssemblyAngularVelocity
+        local horiz  = Vector3.new(lv.X, 0, lv.Z).Magnitude
+        local state  = hum:GetState()
         local walkMax = math.max((hum.WalkSpeed or 16) * 2, 35)
-        local isFlinging =
+
+        local detectByVelocity =
             horiz > math.max(walkMax, FLING_HORIZ)
-            or lv.Y > FLING_VERT_UP
+            or lv.Y > FLING_VERT
             or av.Magnitude > FLING_ANGULAR
 
-        if isFlinging and not isImmune and (now - lastFling > 0.4) then
-            lastFling = now
+        local detectByState =
+            state == Enum.HumanoidStateType.Ragdoll
+            or state == Enum.HumanoidStateType.FallingDown
+            or state == Enum.HumanoidStateType.Physics
+
+        local isFlinging = detectByVelocity or detectByState
+
+        -- COUNT the fling only if we're not already immune
+        if isFlinging and not isImmune and (now - lastFall > DETECT_COOLDOWN) then
+            lastFall = now
             fallCount = fallCount + 1
-            if fallCount >= maxFalls then
+
+            -- once we've passed "maxFalls" real flings, the NEXT one triggers immunity
+            if fallCount > maxFalls then
                 isImmune    = true
                 immuneStart = now
+                immuneDur   = 2 + math.random()  -- 2.0 to 3.0 sec
             end
         end
 
+        -- while immune, dampen — do not zero, do not force state
         if isImmune then
-            if av.Magnitude > ANGULAR_CAP then
-                hrp.AssemblyAngularVelocity = av.Unit * ANGULAR_CAP
+            if av.Magnitude > CAP_ANGULAR then
+                hrp.AssemblyAngularVelocity = av.Unit * CAP_ANGULAR
             end
 
-            if horiz > HORIZ_CAP then
-                local capped = Vector3.new(lv.X, 0, lv.Z).Unit * HORIZ_CAP
+            if horiz > CAP_HORIZ then
+                local capped = Vector3.new(lv.X, 0, lv.Z).Unit * CAP_HORIZ
                 hrp.AssemblyLinearVelocity = Vector3.new(capped.X, lv.Y, capped.Z)
             end
 
-            if lv.Y > VERT_UP_CAP then
+            if lv.Y > CAP_VERT then
                 local cur = hrp.AssemblyLinearVelocity
-                hrp.AssemblyLinearVelocity = Vector3.new(cur.X, VERT_UP_CAP, cur.Z)
+                hrp.AssemblyLinearVelocity = Vector3.new(cur.X, CAP_VERT, cur.Z)
             end
 
+            -- only unstick on ground, never in air
             if hum.FloorMaterial ~= Enum.Material.Air then
                 if hum.PlatformStand then hum.PlatformStand = false end
-                if hum.Sit then hum.Sit = false end
-                local state = hum:GetState()
-                if state == Enum.HumanoidStateType.Ragdoll
-                   or state == Enum.HumanoidStateType.FallingDown
-                   or state == Enum.HumanoidStateType.Physics then
-                    pcall(function() hum:ChangeState(Enum.HumanoidStateType.Running) end)
-                end
+                if hum.Sit           then hum.Sit           = false end
             end
         end
     end)
