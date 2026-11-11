@@ -15,6 +15,8 @@ end
 
 -- Flags & State
 getgenv().smartAntiFlingEnabled = false
+local antiFlingEnabled = false
+local antiFlingDebug   = false
 
 local function isEnemy(player)
     if player == localPlayer then return false end
@@ -47,7 +49,7 @@ local ok, err = pcall(function()
 end)
 if not ok or not uiLibrary then error("Failed to load UI library") end
 
-uiLibrary:SetTitle("Hitblox (v6.5 Physics Fix)")
+uiLibrary:SetTitle("Hitblox (v6.6 Final)")
 uiLibrary:SetIcon("http://www.roblox.com/asset/?id=91738788645337")
 uiLibrary:SetTheme("HighContrast")
 
@@ -190,116 +192,166 @@ end)
 
 uiLibrary:AddToggle("Expand Hitbox", toggleHitboxes, false)
 
--- ═══════════ SMOOTH ANTI-FLING (v6.5 — PHYSICS FIXED) ═══════════
-task.spawn(function()
-    local fallCount  = 0
-    local maxFalls   = math.random(2, 3)   -- 2-3 normal flings, then immunity
-    local isImmune   = false
-    local immuneStart = 0
-    local lastFall   = 0
-    local currentHum = nil
+-- ═══════════ SMART ANTI-FLING v6.6 (PRE-PHYSICS CLAMP + CYCLE) ═══════════
+local af_fallCount    = 0
+local af_maxFalls     = math.random(3, 4)
+local af_isImmune     = false
+local af_immuneStart  = 0
+local af_immuneDur    = 2.5
+local af_lastFling    = 0
+local af_safePos      = nil
+local af_currentHum   = nil
 
-    local IMMUNITY_DURATION = 2.5   -- short, glitch-like, not hack-like
+local function af_setRestrictions(hum, restrict)
+    pcall(function()
+        hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll,      not restrict)
+        hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown,  not restrict)
+        hum:SetStateEnabled(Enum.HumanoidStateType.Physics,      not restrict)
+        hum:SetStateEnabled(Enum.HumanoidStateType.PlatformStanding, not restrict)
+    end)
+end
 
-    -- caps applied ONLY while immune (never zeroed — that's what made it "solid rock")
-    local CAP_HORIZ   = 45
-    local CAP_VERT_UP = 90
-    local CAP_ANGULAR = 12
+local function af_reset(hum, reason)
+    af_isImmune    = false
+    af_fallCount   = 0
+    af_maxFalls    = math.random(3, 4)
+    af_safePos     = nil
+    if hum then af_setRestrictions(hum, false) end
+    if antiFlingDebug and reason then print("[AntiFling] reset — "..reason) end
+end
 
-    RunService.Heartbeat:Connect(function()
-        if not getgenv().smartAntiFlingEnabled then
-            fallCount  = 0
-            isImmune   = false
-            currentHum = nil
-            return
+RunService.Stepped:Connect(function()
+    if not antiFlingEnabled then
+        if af_isImmune or af_fallCount > 0 then
+            local char = localPlayer.Character
+            local hum  = char and char:FindFirstChildOfClass("Humanoid")
+            af_reset(hum, "toggle off")
         end
+        af_currentHum = nil
+        return
+    end
 
-        local char = localPlayer.Character
-        local hrp  = char and char:FindFirstChild("HumanoidRootPart")
-        local hum  = char and char:FindFirstChildOfClass("Humanoid")
-        if not hrp or not hum or hum.Health <= 0 then return end
+    local char = localPlayer.Character
+    local hrp  = char and (char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("UpperTorso"))
+    local hum  = char and char:FindFirstChildOfClass("Humanoid")
+    if not hrp or not hum or hum.Health <= 0 then return end
 
-        -- respawn reset
-        if hum ~= currentHum then
-            currentHum = hum
-            fallCount  = 0
-            maxFalls   = math.random(2, 3)
-            isImmune   = false
-        end
+    -- respawn tracking (do NOT reset fallCount — keep progress)
+    if hum ~= af_currentHum then
+        af_currentHum = hum
+        af_safePos    = hrp.Position
+    end
 
-        local now = tick()
+    local now  = tick()
+    local pos  = hrp.Position
+    local vel  = hrp.AssemblyLinearVelocity
+    local av   = hrp.AssemblyAngularVelocity
+    local state = hum:GetState()
 
-        -- immunity expiry → back to normal cycle
-        if isImmune and (now - immuneStart > IMMUNITY_DURATION) then
-            isImmune  = false
-            fallCount = 0
-            maxFalls  = math.random(2, 3)
-            print("[AntiFling] immunity expired — back to normal")
-        end
+    -- ── expiry ──
+    if af_isImmune and (now - af_immuneStart > af_immuneDur) then
+        af_reset(hum, "immunity expired — re-arm after "..af_maxFalls.." hits")
+    end
 
-        local state = hum:GetState()
-        local isRagdolled = (state == Enum.HumanoidStateType.Ragdoll
+    -- ── detection (only when NOT immune) ──
+    if not af_isImmune then
+        local ragdolled = (state == Enum.HumanoidStateType.Ragdoll
             or state == Enum.HumanoidStateType.FallingDown
             or state == Enum.HumanoidStateType.Physics
-            or hum.PlatformStand)
+            or hum.PlatformStand == true)
 
-        -- count normal flings (only when not immune)
-        if isRagdolled and not isImmune and (now - lastFall > 1.0) then
-            lastFall = now
-            fallCount = fallCount + 1
-            print(string.format("[AntiFling] fall %d/%d — %s", fallCount, maxFalls, tostring(state)))
-            if fallCount >= maxFalls then
-                isImmune    = true
-                immuneStart = now
-                print("[AntiFling] IMMUNITY ACTIVE (2.5s)")
+        local hugeVel = vel.Magnitude > 90
+        local jumped  = af_safePos and (pos - af_safePos).Magnitude > 15
+
+        if (ragdolled or hugeVel or jumped) and (now - af_lastFling > 1.2) then
+            af_lastFling = now
+            af_fallCount = af_fallCount + 1
+            if antiFlingDebug then
+                print(string.format("[AntiFling] HIT %d/%d  (state=%s vel=%.0f jump=%.0f)",
+                    af_fallCount, af_maxFalls, tostring(state), vel.Magnitude,
+                    af_safePos and (pos - af_safePos).Magnitude or 0))
+            end
+
+            if af_fallCount >= af_maxFalls then
+                af_isImmune    = true
+                af_immuneStart = now
+                af_safePos     = pos
+                af_setRestrictions(hum, true)
+                if antiFlingDebug then print("[AntiFling] >>> IMMUNITY ACTIVE for "..af_immuneDur.."s") end
+            else
+                af_safePos = pos
+            end
+        else
+            -- still walking normally — keep safe anchor current
+            if (not af_safePos) or (pos - af_safePos).Magnitude < 10 then
+                af_safePos = pos
             end
         end
+        return
+    end
 
-        -- during immunity: cap physics + fast wake-up, but only when it won't fight the game
-        if isImmune then
-            local av = hrp.AssemblyAngularVelocity
-            local lv = hrp.AssemblyLinearVelocity
+    -- ═══ IMMUNE ═══
+    -- 1. clamp velocity BEFORE physics integrates it
+    local horiz = Vector3.new(vel.X, 0, vel.Z)
+    local hMag  = horiz.Magnitude
+    local nx, ny, nz = vel.X, vel.Y, vel.Z
+    if hMag > 25 then
+        nx = horiz.Unit.X * 25
+        nz = horiz.Unit.Z * 25
+    end
+    if ny >  55 then ny =  55 end
+    if ny < -120 then ny = -120 end
+    hrp.AssemblyLinearVelocity = Vector3.new(nx, ny, nz)
 
-            -- cap spin
-            if av.Magnitude > CAP_ANGULAR then
-                hrp.AssemblyAngularVelocity = av.Unit * CAP_ANGULAR
-            end
+    if av.Magnitude > 5 then
+        hrp.AssemblyAngularVelocity = av.Unit * 5
+    end
 
-            -- cap horizontal (no fly) — CAP, not zero
-            local horiz = Vector3.new(lv.X, 0, lv.Z).Magnitude
-            if horiz > CAP_HORIZ then
-                local capped = Vector3.new(lv.X, 0, lv.Z).Unit * CAP_HORIZ
-                hrp.AssemblyLinearVelocity = Vector3.new(capped.X, lv.Y, capped.Z)
-            end
+    -- 2. position snap-back (catches CFrame-teleport flings)
+    if af_safePos then
+        local delta = (pos - af_safePos).Magnitude
+        if delta > 12 then
+            local dir    = (pos - af_safePos).Unit
+            local target = af_safePos + dir * 6
+            hrp.CFrame = CFrame.new(target, target + hrp.CFrame.LookVector)
+            if antiFlingDebug then print(string.format("[AntiFling] snap-back (delta %.0f)", delta)) end
+        elseif delta < 6 then
+            af_safePos = pos
+        end
+    end
 
-            -- cap upward (no sky launch)
-            if lv.Y > CAP_VERT_UP then
-                local cur = hrp.AssemblyLinearVelocity
-                hrp.AssemblyLinearVelocity = Vector3.new(cur.X, CAP_VERT_UP, cur.Z)
-            end
+    -- 3. force out of any ragdoll / stuck state
+    if hum.PlatformStand then hum.PlatformStand = false end
+    if hum.Sit           then hum.Sit           = false end
 
-            -- fast wake-up: ONLY when grounded AND stuck in a ragdoll state
-            -- (never in air — that caused the "bounce back" and "won't wake up")
+    if state == Enum.HumanoidStateType.Ragdoll
+       or state == Enum.HumanoidStateType.FallingDown
+       or state == Enum.HumanoidStateType.Physics then
+        pcall(function()
             if hum.FloorMaterial ~= Enum.Material.Air then
-                if hum.PlatformStand then hum.PlatformStand = false end
-                if hum.Sit           then hum.Sit           = false end
-
-                if state == Enum.HumanoidStateType.Ragdoll
-                   or state == Enum.HumanoidStateType.FallingDown
-                   or state == Enum.HumanoidStateType.Physics then
-                    pcall(function()
-                        hum:ChangeState(Enum.HumanoidStateType.Running)
-                    end)
-                end
+                hum:ChangeState(Enum.HumanoidStateType.Running)
+            else
+                hum:ChangeState(Enum.HumanoidStateType.Freefall)
             end
-        end
-    end)
+        end)
+    end
 end)
 
 uiLibrary:AddToggle("Smart Anti-Fling (Cycle Mode)", function(enabled)
+    antiFlingEnabled = enabled
     getgenv().smartAntiFlingEnabled = enabled
-    print("[AntiFling] " .. (enabled and "ENABLED" or "DISABLED"))
+    print("[AntiFling] "..(enabled and "ENABLED" or "DISABLED"))
+    if not enabled then
+        local char = localPlayer.Character
+        local hum  = char and char:FindFirstChildOfClass("Humanoid")
+        af_reset(hum, "toggle off")
+    end
     playSound("rbxassetid://12221976")
+end, false)
+
+uiLibrary:AddToggle("Anti-Fling Debug (Console)", function(enabled)
+    antiFlingDebug = enabled
+    print("[AntiFling] debug "..(enabled and "ON" or "OFF"))
 end, false)
 
 -- Toggle button (UI Hide/Show)
