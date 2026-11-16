@@ -1,4 +1,4 @@
--- ═══════════ UNODOCALL'S HUB — FINAL (KEY SYSTEM + FIXED UI) ═══════════
+-- ═══════════ UNODOCALL'S HUB — FINAL (ANTIKICK POPUP) ═══════════
 local StarterGui = game:GetService("StarterGui")
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -665,7 +665,7 @@ local killAuraToggle = addToggleRow(combatPage, "Kill Aura", function(enabled)
     if enabled then if not FlingRE or not SpawnerRE then findRemotes() end; if SpawnerRE then pcall(function() SpawnerRE:FireServer() end) end end
 end)
 
--- 🛑 A-FLING MOVED TO COMBAT CATEGORY
+-- A-FLING
 addToggleRow(combatPage, "A-Fling (Anti-Fling)", function(enabled) 
     if enabled and not keyVerified then notify("Locked", "Enter key first", 3); return end
     toggleAntiFling(enabled) 
@@ -755,7 +755,10 @@ addToggleRow(movePage, "Infinite Jump", function(enabled) getgenv().infiniteJump
 -- MISC
 local miscPage = addPage("Misc")
 addButtonRow(miscPage, "AntiLag (Potato Graphics)", function() applyPotatoGraphics() end)
-addButtonRow(miscPage, "AntiKick", function() loadstring(game:HttpGet("https://raw.githubusercontent.com/OBFhm5650lol/AntickLol/refs/heads/main/Anticklol"))() end)
+addButtonRow(miscPage, "AntiKick", function() 
+    notify("AntiKick Enabled", "Shield active: Blocks false kicks for speed, fly, or server lag.", 5)
+    loadstring(game:HttpGet("https://raw.githubusercontent.com/OBFhm5650lol/AntickLol/refs/heads/main/Anticklol"))() 
+end)
 
 -- SURPRISE
 local surprisePage = addPage("Surprise")
