@@ -1,4 +1,4 @@
--- ═══════════ UNODOCALL'S HUB — FINAL v6 (RESPONSIVE UI) ═══════════
+-- ═══════════ UNODOCALL'S HUB — FINAL v6 (RESPONSIVE UI FIXED) ═══════════
 -- Arena: (-760, 11.5, 2040)
 
 local StarterGui = game:GetService("StarterGui")
@@ -931,26 +931,30 @@ sideBtns["Main"].stroke.Transparency = 0
 
 -- ═══════════ RESPONSIVE STANDALONE TOGGLES ═══════════
 local StandaloneGui = Instance.new("ScreenGui")
-StandaloneGui.Name = "Standalone_Toggles"; StandaloneGui.ResetOnSpawn = false; StandaloneGui.DisplayOrder = 999; StandaloneGui.IgnoreGuiInset = true
+StandaloneGui.Name = "Standalone_Toggles"
+StandaloneGui.ResetOnSpawn = false
+StandaloneGui.DisplayOrder = 999
+-- 🛑 SET TO FALSE SO IT DOES NOT OVERLAP THE TOP ROBLOX MENU
+StandaloneGui.IgnoreGuiInset = false 
 pcall(function() StandaloneGui.Parent = CoreGui end)
 if not StandaloneGui.Parent then StandaloneGui.Parent = lp:WaitForChild("PlayerGui") end
 
-local pillContainer = Instance.new("Frame")
-pillContainer.Size = UDim2.new(0, 100, 0, 100)
-pillContainer.Position = UDim2.new(0, 15, 0.35, 0) 
-pillContainer.BackgroundTransparency = 1
-pillContainer.Parent = StandaloneGui
+local toggleFrame = Instance.new("Frame")
+toggleFrame.Size = UDim2.new(0, 100, 0, 80)
+toggleFrame.Position = UDim2.new(0, 15, 0, 150) -- Fixed position you wanted
+toggleFrame.BackgroundTransparency = 1
+toggleFrame.Parent = StandaloneGui
 
 local pcl = Instance.new("UIListLayout")
 pcl.Padding = UDim.new(0, 8)
 pcl.SortOrder = Enum.SortOrder.LayoutOrder
-pcl.Parent = pillContainer
+pcl.Parent = toggleFrame
 
 local pcs = Instance.new("UIScale")
-pcs.Parent = pillContainer
+pcs.Parent = toggleFrame
 local function updateScale()
-    if workspace.CurrentCamera.ViewportSize.X < 800 then
-        pcs.Scale = 0.8 
+    if workspace.CurrentCamera.ViewportSize.X < 600 then
+        pcs.Scale = 0.8 -- Shrinks for mobile to avoid blocking joystick
     else
         pcs.Scale = 1 
     end
@@ -967,7 +971,7 @@ local function createPill(name, icon)
     btn.Text = ""
     btn.AutoButtonColor = false
     btn.Active = true
-    btn.Parent = pillContainer
+    btn.Parent = toggleFrame
     
     local grad = Instance.new("UIGradient")
     grad.Color = ColorSequence.new({
