@@ -1,4 +1,4 @@
--- ═══════════ UNODOCALL'S HUB — SIMPLIFIED & FIXED ═══════════
+-- ═══════════ UNODOCALL'S HUB — FINAL (KEY SYSTEM + FIXED UI) ═══════════
 local StarterGui = game:GetService("StarterGui")
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -53,8 +53,25 @@ local function findRemotes()
 end
 findRemotes()
 
--- 🛑 BYPASSED FOR EASY TESTING
-local keyVerified = true 
+-- ═══════════ KEY SYSTEM ═══════════
+local KEY_LINK = "https://discord.gg/AUqu8YvHRw"
+local VALID_KEYS = { "UNDC-7KPX-9M2Q" }
+local KEY_FILE = "undocalls_key.txt"
+local keyVerified = false
+
+local function checkKey(input)
+    for _, k in ipairs(VALID_KEYS) do
+        if input == k then return true end
+    end
+    return false
+end
+
+pcall(function()
+    if isfile(KEY_FILE) then
+        local savedKey = readfile(KEY_FILE)
+        if savedKey and checkKey(savedKey) then keyVerified = true end
+    end
+end)
 
 local hitboxSize = 10
 local hitboxTransparency = 0.9
@@ -109,6 +126,35 @@ Players.PlayerAdded:Connect(function(plr)
     end
 end)
 
+local function applyPotatoGraphics()
+    pcall(function()
+        Lighting.GlobalShadows = false
+        Lighting.ShadowSoftness = 0
+        Lighting.EnvironmentDiffuseScale = 0
+        Lighting.EnvironmentSpecularScale = 0
+        Lighting.FogEnd = 1000000
+        Lighting.Brightness = 1
+    end)
+    pcall(function()
+        local terrain = workspace:FindFirstChildOfClass("Terrain")
+        if terrain then
+            terrain.WaterWaveSize = 0
+            terrain.WaterWaveSpeed = 0
+            terrain.WaterReflectance = 0
+            terrain.WaterTransparency = 1
+        end
+    end)
+    local killed = 0
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj:IsA("ParticleEmitter") or obj:IsA("Smoke") or obj:IsA("Fire") or obj:IsA("Sparkles") or obj:IsA("Beam") or obj:IsA("Trail") then
+            pcall(function() obj.Enabled = false end)
+            killed = killed + 1
+        end
+    end
+    pcall(function() settings().Rendering.QualityLevel = 1 end)
+    notify("AntiLag", "Potato mode ON · " .. killed .. " effects off", 3)
+end
+
 -- Invisible Logic
 local invisibleEnabled = false
 local invisibleParts = {}
@@ -160,52 +206,6 @@ local function stopInvisible()
     if char then
         local h = char:FindFirstChildOfClass("Humanoid")
         if h then pcall(function() h.CameraOffset = Vector3.zero end) end
-    end
-end
-
--- A-Fling Logic
-local noFallEnabled = false
-local noFallConnection
-
-local function executeACR(char, hum, hrp)
-    if not (char and hum and hrp) then return end
-    pcall(function()
-        hrp.Anchored = true; hrp.AssemblyLinearVelocity = Vector3.zero; hrp.AssemblyAngularVelocity = Vector3.zero
-        hum.PlatformStand = false; hum.Sit = false
-        local currentPos = hrp.Position; local lookVector = hrp.CFrame.LookVector
-        local flatLook = Vector3.new(lookVector.X, 0, lookVector.Z).Unit
-        if flatLook.Magnitude < 0.1 then flatLook = Vector3.new(0, 0, -1) end
-        local newPos = currentPos + Vector3.new(0, 2.5, 0)
-        hrp.CFrame = CFrame.new(newPos, newPos + flatLook)
-        hum:ChangeState(Enum.HumanoidStateType.Freefall)
-        task.wait(0.05); hrp.Anchored = false; hum.Jump = true
-    end)
-end
-
-local function toggleAntiFling(enabled)
-    noFallEnabled = enabled
-    local char = lp.Character; local hum = char and char:FindFirstChildOfClass("Humanoid"); local hrp = char and char:FindFirstChild("HumanoidRootPart")
-    if enabled then
-        executeACR(char, hum, hrp)
-        pcall(function() hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false); hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false) end)
-        if not noFallConnection then
-            noFallConnection = RunService.Heartbeat:Connect(function()
-                pcall(function()
-                    local c = lp.Character; if not c then return end
-                    local r = c:FindFirstChild("HumanoidRootPart"); local h = c:FindFirstChildOfClass("Humanoid")
-                    if r and h then
-                        local lv = r.AssemblyLinearVelocity; local av = r.AssemblyAngularVelocity
-                        local hs = Vector3.new(lv.X, 0, lv.Z).Magnitude
-                        if hs > 150 or av.Magnitude > 75 then executeACR(c, h, r) end
-                        if h.PlatformStand then h.PlatformStand = false; h.Jump = true end
-                    end
-                end)
-            end)
-        end
-    else
-        if noFallConnection then noFallConnection:Disconnect(); noFallConnection = nil end
-        pcall(function() hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, true); hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, true) end)
-        executeACR(char, hum, hrp)
     end
 end
 
@@ -278,6 +278,52 @@ local function stopFlyV3()
         pcall(function() hum:ChangeState(Enum.HumanoidStateType.RunningNoPhysics); hum.PlatformStand = false end)
     end
     pcall(function() if char:FindFirstChild("Animate") then char.Animate.Disabled = false end end)
+end
+
+-- A-Fling Logic
+local noFallEnabled = false
+local noFallConnection
+
+local function executeACR(char, hum, hrp)
+    if not (char and hum and hrp) then return end
+    pcall(function()
+        hrp.Anchored = true; hrp.AssemblyLinearVelocity = Vector3.zero; hrp.AssemblyAngularVelocity = Vector3.zero
+        hum.PlatformStand = false; hum.Sit = false
+        local currentPos = hrp.Position; local lookVector = hrp.CFrame.LookVector
+        local flatLook = Vector3.new(lookVector.X, 0, lookVector.Z).Unit
+        if flatLook.Magnitude < 0.1 then flatLook = Vector3.new(0, 0, -1) end
+        local newPos = currentPos + Vector3.new(0, 2.5, 0)
+        hrp.CFrame = CFrame.new(newPos, newPos + flatLook)
+        hum:ChangeState(Enum.HumanoidStateType.Freefall)
+        task.wait(0.05); hrp.Anchored = false; hum.Jump = true
+    end)
+end
+
+local function toggleAntiFling(enabled)
+    noFallEnabled = enabled
+    local char = lp.Character; local hum = char and char:FindFirstChildOfClass("Humanoid"); local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    if enabled then
+        executeACR(char, hum, hrp)
+        pcall(function() hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false); hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false) end)
+        if not noFallConnection then
+            noFallConnection = RunService.Heartbeat:Connect(function()
+                pcall(function()
+                    local c = lp.Character; if not c then return end
+                    local r = c:FindFirstChild("HumanoidRootPart"); local h = c:FindFirstChildOfClass("Humanoid")
+                    if r and h then
+                        local lv = r.AssemblyLinearVelocity; local av = r.AssemblyAngularVelocity
+                        local hs = Vector3.new(lv.X, 0, lv.Z).Magnitude
+                        if hs > 150 or av.Magnitude > 75 then executeACR(c, h, r) end
+                        if h.PlatformStand then h.PlatformStand = false; h.Jump = true end
+                    end
+                end)
+            end)
+        end
+    else
+        if noFallConnection then noFallConnection:Disconnect(); noFallConnection = nil end
+        pcall(function() hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, true); hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, true) end)
+        executeACR(char, hum, hrp)
+    end
 end
 
 -- Hitbox Logic
@@ -407,7 +453,7 @@ mainPanel.BackgroundColor3 = COL.bg
 mainPanel.BackgroundTransparency = 0.25
 mainPanel.BorderSizePixel = 0
 mainPanel.ClipsDescendants = true
-mainPanel.Visible = true
+mainPanel.Visible = true 
 mainPanel.Active = true
 mainPanel.Parent = ScreenGui
 
@@ -419,13 +465,36 @@ header.Size = UDim2.new(1, 0, 0, 50); header.BackgroundColor3 = COL.sidebar; hea
 local hC = Instance.new("UICorner"); hC.CornerRadius = UDim.new(0, 12); hC.Parent = header
 
 local hTitle = Instance.new("TextLabel")
-hTitle.Size = UDim2.new(0, 300, 1, 0); hTitle.Position = UDim2.new(0, 14, 0, 0); hTitle.BackgroundTransparency = 1; hTitle.Text = "Undocall's Hub"
+hTitle.Size = UDim2.new(0, 300, 1, 0); hTitle.Position = UDim2.new(0, 14, 0, 0); hTitle.BackgroundTransparency = 1; hTitle.Text = "Undocall's Hub (v6)"
 hTitle.TextColor3 = COL.text; hTitle.Font = Enum.Font.GothamBold; hTitle.TextSize = 16; hTitle.TextXAlignment = Enum.TextXAlignment.Left; hTitle.Parent = header
 
 local closeBtn = Instance.new("TextButton")
 closeBtn.Size = UDim2.new(0, 28, 0, 28); closeBtn.Position = UDim2.new(1, -36, 0, 11); closeBtn.BackgroundColor3 = Color3.fromRGB(160, 40, 40); closeBtn.BackgroundTransparency = 0.2
 closeBtn.Text = "X"; closeBtn.TextColor3 = Color3.fromRGB(255, 255, 255); closeBtn.Font = Enum.Font.GothamBold; closeBtn.TextSize = 12; closeBtn.Parent = header
 local cbC = Instance.new("UICorner"); cbC.CornerRadius = UDim.new(0, 6); cbC.Parent = closeBtn
+
+local reopenBtn = Instance.new("TextButton")
+reopenBtn.Size = UDim2.new(0, 40, 0, 40); reopenBtn.Position = UDim2.new(0.5, -20, 0.5, -20)
+reopenBtn.BackgroundColor3 = COL.accent; reopenBtn.BackgroundTransparency = 0.85
+reopenBtn.Text = "◇"; reopenBtn.TextColor3 = Color3.fromRGB(255, 255, 255); reopenBtn.TextTransparency = 0.5; reopenBtn.Font = Enum.Font.Gotham; reopenBtn.TextSize = 18; reopenBtn.AutoButtonColor = false; reopenBtn.Visible = false; reopenBtn.Parent = ScreenGui
+local rbC = Instance.new("UICorner"); rbC.CornerRadius = UDim.new(1, 0); rbC.Parent = reopenBtn
+
+local hasBeenClosed = false
+local function syncReopenToPanel()
+    local px, psz, rsz = mainPanel.Position, mainPanel.Size, reopenBtn.Size
+    reopenBtn.Position = UDim2.new(px.X.Scale, px.X.Offset + (psz.X.Offset - rsz.X.Offset)/2, px.Y.Scale, px.Y.Offset + (psz.Y.Offset - rsz.Y.Offset)/2)
+end
+
+local function openPanel()
+    reopenBtn.Visible = false
+    mainPanel.Visible = true
+end
+local function closePanel()
+    mainPanel.Visible = false; syncReopenToPanel(); hasBeenClosed = true; reopenBtn.Visible = true
+end
+
+closeBtn.MouseButton1Click:Connect(closePanel)
+reopenBtn.MouseButton1Click:Connect(openPanel)
 
 local sidebar = Instance.new("Frame")
 sidebar.Size = UDim2.new(0, 110, 1, -50); sidebar.Position = UDim2.new(0, 0, 0, 50)
@@ -545,22 +614,62 @@ local function addButtonRow(page, name, callback)
     btn.MouseButton1Click:Connect(function() playSound("rbxassetid://12221976"); if callback then callback() end end)
 end
 
--- BUILD PAGES
+-- KEY PAGE
+local keyPage = addPage("Key")
+local keyInput = Instance.new("TextBox")
+keyInput.Size = UDim2.new(1, 0, 0, 40); keyInput.BackgroundColor3 = COL.card; keyInput.BackgroundTransparency = 0.1; keyInput.BorderSizePixel = 0
+keyInput.PlaceholderText = "Key"; keyInput.Text = ""; keyInput.TextColor3 = COL.text; keyInput.Font = Enum.Font.GothamMedium; keyInput.TextSize = 13; keyInput.ClearTextOnFocus = false; keyInput.Visible = not keyVerified; keyInput.Parent = keyPage
+local kiC = Instance.new("UICorner"); kiC.CornerRadius = UDim.new(0, 8); kiC.Parent = keyInput
+local kiS = Instance.new("UIStroke"); kiS.Color = COL.border; kiS.Thickness = 1; kiS.Transparency = 0.5; kiS.Parent = keyInput
+
+local getKeyBtn = Instance.new("TextButton")
+getKeyBtn.Size = UDim2.new(1, 0, 0, 36); getKeyBtn.BackgroundColor3 = COL.btnBg; getKeyBtn.BackgroundTransparency = 0.1; getKeyBtn.BorderSizePixel = 0
+getKeyBtn.Text = "Get Key"; getKeyBtn.TextColor3 = Color3.fromRGB(114, 137, 218); getKeyBtn.Font = Enum.Font.GothamBold; getKeyBtn.TextSize = 13; getKeyBtn.AutoButtonColor = false; getKeyBtn.Visible = not keyVerified; getKeyBtn.Parent = keyPage
+local gkC = Instance.new("UICorner"); gkC.CornerRadius = UDim.new(0, 8); gkC.Parent = getKeyBtn
+local gkS = Instance.new("UIStroke"); gkS.Color = COL.border; gkS.Thickness = 1; gkS.Transparency = 0.5; gkS.Parent = getKeyBtn
+
+local keyActivatedL = Instance.new("TextLabel")
+keyActivatedL.Size = UDim2.new(1, 0, 0, 44); keyActivatedL.BackgroundColor3 = COL.card; keyActivatedL.BackgroundTransparency = 0.1
+keyActivatedL.Text = "✓  Key Activated"; keyActivatedL.TextColor3 = COL.green; keyActivatedL.Font = Enum.Font.GothamBold; keyActivatedL.TextSize = 14; keyActivatedL.Visible = keyVerified; keyActivatedL.Parent = keyPage
+local kac = Instance.new("UICorner"); kac.CornerRadius = UDim.new(0, 8); kac.Parent = keyActivatedL
+local kas = Instance.new("UIStroke"); kas.Color = COL.green; kas.Thickness = 1; kas.Transparency = 0.5; kas.Parent = keyActivatedL
+
+getKeyBtn.MouseButton1Click:Connect(function() pcall(function() setclipboard(KEY_LINK) end); playSound("rbxassetid://12221976"); notify("Discord", "Link copied!", 3) end)
+keyInput.FocusLost:Connect(function(enterPressed)
+    if enterPressed then
+        if checkKey(keyInput.Text) then
+            keyVerified = true; pcall(function() writefile(KEY_FILE, keyInput.Text) end)
+            keyInput.Text = ""; keyInput.Visible = false; getKeyBtn.Visible = false; keyActivatedL.Visible = true
+            playSound("rbxassetid://12221976"); notify("Unlocked", "OP features active", 3)
+        else
+            keyInput.Text = ""; playSound("rbxassetid://12221976"); notify("Invalid key", "Get key from Discord", 3)
+        end
+    end
+end)
+
+-- MAIN
 local mainPage = addPage("Main")
 addValueRow(mainPage, "Hitbox", 10, 1, 50, 5, function(val) hitboxSize = val; if hitboxEnabled then applyHitboxesToAllPlayers() end end)
 addToggleRow(mainPage, "Enable Hitbox", function(enabled) toggleHitboxes(enabled) end)
 
+-- COMBAT
 local combatPage = addPage("Combat")
 addButtonRow(combatPage, "Force Teleport to Arena", function()
+    if not keyVerified then notify("Locked", "Enter key first", 3); return end
     local ok, msg = teleportToArena(true); if ok then notify("Teleported", "At arena", 2) else notify("Failed", msg, 3) end
 end)
 
 local killAuraToggle = addToggleRow(combatPage, "Kill Aura", function(enabled)
+    if enabled and not keyVerified then notify("Locked", "Enter key first", 3); killAuraToggle.set(false); return end
     killAuraOn = enabled
     if enabled then if not FlingRE or not SpawnerRE then findRemotes() end; if SpawnerRE then pcall(function() SpawnerRE:FireServer() end) end end
 end)
 
-addToggleRow(combatPage, "A-Fling (Anti-Fling)", function(enabled) toggleAntiFling(enabled) end)
+-- 🛑 A-FLING MOVED TO COMBAT CATEGORY
+addToggleRow(combatPage, "A-Fling (Anti-Fling)", function(enabled) 
+    if enabled and not keyVerified then notify("Locked", "Enter key first", 3); return end
+    toggleAntiFling(enabled) 
+end)
 
 local targetFrame = Instance.new("Frame")
 targetFrame.Size = UDim2.new(1, 0, 0, 70); targetFrame.BackgroundColor3 = COL.card; targetFrame.BackgroundTransparency = 0.1; targetFrame.BorderSizePixel = 0; targetFrame.Parent = combatPage
@@ -601,6 +710,7 @@ searchBox.FocusLost:Connect(function(enterPressed)
 end)
 
 targetLockToggle = addToggleRow(combatPage, "Enable Target Lock", function(enabled)
+    if enabled and not keyVerified then notify("Locked", "Enter key first", 3); targetLockToggle.set(false); return end
     if enabled and (targetName == "" or not targetName) then notify("Error", "Type a name first!", 2); targetLockToggle.set(false); return end
     targetLockOn = enabled
     if not enabled then
@@ -614,6 +724,7 @@ targetLockToggle = addToggleRow(combatPage, "Enable Target Lock", function(enabl
     end
 end)
 
+-- MOVEMENT
 local movePage = addPage("Movement")
 addToggleRow(movePage, "Fly V3", function(enabled) if enabled then startFlyV3() else stopFlyV3() end end)
 addValueRow(movePage, "Speed", 1, 1, 10, 1, function(val) flyV3Speed = val; if flyV3Active then stopFlyV3(); task.wait(0.1); startFlyV3() end end)
@@ -641,6 +752,138 @@ UserInputService.InputEnded:Connect(function(input) if input.UserInputType == En
 addToggleRow(movePage, "Super Power", function(enabled) getgenv().superPowerEnabled = enabled; if not enabled then local char = lp.Character; local hum = char and char:FindFirstChildOfClass("Humanoid"); if hum then hum.WalkSpeed = 16; hum.JumpPower = 50 end end end)
 addToggleRow(movePage, "Infinite Jump", function(enabled) getgenv().infiniteJumpEnabled = enabled end)
 
+-- MISC
+local miscPage = addPage("Misc")
+addButtonRow(miscPage, "AntiLag (Potato Graphics)", function() applyPotatoGraphics() end)
+addButtonRow(miscPage, "AntiKick", function() loadstring(game:HttpGet("https://raw.githubusercontent.com/OBFhm5650lol/AntickLol/refs/heads/main/Anticklol"))() end)
+
+-- SURPRISE
+local surprisePage = addPage("Surprise")
+local claimBtn = Instance.new("TextButton")
+claimBtn.Size = UDim2.new(1, 0, 0, 40); claimBtn.BackgroundColor3 = COL.accent; claimBtn.TextColor3 = COL.text; claimBtn.Font = Enum.Font.GothamBold; claimBtn.TextSize = 14; claimBtn.Text = "FREE JESTER CLAIM"; claimBtn.Parent = surprisePage
+Instance.new("UICorner", claimBtn).CornerRadius = UDim.new(0, 8)
+local cbS = Instance.new("UIStroke", claimBtn); cbS.Color = COL.border; cbS.Parent = claimBtn
+
+local statusLbl = Instance.new("TextLabel", surprisePage)
+statusLbl.Size = UDim2.new(1, 0, 0, 20); statusLbl.BackgroundTransparency = 1; statusLbl.Text = ""; statusLbl.TextColor3 = COL.textDim; statusLbl.Font = Enum.Font.Gotham; statusLbl.TextSize = 12; statusLbl.TextWrapped = true; statusLbl.Visible = false; statusLbl.Parent = surprisePage
+
+claimBtn.MouseButton1Click:Connect(function()
+    if not keyVerified then notify("Locked", "Enter key first", 3); return end
+    local char = lp.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+    if hrp.Position.Z > -1000 then
+        statusLbl.Visible = true; statusLbl.Text = "❌ You must be inside the maze!"; statusLbl.TextColor3 = COL.red
+        task.delay(3, function() statusLbl.Visible = false end)
+        return
+    end
+    statusLbl.Visible = true; claimBtn.Text = "CLAIMING..."; claimBtn.BackgroundColor3 = Color3.fromRGB(200, 150, 0)
+    statusLbl.Text = "Teleporting to exit..."; statusLbl.TextColor3 = Color3.fromRGB(200, 150, 0)
+    task.spawn(function()
+        local success, err = pcall(function()
+            hrp.CFrame = CFrame.new(-6.76, 3.20, -3741.35)
+            task.wait(1)
+            local SkinGiverRE, RespawnRE, MazeSkinsInfo
+            for _, obj in ipairs(game:GetDescendants()) do
+                if obj.Name == "SkinGiverRemoteEvent" and obj:IsA("RemoteEvent") then SkinGiverRE = obj end
+                if obj.Name == "RespawnRemoteEvent" and obj:IsA("RemoteEvent") then RespawnRE = obj end
+                if obj.Name == "UnlockableMazeSkinsInfo" and obj:IsA("ModuleScript") then MazeSkinsInfo = obj end
+            end
+            if not (SkinGiverRE and RespawnRE and MazeSkinsInfo) then error("Remotes or Modules not found in game.") end
+            statusLbl.Text = "Claiming skins..."
+            local s, data = pcall(require, MazeSkinsInfo)
+            if s and data then
+                for mazeName, skins in pairs(data) do
+                    for skinId, _ in pairs(skins) do
+                        pcall(function() SkinGiverRE:FireServer(skinId, false, "maze") end)
+                    end
+                end
+            end
+            task.wait(1); statusLbl.Text = "Returning to lobby..."
+            pcall(function() RespawnRE:FireServer() end)
+        end)
+        if success then
+            statusLbl.Text = "✅ Skins claimed! (Can re-claim on alts)"; statusLbl.TextColor3 = COL.green; claimBtn.Text = "FREE JESTER CLAIM"; claimBtn.BackgroundColor3 = COL.accent; notify("Surprise", "Claim sequence finished.", 4)
+            task.delay(4, function() statusLbl.Visible = false end)
+        else
+            statusLbl.Text = "❌ Error: " .. tostring(err); statusLbl.TextColor3 = COL.red; claimBtn.Text = "FREE JESTER CLAIM"; claimBtn.BackgroundColor3 = COL.accent
+            task.delay(4, function() statusLbl.Visible = false end)
+        end
+    end)
+end)
+
+local bullRunning = false
+local bullToggle
+local bullStatus = Instance.new("TextLabel", surprisePage)
+bullStatus.Size = UDim2.new(1, 0, 0, 20); bullStatus.BackgroundTransparency = 1; bullStatus.Text = ""; bullStatus.TextColor3 = COL.textDim; bullStatus.Font = Enum.Font.Gotham; bullStatus.TextSize = 11; bullStatus.Visible = false; bullStatus.Parent = surprisePage
+
+bullToggle = addToggleRow(surprisePage, "Auto Claim Skullyblaze", function(enabled)
+    if enabled then
+        if bullRunning then return end
+        if not keyVerified then notify("Locked", "Enter key first", 3); bullToggle.set(false); return end
+        bullRunning = true; bullStatus.Visible = true; bullStatus.Text = "Starting Trial..."; bullStatus.TextColor3 = Color3.fromRGB(200, 150, 0)
+        task.spawn(function()
+            local Event = ReplicatedStorage:WaitForChild("RiderTrial"):WaitForChild("Event")
+            local SAFE_COORD = Vector3.new(492.5, 594.2, 11342.0)
+            local FINAL_COORD = Vector3.new(527.4, 585.2, 11370.1)
+            local char = lp.Character
+            local hrp = char and char:FindFirstChild("HumanoidRootPart")
+            local hum = char and char:FindFirstChildOfClass("Humanoid")
+            if not hrp or not hum then bullRunning = false bullToggle.set(false) return end
+            local godConnection
+            godConnection = RunService.Stepped:Connect(function()
+                if bullRunning and hum and hum.Parent then
+                    hum.MaxHealth = math.huge; hum.Health = math.huge
+                    for _, part in ipairs(char:GetDescendants()) do if part:IsA("BasePart") then part.CanCollide = false end end
+                end
+            end)
+            pcall(function() Event:FireServer("Leave") end)
+            task.wait(1)
+            pcall(function() Event:FireServer("Ride", true) end)
+            local map = nil; local t = 0
+            while not map and t < 15 and bullRunning do map = workspace:FindFirstChild("RiderTrialMap") or ReplicatedStorage:FindFirstChild("RiderTrialMap"); task.wait(1); t = t + 1 end
+            if map and hrp and bullRunning then
+                local rings = CollectionService:GetTagged("ChainAnchor")
+                table.sort(rings, function(a, b) return a.Position.Y > b.Position.Y end)
+                for i, ring in ipairs(rings) do if not bullRunning then break end hrp.CFrame = ring.CFrame + Vector3.new(0, 5, 0); pcall(function() Event:FireServer("Throw", i, ring.Position) end); task.wait(0.1) end
+                if bullRunning then
+                    local path = map.Stage2.Ride.Path
+                    local points = {}; local p = 0
+                    while path:FindFirstChild("P" .. p) do table.insert(points, path["P" .. p].Position); p = p + 1 end
+                    for index, pos in ipairs(points) do if not bullRunning then break end hrp.CFrame = CFrame.new(pos + Vector3.new(0, 5, 0)); pcall(function() Event:FireServer("Throw", index, pos) end); task.wait(0.2) end
+                    pcall(function() Event:FireServer("Ride", false) end)
+                end
+                if bullRunning then
+                    local stage3 = map.Stage3; local centerPart = stage3 and stage3:FindFirstChildWhichIsA("BasePart")
+                    if centerPart then hrp.CFrame = centerPart.CFrame + Vector3.new(0, 5, 0); pcall(function() Event:FireServer("Pit", "Start") end) end
+                    task.wait(1); hrp.CFrame = CFrame.new(SAFE_COORD); hrp.AssemblyLinearVelocity = Vector3.zero
+                    local waitTime = 187; local startTime = os.clock()
+                    while bullRunning do
+                        local elapsed = os.clock() - startTime; local remaining = waitTime - elapsed
+                        if remaining <= 0 then break end
+                        bullStatus.Text = "Safe Wait: " .. string.format("%.1f", remaining) .. "s"
+                        if (hrp.Position - SAFE_COORD).Magnitude > 5 then hrp.CFrame = CFrame.new(SAFE_COORD); hrp.AssemblyLinearVelocity = Vector3.zero end
+                        task.wait(0.1) 
+                    end
+                    if bullRunning then
+                        bullStatus.Text = "Teleporting to bull coord..."; hrp.CFrame = CFrame.new(FINAL_COORD); hrp.AssemblyLinearVelocity = Vector3.zero; task.wait(3.5)
+                        bullStatus.Text = "Claiming bull..."; pcall(function() Event:FireServer("Pit", "Win") end); task.wait(0.5)
+                        for _, obj in ipairs(game:GetDescendants()) do
+                            if obj.Name == "SkinGiverRemoteEvent" then pcall(function() obj:FireServer("Gamepass3", true) end); pcall(function() obj:FireServer("Gamepass3", 1, true) end) end
+                            if obj.Name == "EquipSkinRemoteFunction" then pcall(function() obj:InvokeServer("Gamepass3", true) end); pcall(function() obj:InvokeServer("Gamepass3") end) end
+                        end
+                        task.wait(1); pcall(function() Event:FireServer("Leave") end); bullStatus.Text = "Done! Check skins."; bullStatus.TextColor3 = COL.green; notify("Bull Trial", "Auto Claim Skullyblaze Finished", 5); task.delay(4, function() bullStatus.Visible = false end)
+                    end
+                end
+            end
+            if godConnection then godConnection:Disconnect() end
+            bullRunning = false; bullToggle.set(false)
+        end)
+    else
+        bullRunning = false; bullStatus.Text = "Cancelled."; bullStatus.TextColor3 = COL.red; task.delay(2, function() bullStatus.Visible = false end)
+    end
+end)
+
 pages["Main"].Visible = true
 sideBtns["Main"].btn.BackgroundColor3 = COL.accent
 sideBtns["Main"].btn.BackgroundTransparency = 0.1
@@ -649,10 +892,10 @@ sideBtns["Main"].btn.Font = Enum.Font.GothamBold
 sideBtns["Main"].stroke.Color = COL.accentLight
 sideBtns["Main"].stroke.Transparency = 0
 
--- 🛑 DRAGGABLE INVISIBLE FLOATING BUTTON
+-- 🛑 FLOATING INVISIBLE BUTTON (DRAGGABLE)
 local invisBtn = Instance.new("TextButton")
 invisBtn.Size = UDim2.new(0, 60, 0, 60)
-invisBtn.Position = UDim2.new(0, 15, 0.4, 0) -- Top-left side
+invisBtn.Position = UDim2.new(0, 15, 0.4, 0)
 invisBtn.BackgroundColor3 = Color3.fromRGB(25, 20, 35)
 invisBtn.BackgroundTransparency = 0.5
 invisBtn.Text = "👻"
@@ -712,41 +955,9 @@ UserInputService.InputChanged:Connect(function(input)
     end
 end)
 
--- Close button hides panel
-closeBtn.MouseButton1Click:Connect(function()
-    mainPanel.Visible = false
-end)
-
--- Misc: Reopen Button if they close it
-local reopenBtn = Instance.new("TextButton")
-reopenBtn.Size = UDim2.new(0, 40, 0, 40)
-reopenBtn.Position = UDim2.new(0.5, -20, 0.5, -20)
-reopenBtn.BackgroundColor3 = COL.accent
-reopenBtn.BackgroundTransparency = 0.7
-reopenBtn.Text = "◇"
-reopenBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-reopenBtn.TextTransparency = 0.5
-reopenBtn.Font = Enum.Font.GothamBold
-reopenBtn.Visible = false
-reopenBtn.Parent = ScreenGui
-Instance.new("UICorner", reopenBtn).CornerRadius = UDim.new(1, 0)
-
-local function syncReopenToPanel()
-    local px, psz, rsz = mainPanel.Position, mainPanel.Size, reopenBtn.Size
-    reopenBtn.Position = UDim2.new(px.X.Scale, px.X.Offset + (psz.X.Offset - rsz.X.Offset)/2, px.Y.Scale, px.Y.Offset + (psz.Y.Offset - rsz.Y.Offset)/2)
-end
-
-local hasBeenClosed = false
-closeBtn.MouseButton1Click:Connect(function()
-    mainPanel.Visible = false; syncReopenToPanel(); hasBeenClosed = true; reopenBtn.Visible = true
-end)
-reopenBtn.MouseButton1Click:Connect(function()
-    reopenBtn.Visible = false; mainPanel.Visible = true
-end)
-
 -- Main Loop
 RunService.Heartbeat:Connect(function()
-    if not killAuraOn or not FlingRE then return end
+    if not killAuraOn or not keyVerified or not FlingRE then return end
     local now = tick()
     if now - lastAuraHit < auraDelay then return end
     lastAuraHit = now
@@ -801,4 +1012,4 @@ UserInputService.JumpRequest:Connect(function()
     end
 end)
 
-print("Undocall's Hub Loaded.")
+print("Undocall's Hub v6 loaded.")
