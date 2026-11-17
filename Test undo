@@ -895,8 +895,11 @@ sideBtns["Main"].btn.Font = Enum.Font.GothamBold
 sideBtns["Main"].stroke.Color = COL.accentLight
 sideBtns["Main"].stroke.Transparency = 0
 
--- 👻 FLOATING INVISIBLE BUTTON (LOCKED BY DEFAULT; MANUAL MOVE MODE)
+-- 👻 FLOATING INVISIBLE BUTTON + SEPARATE POSITION ADJUST PANEL
+-- The ghost button is locked during gameplay. Open the small adjust panel
+-- to temporarily unlock dragging, then close the panel to lock it again.
 local invisBtn = Instance.new("TextButton")
+invisBtn.Name = "InvisibleButton"
 invisBtn.Size = UDim2.new(0, 60, 0, 60)
 invisBtn.Position = UDim2.new(0, 15, 0.4, 0)
 invisBtn.BackgroundColor3 = Color3.fromRGB(25, 20, 35)
@@ -906,48 +909,109 @@ invisBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 invisBtn.Font = Enum.Font.GothamBold
 invisBtn.TextSize = 24
 invisBtn.Parent = ScreenGui
+invisBtn.Active = true
 Instance.new("UICorner", invisBtn).CornerRadius = UDim.new(1, 0)
 local invStroke = Instance.new("UIStroke", invisBtn)
 invStroke.Color = Color3.fromRGB(255, 75, 75)
 invStroke.Thickness = 2
 
--- A separate handle prevents accidental movement during gameplay.
--- Tap the handle to unlock/relock; drag the ghost only while unlocked.
-local moveMode = false
-local moveHandle = Instance.new("TextButton")
-moveHandle.Name = "MoveHandle"
-moveHandle.Size = UDim2.new(0, 23, 0, 23)
-moveHandle.Position = UDim2.new(1, -5, 0, -5)
-moveHandle.AnchorPoint = Vector2.new(1, 0)
-moveHandle.BackgroundColor3 = Color3.fromRGB(55, 145, 255)
-moveHandle.TextColor3 = Color3.new(1, 1, 1)
-moveHandle.Text = "✥"
-moveHandle.TextSize = 16
-moveHandle.Font = Enum.Font.GothamBold
-moveHandle.Visible = false
-moveHandle.ZIndex = invisBtn.ZIndex + 1
-moveHandle.Parent = invisBtn
-Instance.new("UICorner", moveHandle).CornerRadius = UDim.new(1, 0)
+-- Small independent adjust toggle; it does not move with the ghost button.
+local adjustToggle = Instance.new("TextButton")
+adjustToggle.Name = "InvisibleButtonAdjustToggle"
+adjustToggle.Size = UDim2.new(0, 34, 0, 34)
+adjustToggle.Position = UDim2.new(0, 82, 0.4, 13)
+adjustToggle.BackgroundColor3 = Color3.fromRGB(35, 40, 55)
+adjustToggle.BackgroundTransparency = 0.12
+adjustToggle.Text = "⚙"
+adjustToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
+adjustToggle.Font = Enum.Font.GothamBold
+adjustToggle.TextSize = 19
+adjustToggle.Parent = ScreenGui
+adjustToggle.ZIndex = 20
+Instance.new("UICorner", adjustToggle).CornerRadius = UDim.new(1, 0)
+local adjustToggleStroke = Instance.new("UIStroke", adjustToggle)
+adjustToggleStroke.Color = Color3.fromRGB(90, 160, 255)
+adjustToggleStroke.Thickness = 1.5
+
+-- Compact panel: while visible, the ghost can be dragged. Closing it locks the ghost.
+local adjustPanel = Instance.new("Frame")
+adjustPanel.Name = "InvisibleButtonAdjustPanel"
+adjustPanel.Size = UDim2.new(0, 190, 0, 62)
+adjustPanel.Position = UDim2.new(0, 15, 0.4, 68)
+adjustPanel.BackgroundColor3 = Color3.fromRGB(25, 20, 35)
+adjustPanel.BackgroundTransparency = 0.08
+adjustPanel.BorderSizePixel = 0
+adjustPanel.Visible = false
+adjustPanel.ZIndex = 19
+adjustPanel.Parent = ScreenGui
+Instance.new("UICorner", adjustPanel).CornerRadius = UDim.new(0, 10)
+local panelStroke = Instance.new("UIStroke", adjustPanel)
+panelStroke.Color = Color3.fromRGB(90, 160, 255)
+panelStroke.Thickness = 1.5
+
+local adjustTitle = Instance.new("TextLabel")
+adjustTitle.BackgroundTransparency = 1
+adjustTitle.Position = UDim2.new(0, 10, 0, 5)
+adjustTitle.Size = UDim2.new(1, -48, 0, 22)
+adjustTitle.Font = Enum.Font.GothamBold
+adjustTitle.Text = "MOVE GHOST BUTTON"
+adjustTitle.TextSize = 12
+adjustTitle.TextXAlignment = Enum.TextXAlignment.Left
+adjustTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
+adjustTitle.ZIndex = 20
+adjustTitle.Parent = adjustPanel
+
+local adjustHint = Instance.new("TextLabel")
+adjustHint.BackgroundTransparency = 1
+adjustHint.Position = UDim2.new(0, 10, 0, 29)
+adjustHint.Size = UDim2.new(1, -18, 0, 22)
+adjustHint.Font = Enum.Font.Gotham
+adjustHint.Text = "Drag 👻, then close this panel to lock"
+adjustHint.TextSize = 10
+adjustHint.TextXAlignment = Enum.TextXAlignment.Left
+adjustHint.TextColor3 = Color3.fromRGB(205, 205, 215)
+adjustHint.ZIndex = 20
+adjustHint.Parent = adjustPanel
+
+local closeAdjust = Instance.new("TextButton")
+closeAdjust.Size = UDim2.new(0, 26, 0, 26)
+closeAdjust.Position = UDim2.new(1, -31, 0, 4)
+closeAdjust.BackgroundColor3 = Color3.fromRGB(160, 55, 65)
+closeAdjust.Text = "×"
+closeAdjust.TextColor3 = Color3.new(1, 1, 1)
+closeAdjust.Font = Enum.Font.GothamBold
+closeAdjust.TextSize = 19
+closeAdjust.ZIndex = 21
+closeAdjust.Parent = adjustPanel
+Instance.new("UICorner", closeAdjust).CornerRadius = UDim.new(1, 0)
 
 local draggingInv = false
 local dragInputInv = nil
 local dragStartInv = nil
 local startPosInv = nil
+local adjustOpen = false
 
-local function setMoveMode(enabled)
-    moveMode = enabled
-    moveHandle.Visible = enabled
-    moveHandle.BackgroundColor3 = enabled and Color3.fromRGB(255, 170, 55) or Color3.fromRGB(55, 145, 255)
-    invStroke.Color = enabled and Color3.fromRGB(255, 190, 65) or (invisibleEnabled and Color3.fromRGB(75, 255, 75) or Color3.fromRGB(255, 75, 75))
-    notify("Invisible Button", enabled and "Move mode ON — drag the ghost, then tap ✥ to lock." or "Move mode OFF — button locked.", 3)
+local function setAdjustOpen(open)
+    adjustOpen = open
+    adjustPanel.Visible = open
+    adjustToggle.BackgroundColor3 = open and Color3.fromRGB(55, 115, 190) or Color3.fromRGB(35, 40, 55)
+    adjustHint.Text = open and "Drag 👻, then close this panel to lock" or ""
+    if not open then
+        draggingInv = false
+        dragInputInv = nil
+    end
 end
 
-moveHandle.Activated:Connect(function()
-    setMoveMode(not moveMode)
+adjustToggle.Activated:Connect(function()
+    setAdjustOpen(not adjustOpen)
+end)
+closeAdjust.Activated:Connect(function()
+    setAdjustOpen(false)
 end)
 
+-- Only allow dragging while the separate adjustment panel is open.
 invisBtn.InputBegan:Connect(function(input)
-    if not moveMode then return end
+    if not adjustOpen then return end
     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
         draggingInv = true
         dragInputInv = input
@@ -957,17 +1021,17 @@ invisBtn.InputBegan:Connect(function(input)
 end)
 
 UserInputService.InputChanged:Connect(function(input)
-    if not moveMode or not draggingInv then return end
+    if not adjustOpen or not draggingInv then return end
     local mouseMove = input.UserInputType == Enum.UserInputType.MouseMovement
         and dragInputInv and dragInputInv.UserInputType == Enum.UserInputType.MouseButton1
     local touchMove = input == dragInputInv
     if mouseMove or touchMove then
         local delta = input.Position - dragStartInv
-        local newX = startPosInv.X.Offset + delta.X
-        local newY = startPosInv.Y.Offset + delta.Y
         local camera = workspace.CurrentCamera
         local viewport = camera and camera.ViewportSize
         local buttonSize = invisBtn.AbsoluteSize
+        local newX = startPosInv.X.Offset + delta.X
+        local newY = startPosInv.Y.Offset + delta.Y
         if viewport then
             newX = math.clamp(newX, 0, math.max(0, viewport.X - buttonSize.X))
             newY = math.clamp(newY, 0, math.max(0, viewport.Y - buttonSize.Y))
@@ -983,9 +1047,9 @@ UserInputService.InputEnded:Connect(function(input)
     end
 end)
 
--- Normal tap toggles invisibility; taps do nothing while reposition mode is active.
+-- Normal tap toggles invisibility only while adjustment mode is closed.
 invisBtn.Activated:Connect(function()
-    if moveMode then return end
+    if adjustOpen then return end
     if invisibleEnabled then
         stopInvisible()
         invStroke.Color = Color3.fromRGB(255, 75, 75)
