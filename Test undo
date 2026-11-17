@@ -993,7 +993,7 @@ Instance.new("UICorner", closeAdjust).CornerRadius = UDim.new(1, 0)
 local draggingInv = false
 local dragInputInv = nil
 local dragStartInv = nil
-local startPosInv = nil
+local startAbsPosInv = nil
 local adjustOpen = false
 
 local function setAdjustOpen(open)
@@ -1004,6 +1004,7 @@ local function setAdjustOpen(open)
     if not open then
         draggingInv = false
         dragInputInv = nil
+        startAbsPosInv = nil
     end
 end
 
@@ -1021,7 +1022,9 @@ invisBtn.InputBegan:Connect(function(input)
         draggingInv = true
         dragInputInv = input
         dragStartInv = input.Position
-        startPosInv = invisBtn.Position
+        -- Capture the button's actual screen position once. Do not reset its
+        -- origin during movement; that avoids snapping/jumping to the top.
+        startAbsPosInv = invisBtn.AbsolutePosition
     end
 end)
 
@@ -1035,16 +1038,15 @@ UserInputService.InputChanged:Connect(function(input)
         local camera = workspace.CurrentCamera
         local viewport = camera and camera.ViewportSize
         local buttonSize = invisBtn.AbsoluteSize
-        -- Work entirely in absolute screen pixels. Mixing Scale and Offset here
-        -- prevented the button from reaching the top edge on some screens.
-        local newX = invisBtn.AbsolutePosition.X + delta.X
-        local newY = invisBtn.AbsolutePosition.Y + delta.Y
+        -- Calculate from the original position captured at touch/mouse-down.
+        -- ScreenGui.IgnoreGuiInset is true, so these are matching coordinates.
+        local newX = startAbsPosInv.X + delta.X
+        local newY = startAbsPosInv.Y + delta.Y
         if viewport then
             newX = math.clamp(newX, 0, math.max(0, viewport.X - buttonSize.X))
             newY = math.clamp(newY, 0, math.max(0, viewport.Y - buttonSize.Y))
         end
         invisBtn.Position = UDim2.fromOffset(newX, newY)
-        dragStartInv = input.Position
     end
 end)
 
@@ -1052,6 +1054,7 @@ UserInputService.InputEnded:Connect(function(input)
     if draggingInv and (input == dragInputInv or input.UserInputType == Enum.UserInputType.MouseButton1) then
         draggingInv = false
         dragInputInv = nil
+        startAbsPosInv = nil
     end
 end)
 
