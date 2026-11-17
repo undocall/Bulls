@@ -918,14 +918,16 @@ invStroke.Thickness = 2
 -- Small independent adjust toggle; it does not move with the ghost button.
 local adjustToggle = Instance.new("TextButton")
 adjustToggle.Name = "InvisibleButtonAdjustToggle"
-adjustToggle.Size = UDim2.new(0, 34, 0, 34)
-adjustToggle.Position = UDim2.new(0, 82, 0.4, 13)
+adjustToggle.Size = UDim2.new(0, 30, 0, 30)
+-- Kept in the upper-right clear area, away from the movement/attack controls.
+adjustToggle.AnchorPoint = Vector2.new(0.5, 0.5)
+adjustToggle.Position = UDim2.new(0.93, 0, 0.20, 0)
 adjustToggle.BackgroundColor3 = Color3.fromRGB(35, 40, 55)
 adjustToggle.BackgroundTransparency = 0.12
 adjustToggle.Text = "⚙"
 adjustToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
 adjustToggle.Font = Enum.Font.GothamBold
-adjustToggle.TextSize = 19
+adjustToggle.TextSize = 17
 adjustToggle.Parent = ScreenGui
 adjustToggle.ZIndex = 20
 Instance.new("UICorner", adjustToggle).CornerRadius = UDim.new(1, 0)
@@ -936,8 +938,9 @@ adjustToggleStroke.Thickness = 1.5
 -- Compact panel: while visible, the ghost can be dragged. Closing it locks the ghost.
 local adjustPanel = Instance.new("Frame")
 adjustPanel.Name = "InvisibleButtonAdjustPanel"
-adjustPanel.Size = UDim2.new(0, 190, 0, 62)
-adjustPanel.Position = UDim2.new(0, 15, 0.4, 68)
+adjustPanel.Size = UDim2.new(0, 174, 0, 54)
+adjustPanel.AnchorPoint = Vector2.new(1, 0)
+adjustPanel.Position = UDim2.new(0.98, 0, 0.25, 0)
 adjustPanel.BackgroundColor3 = Color3.fromRGB(25, 20, 35)
 adjustPanel.BackgroundTransparency = 0.08
 adjustPanel.BorderSizePixel = 0
@@ -951,11 +954,12 @@ panelStroke.Thickness = 1.5
 
 local adjustTitle = Instance.new("TextLabel")
 adjustTitle.BackgroundTransparency = 1
-adjustTitle.Position = UDim2.new(0, 10, 0, 5)
-adjustTitle.Size = UDim2.new(1, -48, 0, 22)
+adjustTitle.Position = UDim2.new(0, 9, 0, 4)
+adjustTitle.Size = UDim2.new(1, -43, 0, 20)
 adjustTitle.Font = Enum.Font.GothamBold
-adjustTitle.Text = "MOVE GHOST BUTTON"
-adjustTitle.TextSize = 12
+adjustTitle.Text = "Adjust Invisible Button"
+adjustTitle.TextSize = 11
+adjustTitle.TextTruncate = Enum.TextTruncate.AtEnd
 adjustTitle.TextXAlignment = Enum.TextXAlignment.Left
 adjustTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
 adjustTitle.ZIndex = 20
@@ -963,24 +967,25 @@ adjustTitle.Parent = adjustPanel
 
 local adjustHint = Instance.new("TextLabel")
 adjustHint.BackgroundTransparency = 1
-adjustHint.Position = UDim2.new(0, 10, 0, 29)
-adjustHint.Size = UDim2.new(1, -18, 0, 22)
+adjustHint.Position = UDim2.new(0, 9, 0, 26)
+adjustHint.Size = UDim2.new(1, -16, 0, 19)
 adjustHint.Font = Enum.Font.Gotham
-adjustHint.Text = "Drag 👻, then close this panel to lock"
-adjustHint.TextSize = 10
+adjustHint.Text = "Drag 👻 to move • Close to lock"
+adjustHint.TextSize = 9
+adjustHint.TextTruncate = Enum.TextTruncate.AtEnd
 adjustHint.TextXAlignment = Enum.TextXAlignment.Left
 adjustHint.TextColor3 = Color3.fromRGB(205, 205, 215)
 adjustHint.ZIndex = 20
 adjustHint.Parent = adjustPanel
 
 local closeAdjust = Instance.new("TextButton")
-closeAdjust.Size = UDim2.new(0, 26, 0, 26)
-closeAdjust.Position = UDim2.new(1, -31, 0, 4)
+closeAdjust.Size = UDim2.new(0, 22, 0, 22)
+closeAdjust.Position = UDim2.new(1, -26, 0, 4)
 closeAdjust.BackgroundColor3 = Color3.fromRGB(160, 55, 65)
 closeAdjust.Text = "×"
 closeAdjust.TextColor3 = Color3.new(1, 1, 1)
 closeAdjust.Font = Enum.Font.GothamBold
-closeAdjust.TextSize = 19
+closeAdjust.TextSize = 17
 closeAdjust.ZIndex = 21
 closeAdjust.Parent = adjustPanel
 Instance.new("UICorner", closeAdjust).CornerRadius = UDim.new(1, 0)
@@ -995,7 +1000,7 @@ local function setAdjustOpen(open)
     adjustOpen = open
     adjustPanel.Visible = open
     adjustToggle.BackgroundColor3 = open and Color3.fromRGB(55, 115, 190) or Color3.fromRGB(35, 40, 55)
-    adjustHint.Text = open and "Drag 👻, then close this panel to lock" or ""
+    adjustHint.Text = "Drag 👻 to move • Close to lock"
     if not open then
         draggingInv = false
         dragInputInv = nil
@@ -1030,13 +1035,16 @@ UserInputService.InputChanged:Connect(function(input)
         local camera = workspace.CurrentCamera
         local viewport = camera and camera.ViewportSize
         local buttonSize = invisBtn.AbsoluteSize
-        local newX = startPosInv.X.Offset + delta.X
-        local newY = startPosInv.Y.Offset + delta.Y
+        -- Work entirely in absolute screen pixels. Mixing Scale and Offset here
+        -- prevented the button from reaching the top edge on some screens.
+        local newX = invisBtn.AbsolutePosition.X + delta.X
+        local newY = invisBtn.AbsolutePosition.Y + delta.Y
         if viewport then
             newX = math.clamp(newX, 0, math.max(0, viewport.X - buttonSize.X))
             newY = math.clamp(newY, 0, math.max(0, viewport.Y - buttonSize.Y))
         end
-        invisBtn.Position = UDim2.new(startPosInv.X.Scale, newX, startPosInv.Y.Scale, newY)
+        invisBtn.Position = UDim2.fromOffset(newX, newY)
+        dragStartInv = input.Position
     end
 end)
 
