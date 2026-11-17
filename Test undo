@@ -959,26 +959,49 @@ UserInputService.InputChanged:Connect(function(input)
 end)
 
 -- Main Loop
+-- Kill Aura — randomized timing, nearest enemy, humanoid check
+local lastAuraHit = 0
+local auraMinDelay = 0.55
+local auraMaxDelay = 1.15
+
+local function getAuraDelay()
+    return auraMinDelay + math.random() * (auraMaxDelay - auraMinDelay)
+end
+
+local nextAuraFire = tick() + getAuraDelay()
+
 RunService.Heartbeat:Connect(function()
     if not killAuraOn or not keyVerified or not FlingRE then return end
     local now = tick()
-    if now - lastAuraHit < auraDelay then return end
-    lastAuraHit = now
+    if now < nextAuraFire then return end
+
     local myChar = lp.Character
     local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
-    if not myRoot then return end
+    if not myRoot then
+        nextAuraFire = now + getAuraDelay()
+        return
+    end
+
     local nearest, nearestDist = nil, auraRange
     for _, p in ipairs(Players:GetPlayers()) do
-        if p ~= lp and p.Character then
+        if p ~= lp and isEnemy(p) and p.Character then
             local root = p.Character:FindFirstChild("HumanoidRootPart")
             local eHum = p.Character:FindFirstChildOfClass("Humanoid")
             if root and eHum and eHum.Health > 0 then
                 local dist = (myRoot.Position - root.Position).Magnitude
-                if dist < nearestDist then nearest = p; nearestDist = dist end
+                if dist < nearestDist then
+                    nearest = p
+                    nearestDist = dist
+                end
             end
         end
     end
-    if nearest then pcall(function() FlingRE:FireServer(nearest) end) end
+
+    if nearest then
+        pcall(function() FlingRE:FireServer(nearest) end)
+    end
+
+    nextAuraFire = now + getAuraDelay()
 end)
 
 RunService.Heartbeat:Connect(function()
