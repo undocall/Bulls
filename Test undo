@@ -673,6 +673,11 @@ local TRICK = {
     -- "remote": RespawnRemoteEvent:FireServer(), the game's own return-to-lobby (used in your hub line ~806). Untested here.
     ResetMethod = "health",
     RespawnTimeout = 8,   -- seconds, uncalibrated
+    -- Hypothesis from your Cobalt counts (Spawner 3 -> 6 across the respawn): the bull is only
+    -- created by SpawnerRemoteEvent, and in your video it fired while the character was DEAD,
+    -- so the bull existed but nobody got seated. 0 = never fire it during the respawn gap.
+    MaxSpawnerFiresWhileDead = 3,
+    SpawnerFireInterval = 0.2, -- seconds, uncalibrated
     HoldSeconds = 0.8,    -- seconds to keep forcing position and dismount after respawn, uncalibrated
 }
 local trickRunning = false
@@ -707,6 +712,7 @@ local function runKillAuraTrick()
 
     trickRunning = true
     local newCharacter, spawnConn
+    local spawnerFires, dismounts = 0, 0
     local ok, err = pcall(function()
         local returnCF = oldRoot.CFrame
         -- assumption: lobby is Z < LOBBY_MAX_Z, so from the lobby we return to ARENA_TELEPORT
@@ -730,17 +736,26 @@ local function runKillAuraTrick()
         end
 
         local deadline = os.clock() + TRICK.RespawnTimeout
-        while not newCharacter and os.clock() < deadline do task.wait() end
+        local nextFire = os.clock()
+        while not newCharacter and os.clock() < deadline do
+            if spawnerFires < TRICK.MaxSpawnerFiresWhileDead and os.clock() >= nextFire then
+                pcall(function() SpawnerRE:FireServer() end)
+                spawnerFires = spawnerFires + 1
+                nextFire = os.clock() + TRICK.SpawnerFireInterval
+            end
+            task.wait()
+        end
         if not newCharacter then error("no new character (try the other ResetMethod)") end
 
         local hum = newCharacter:WaitForChild("Humanoid", 3)
         local root = newCharacter:WaitForChild("HumanoidRootPart", 3)
         if not hum or not root then error("new character incomplete") end
 
-        -- the game seats you on a fresh bull at spawn: get off it and go back to the arena
+        -- if you did get seated on a bull anyway: get off it, then go back to the arena
         local holdUntil = os.clock() + TRICK.HoldSeconds
         while os.clock() < holdUntil and newCharacter.Parent and hum.Health > 0 do
             if hum.SeatPart then
+                dismounts = dismounts + 1
                 hum.Sit = false
                 hum:ChangeState(Enum.HumanoidStateType.Jumping)
             end
@@ -753,8 +768,9 @@ local function runKillAuraTrick()
     end)
     if spawnConn then spawnConn:Disconnect() end
     trickRunning = false
-    if ok then notify("Kill Aura Trick", "Done, aura is on", 3)
-    else notify("Trick failed", tostring(err), 4) end
+    local report = string.format("Spawner x%d while dead, dismount frames: %d", spawnerFires, dismounts)
+    if ok then notify("Kill Aura Trick", "Done · " .. report, 5)
+    else notify("Trick failed", tostring(err) .. " · " .. report, 5) end
 end
 
 addButtonRow(combatPage, "Kill Aura Trick (1-click)", function() task.spawn(runKillAuraTrick) end)
