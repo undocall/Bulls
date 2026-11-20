@@ -671,7 +671,7 @@ local function runKillAuraTrick()
     if not FlingRE or not SpawnerRE then notify("Trick", "Remotes not found", 3) return end
     
     deathBusy = true
-    notify("Trick", "Starting auto-bypass loop...", 3)
+    notify("Trick", "Starting auto-respawn loop...", 3)
     
     task.spawn(function()
         local success = false
@@ -680,30 +680,30 @@ local function runKillAuraTrick()
         while not success and attempts < 20 do
             attempts = attempts + 1
             
+            -- 1. Fire Spawner (Game teleports us to arena with bull automatically)
+            pcall(function() SpawnerRE:FireServer() end)
+            task.wait(1.5) -- Wait for the spawn animation and bull to appear
+            
             local char = lp.Character
             local hum = char and char:FindFirstChildOfClass("Humanoid")
             local hrp = char and char:FindFirstChild("HumanoidRootPart")
             
             if hum and hrp then
-                -- Fire the spawner exactly like the original toggle
-                pcall(function() SpawnerRE:FireServer() end)
-                
-                -- Teleport to the specific coordinate
+                -- 2. Lock coordinates
                 hrp.CFrame = CFrame.new(ARENA_TELEPORT)
-                
-                -- Die immediately
                 task.wait(0.5)
+                
+                -- 3. Die
                 hum.Health = 0
                 pcall(function() char:BreakJoints() end)
             end
             
-            -- Wait for respawn
+            -- 4. Wait for the game to automatically respawn us
             local newChar = lp.CharacterAdded:Wait()
-            task.wait(2) -- Wait for game to load character
+            task.wait(2) -- Wait for the game to assign bull or no bull
             
             local newHum = newChar:WaitForChild("Humanoid", 3)
             if newHum and not newHum.SeatPart then
-                -- We are NOT on a bull!
                 success = true
                 break
             end
@@ -954,7 +954,6 @@ sideBtns["Main"].stroke.Transparency = 0
 
 -- ═══════════ INVISIBLE PANEL (SMALL TOGGLE + SLIDE PANEL) ═══════════
 
--- Small static toggle button — always visible, never drags
 local invToggleBtn = Instance.new("TextButton")
 invToggleBtn.Size = UDim2.new(0, 36, 0, 36)
 invToggleBtn.Position = UDim2.new(0, 10, 0.45, 0)
@@ -971,7 +970,6 @@ local invToggleStroke = Instance.new("UIStroke", invToggleBtn)
 invToggleStroke.Color = Color3.fromRGB(180, 60, 255)
 invToggleStroke.Thickness = 1.5
 
--- Invisible panel — hidden by default
 local invPanel = Instance.new("Frame")
 invPanel.Size = UDim2.new(0, 160, 0, 90)
 invPanel.Position = UDim2.new(0, 54, 0.43, 0)
@@ -986,7 +984,6 @@ local invPanelStroke = Instance.new("UIStroke", invPanel)
 invPanelStroke.Color = Color3.fromRGB(180, 60, 255)
 invPanelStroke.Thickness = 1.5
 
--- Drag bar (header strip inside panel)
 local invDragBar = Instance.new("TextLabel")
 invDragBar.Size = UDim2.new(1, 0, 0, 20)
 invDragBar.Position = UDim2.new(0, 0, 0, 0)
@@ -1000,7 +997,6 @@ invDragBar.ZIndex = 10
 invDragBar.Parent = invPanel
 Instance.new("UICorner", invDragBar).CornerRadius = UDim.new(0, 10)
 
--- Toggle button inside panel
 local invInnerBtn = Instance.new("TextButton")
 invInnerBtn.Size = UDim2.new(1, -20, 0, 32)
 invInnerBtn.Position = UDim2.new(0, 10, 0, 28)
@@ -1014,7 +1010,6 @@ invInnerBtn.ZIndex = 10
 invInnerBtn.Parent = invPanel
 Instance.new("UICorner", invInnerBtn).CornerRadius = UDim.new(0, 8)
 
--- Status hint
 local invStatusLabel = Instance.new("TextLabel")
 invStatusLabel.Size = UDim2.new(1, -20, 0, 16)
 invStatusLabel.Position = UDim2.new(0, 10, 0, 66)
@@ -1026,12 +1021,10 @@ invStatusLabel.Font = Enum.Font.Gotham
 invStatusLabel.ZIndex = 10
 invStatusLabel.Parent = invPanel
 
--- Toggle button opens/closes panel
 invToggleBtn.MouseButton1Click:Connect(function()
     invPanel.Visible = not invPanel.Visible
 end)
 
--- Invisible on/off logic
 invInnerBtn.MouseButton1Click:Connect(function()
     if invisibleEnabled then
         stopInvisible()
@@ -1048,7 +1041,6 @@ invInnerBtn.MouseButton1Click:Connect(function()
     end
 end)
 
--- Panel drag — only fires when panel is visible
 local invPanelDragging, invPanelDragStart, invPanelStartPos
 invDragBar.InputBegan:Connect(function(input)
     if not invPanel.Visible then return end
@@ -1080,7 +1072,6 @@ UserInputService.InputChanged:Connect(function(input)
     end
 end)
 
--- Main Panel Drag (header)
 local dragging, dragStart, startPos
 header.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
@@ -1096,7 +1087,6 @@ UserInputService.InputChanged:Connect(function(input)
 end)
 
 -- Main Loop
--- Kill Aura — randomized timing, nearest enemy, humanoid check
 local lastAuraHit = 0
 local auraMinDelay = 0.55
 local auraMaxDelay = 1.15
