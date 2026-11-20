@@ -665,22 +665,19 @@ local killAuraToggle = addToggleRow(combatPage, "Kill Aura", function(enabled)
     if enabled then if not FlingRE or not SpawnerRE then findRemotes() end; if SpawnerRE then pcall(function() SpawnerRE:FireServer() end) end end
 end)
 
--- ═══════════ KILL AURA TRICK (one click) ═══════════
--- Sequence read from the recorded video: aura running, reset the character, come back
--- to the arena NOT riding while the bull follows. Why the server accepts it is unknown.
+-- ═══════════ KILL AURA: AUTO RESPAWN + ONE-CLICK TRICK ═══════════
+-- Behavior as you described it: with Kill Aura on, every death fires the game's respawn
+-- remote and puts you straight into the arena, never the lobby.
 local TRICK = {
-    -- "health": Humanoid.Health = 0, like the menu reset in your video.
-    -- "remote": RespawnRemoteEvent:FireServer(), the game's own return-to-lobby (used in your hub line ~806). Untested here.
-    ResetMethod = "health",
+    -- Order inside a respawn: SpawnerRemoteEvent x N, then RespawnRemoteEvent. Hypothesis from your
+    -- Cobalt counts (Spawner 3 -> 6 across a respawn): the bull is made while you are dead, so
+    -- nobody gets seated on it. 0 = never fire Spawner during a respawn.
+    SpawnerFiresBeforeRespawn = 1,
     RespawnTimeout = 8,   -- seconds, uncalibrated
-    -- Hypothesis from your Cobalt counts (Spawner 3 -> 6 across the respawn): the bull is only
-    -- created by SpawnerRemoteEvent, and in your video it fired while the character was DEAD,
-    -- so the bull existed but nobody got seated. 0 = never fire it during the respawn gap.
-    MaxSpawnerFiresWhileDead = 3,
-    SpawnerFireInterval = 0.2, -- seconds, uncalibrated
-    HoldSeconds = 0.8,    -- seconds to keep forcing position and dismount after respawn, uncalibrated
+    HoldSeconds = 0.8,    -- seconds to keep forcing arena position and dismount, uncalibrated
 }
-local trickRunning = false
+local respawnBusy = false
+local respawnRE = nil
 
 local function getLiveParts()
     local c = lp.Character
@@ -690,85 +687,97 @@ local function getLiveParts()
     return nil
 end
 
-local function isSanePosition(cf)
-    local p = cf.Position
-    return p.X == p.X and p.Y == p.Y and p.Z == p.Z and p.Magnitude < 1e6
-end
-
 local function findRespawnRemote()
+    if respawnRE and respawnRE.Parent then return respawnRE end
     for _, obj in ipairs(game:GetDescendants()) do
-        if obj.Name == "RespawnRemoteEvent" and obj:IsA("RemoteEvent") then return obj end
+        if obj.Name == "RespawnRemoteEvent" and obj:IsA("RemoteEvent") then
+            respawnRE = obj
+            return obj
+        end
     end
     return nil
 end
 
-local function runKillAuraTrick()
-    if trickRunning then return end
-    if not keyVerified then notify("Locked", "Enter key first", 3) return end
-    if not FlingRE or not SpawnerRE then findRemotes() end
-    if not FlingRE or not SpawnerRE then notify("Trick", "Remotes not found", 3) return end
-    local oldChar, oldHum, oldRoot = getLiveParts()
-    if not oldChar then notify("Trick", "No live character", 3) return end
-
-    trickRunning = true
-    local newCharacter, spawnConn
+-- trigger: optional function that kills the character, run after the listener is attached.
+-- Returns ok, err, spawnerFires, dismountFrames.
+local function respawnIntoArena(trigger)
     local spawnerFires, dismounts = 0, 0
+    local newCharacter
+    local conn = lp.CharacterAdded:Connect(function(c) newCharacter = c end)
     local ok, err = pcall(function()
-        local returnCF = oldRoot.CFrame
-        -- assumption: lobby is Z < LOBBY_MAX_Z, so from the lobby we return to ARENA_TELEPORT
-        if returnCF.Position.Z < LOBBY_MAX_Z then returnCF = CFrame.new(ARENA_TELEPORT) end
-        if not isSanePosition(returnCF) then error("bad return position") end
+        local remote = findRespawnRemote()
+        if not remote then error("RespawnRemoteEvent not found") end
+        if not SpawnerRE then findRemotes() end
+        if trigger then trigger() end
 
-        local respawnRE
-        if TRICK.ResetMethod == "remote" then
-            respawnRE = findRespawnRemote()
-            if not respawnRE then error("RespawnRemoteEvent not found") end
-        end
-
-        if not killAuraOn then killAuraToggle.set(true) end -- same as a normal enable
-
-        spawnConn = lp.CharacterAdded:Connect(function(c) newCharacter = c end)
-        if respawnRE then
-            respawnRE:FireServer()
-        else
-            oldHum.Health = 0
-            pcall(function() oldChar:BreakJoints() end)
-        end
-
-        local deadline = os.clock() + TRICK.RespawnTimeout
-        local nextFire = os.clock()
-        while not newCharacter and os.clock() < deadline do
-            if spawnerFires < TRICK.MaxSpawnerFiresWhileDead and os.clock() >= nextFire then
+        for _ = 1, TRICK.SpawnerFiresBeforeRespawn do
+            if SpawnerRE then
                 pcall(function() SpawnerRE:FireServer() end)
                 spawnerFires = spawnerFires + 1
-                nextFire = os.clock() + TRICK.SpawnerFireInterval
             end
-            task.wait()
         end
-        if not newCharacter then error("no new character (try the other ResetMethod)") end
+        remote:FireServer()
+
+        local deadline = os.clock() + TRICK.RespawnTimeout
+        while not newCharacter and os.clock() < deadline do task.wait() end
+        if not newCharacter then error("no new character after respawn") end
 
         local hum = newCharacter:WaitForChild("Humanoid", 3)
         local root = newCharacter:WaitForChild("HumanoidRootPart", 3)
         if not hum or not root then error("new character incomplete") end
 
-        -- if you did get seated on a bull anyway: get off it, then go back to the arena
         local holdUntil = os.clock() + TRICK.HoldSeconds
         while os.clock() < holdUntil and newCharacter.Parent and hum.Health > 0 do
-            if hum.SeatPart then
+            if hum.SeatPart then -- seated on a bull anyway: get off
                 dismounts = dismounts + 1
                 hum.Sit = false
                 hum:ChangeState(Enum.HumanoidStateType.Jumping)
             end
-            if (root.Position - returnCF.Position).Magnitude > 15 then
-                root.CFrame = returnCF
+            if (root.Position - ARENA_TELEPORT).Magnitude > 15 then
+                root.CFrame = CFrame.new(ARENA_TELEPORT)
                 root.AssemblyLinearVelocity = Vector3.zero
             end
             RunService.Heartbeat:Wait()
         end
     end)
-    if spawnConn then spawnConn:Disconnect() end
-    trickRunning = false
-    local report = string.format("Spawner x%d while dead, dismount frames: %d", spawnerFires, dismounts)
+    conn:Disconnect()
+    return ok, err, spawnerFires, dismounts
+end
+
+-- Auto respawn: every death while Kill Aura is on.
+local function watchDeaths(character)
+    local hum = character:WaitForChild("Humanoid", 10)
+    if not hum then return end
+    hum.Died:Connect(function()
+        if not killAuraOn or not keyVerified or respawnBusy then return end
+        respawnBusy = true
+        task.spawn(function()
+            local ok, err = respawnIntoArena(nil)
+            respawnBusy = false
+            if not ok then notify("Auto respawn failed", tostring(err), 4) end
+        end)
+    end)
+end
+if lp.Character then task.spawn(watchDeaths, lp.Character) end
+lp.CharacterAdded:Connect(function(c) task.spawn(watchDeaths, c) end)
+
+-- One click: aura on, die on purpose, same respawn path.
+local function runKillAuraTrick()
+    if respawnBusy then return end
+    if not keyVerified then notify("Locked", "Enter key first", 3) return end
+    if not FlingRE or not SpawnerRE then findRemotes() end
+    if not FlingRE or not SpawnerRE then notify("Trick", "Remotes not found", 3) return end
+    local oldChar, oldHum = getLiveParts()
+    if not oldChar then notify("Trick", "No live character", 3) return end
+
+    respawnBusy = true
+    if not killAuraOn then killAuraToggle.set(true) end -- same as a normal enable
+    local ok, err, fires, dismounts = respawnIntoArena(function()
+        oldHum.Health = 0
+        pcall(function() oldChar:BreakJoints() end)
+    end)
+    respawnBusy = false
+    local report = string.format("Spawner x%d, dismount frames: %d", fires, dismounts)
     if ok then notify("Kill Aura Trick", "Done · " .. report, 5)
     else notify("Trick failed", tostring(err) .. " · " .. report, 5) end
 end
