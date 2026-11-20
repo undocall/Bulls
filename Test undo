@@ -665,6 +665,100 @@ local killAuraToggle = addToggleRow(combatPage, "Kill Aura", function(enabled)
     if enabled then if not FlingRE or not SpawnerRE then findRemotes() end; if SpawnerRE then pcall(function() SpawnerRE:FireServer() end) end end
 end)
 
+-- ═══════════ KILL AURA TRICK (one click) ═══════════
+-- Sequence read from the recorded video: aura running, reset the character, come back
+-- to the arena NOT riding while the bull follows. Why the server accepts it is unknown.
+local TRICK = {
+    -- "health": Humanoid.Health = 0, like the menu reset in your video.
+    -- "remote": RespawnRemoteEvent:FireServer(), the game's own return-to-lobby (used in your hub line ~806). Untested here.
+    ResetMethod = "health",
+    RespawnTimeout = 8,   -- seconds, uncalibrated
+    HoldSeconds = 0.8,    -- seconds to keep forcing position and dismount after respawn, uncalibrated
+}
+local trickRunning = false
+
+local function getLiveParts()
+    local c = lp.Character
+    local h = c and c:FindFirstChildOfClass("Humanoid")
+    local r = c and c:FindFirstChild("HumanoidRootPart")
+    if c and h and r and h.Health > 0 then return c, h, r end
+    return nil
+end
+
+local function isSanePosition(cf)
+    local p = cf.Position
+    return p.X == p.X and p.Y == p.Y and p.Z == p.Z and p.Magnitude < 1e6
+end
+
+local function findRespawnRemote()
+    for _, obj in ipairs(game:GetDescendants()) do
+        if obj.Name == "RespawnRemoteEvent" and obj:IsA("RemoteEvent") then return obj end
+    end
+    return nil
+end
+
+local function runKillAuraTrick()
+    if trickRunning then return end
+    if not keyVerified then notify("Locked", "Enter key first", 3) return end
+    if not FlingRE or not SpawnerRE then findRemotes() end
+    if not FlingRE or not SpawnerRE then notify("Trick", "Remotes not found", 3) return end
+    local oldChar, oldHum, oldRoot = getLiveParts()
+    if not oldChar then notify("Trick", "No live character", 3) return end
+
+    trickRunning = true
+    local newCharacter, spawnConn
+    local ok, err = pcall(function()
+        local returnCF = oldRoot.CFrame
+        -- assumption: lobby is Z < LOBBY_MAX_Z, so from the lobby we return to ARENA_TELEPORT
+        if returnCF.Position.Z < LOBBY_MAX_Z then returnCF = CFrame.new(ARENA_TELEPORT) end
+        if not isSanePosition(returnCF) then error("bad return position") end
+
+        local respawnRE
+        if TRICK.ResetMethod == "remote" then
+            respawnRE = findRespawnRemote()
+            if not respawnRE then error("RespawnRemoteEvent not found") end
+        end
+
+        if not killAuraOn then killAuraToggle.set(true) end -- same as a normal enable
+
+        spawnConn = lp.CharacterAdded:Connect(function(c) newCharacter = c end)
+        if respawnRE then
+            respawnRE:FireServer()
+        else
+            oldHum.Health = 0
+            pcall(function() oldChar:BreakJoints() end)
+        end
+
+        local deadline = os.clock() + TRICK.RespawnTimeout
+        while not newCharacter and os.clock() < deadline do task.wait() end
+        if not newCharacter then error("no new character (try the other ResetMethod)") end
+
+        local hum = newCharacter:WaitForChild("Humanoid", 3)
+        local root = newCharacter:WaitForChild("HumanoidRootPart", 3)
+        if not hum or not root then error("new character incomplete") end
+
+        -- the game seats you on a fresh bull at spawn: get off it and go back to the arena
+        local holdUntil = os.clock() + TRICK.HoldSeconds
+        while os.clock() < holdUntil and newCharacter.Parent and hum.Health > 0 do
+            if hum.SeatPart then
+                hum.Sit = false
+                hum:ChangeState(Enum.HumanoidStateType.Jumping)
+            end
+            if (root.Position - returnCF.Position).Magnitude > 15 then
+                root.CFrame = returnCF
+                root.AssemblyLinearVelocity = Vector3.zero
+            end
+            RunService.Heartbeat:Wait()
+        end
+    end)
+    if spawnConn then spawnConn:Disconnect() end
+    trickRunning = false
+    if ok then notify("Kill Aura Trick", "Done, aura is on", 3)
+    else notify("Trick failed", tostring(err), 4) end
+end
+
+addButtonRow(combatPage, "Kill Aura Trick (1-click)", function() task.spawn(runKillAuraTrick) end)
+
 -- A-FLING
 addToggleRow(combatPage, "A-Fling (Anti-Fling)", function(enabled) 
     if enabled and not keyVerified then notify("Locked", "Enter key first", 3); return end
@@ -895,184 +989,135 @@ sideBtns["Main"].btn.Font = Enum.Font.GothamBold
 sideBtns["Main"].stroke.Color = COL.accentLight
 sideBtns["Main"].stroke.Transparency = 0
 
--- 👻 FLOATING INVISIBLE BUTTON + SEPARATE POSITION ADJUST PANEL
--- The ghost button is locked during gameplay. Open the small adjust panel
--- to temporarily unlock dragging, then close the panel to lock it again.
-local invisBtn = Instance.new("TextButton")
-invisBtn.Name = "InvisibleButton"
-invisBtn.Size = UDim2.new(0, 60, 0, 60)
-invisBtn.Position = UDim2.new(0, 15, 0.4, 0)
-invisBtn.BackgroundColor3 = Color3.fromRGB(25, 20, 35)
-invisBtn.BackgroundTransparency = 0.5
-invisBtn.Text = "👻"
-invisBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-invisBtn.Font = Enum.Font.GothamBold
-invisBtn.TextSize = 24
-invisBtn.Parent = ScreenGui
-invisBtn.Active = true
-Instance.new("UICorner", invisBtn).CornerRadius = UDim.new(1, 0)
-local invStroke = Instance.new("UIStroke", invisBtn)
-invStroke.Color = Color3.fromRGB(255, 75, 75)
-invStroke.Thickness = 2
+-- ═══════════ INVISIBLE PANEL (SMALL TOGGLE + SLIDE PANEL) ═══════════
 
--- Small independent adjust toggle; it does not move with the ghost button.
-local adjustToggle = Instance.new("TextButton")
-adjustToggle.Name = "InvisibleButtonAdjustToggle"
-adjustToggle.Size = UDim2.new(0, 30, 0, 30)
--- Kept in the upper-right clear area, away from the movement/attack controls.
-adjustToggle.AnchorPoint = Vector2.new(0.5, 0.5)
-adjustToggle.Position = UDim2.new(0.93, 0, 0.20, 0)
-adjustToggle.BackgroundColor3 = Color3.fromRGB(35, 40, 55)
-adjustToggle.BackgroundTransparency = 0.12
-adjustToggle.Text = "⚙"
-adjustToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
-adjustToggle.Font = Enum.Font.GothamBold
-adjustToggle.TextSize = 17
-adjustToggle.Parent = ScreenGui
-adjustToggle.ZIndex = 20
-Instance.new("UICorner", adjustToggle).CornerRadius = UDim.new(1, 0)
-local adjustToggleStroke = Instance.new("UIStroke", adjustToggle)
-adjustToggleStroke.Color = Color3.fromRGB(90, 160, 255)
-adjustToggleStroke.Thickness = 1.5
+-- Small static toggle button — always visible, never drags
+local invToggleBtn = Instance.new("TextButton")
+invToggleBtn.Size = UDim2.new(0, 36, 0, 36)
+invToggleBtn.Position = UDim2.new(0, 10, 0.45, 0)
+invToggleBtn.BackgroundColor3 = Color3.fromRGB(20, 15, 30)
+invToggleBtn.BackgroundTransparency = 0.3
+invToggleBtn.Text = "👻"
+invToggleBtn.TextSize = 18
+invToggleBtn.Font = Enum.Font.GothamBold
+invToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+invToggleBtn.ZIndex = 10
+invToggleBtn.Parent = ScreenGui
+Instance.new("UICorner", invToggleBtn).CornerRadius = UDim.new(1, 0)
+local invToggleStroke = Instance.new("UIStroke", invToggleBtn)
+invToggleStroke.Color = Color3.fromRGB(180, 60, 255)
+invToggleStroke.Thickness = 1.5
 
--- Compact panel: while visible, the ghost can be dragged. Closing it locks the ghost.
-local adjustPanel = Instance.new("Frame")
-adjustPanel.Name = "InvisibleButtonAdjustPanel"
-adjustPanel.Size = UDim2.new(0, 174, 0, 54)
-adjustPanel.AnchorPoint = Vector2.new(1, 0)
-adjustPanel.Position = UDim2.new(0.98, 0, 0.25, 0)
-adjustPanel.BackgroundColor3 = Color3.fromRGB(25, 20, 35)
-adjustPanel.BackgroundTransparency = 0.08
-adjustPanel.BorderSizePixel = 0
-adjustPanel.Visible = false
-adjustPanel.ZIndex = 19
-adjustPanel.Parent = ScreenGui
-Instance.new("UICorner", adjustPanel).CornerRadius = UDim.new(0, 10)
-local panelStroke = Instance.new("UIStroke", adjustPanel)
-panelStroke.Color = Color3.fromRGB(90, 160, 255)
-panelStroke.Thickness = 1.5
+-- Invisible panel — hidden by default
+local invPanel = Instance.new("Frame")
+invPanel.Size = UDim2.new(0, 160, 0, 90)
+invPanel.Position = UDim2.new(0, 54, 0.43, 0)
+invPanel.BackgroundColor3 = Color3.fromRGB(18, 12, 28)
+invPanel.BackgroundTransparency = 0.1
+invPanel.BorderSizePixel = 0
+invPanel.Visible = false
+invPanel.ZIndex = 9
+invPanel.Parent = ScreenGui
+Instance.new("UICorner", invPanel).CornerRadius = UDim.new(0, 10)
+local invPanelStroke = Instance.new("UIStroke", invPanel)
+invPanelStroke.Color = Color3.fromRGB(180, 60, 255)
+invPanelStroke.Thickness = 1.5
 
-local adjustTitle = Instance.new("TextLabel")
-adjustTitle.BackgroundTransparency = 1
-adjustTitle.Position = UDim2.new(0, 9, 0, 4)
-adjustTitle.Size = UDim2.new(1, -43, 0, 20)
-adjustTitle.Font = Enum.Font.GothamBold
-adjustTitle.Text = "Adjust Invisible Button"
-adjustTitle.TextSize = 11
-adjustTitle.TextTruncate = Enum.TextTruncate.AtEnd
-adjustTitle.TextXAlignment = Enum.TextXAlignment.Left
-adjustTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
-adjustTitle.ZIndex = 20
-adjustTitle.Parent = adjustPanel
+-- Drag bar (header strip inside panel)
+local invDragBar = Instance.new("TextLabel")
+invDragBar.Size = UDim2.new(1, 0, 0, 20)
+invDragBar.Position = UDim2.new(0, 0, 0, 0)
+invDragBar.BackgroundColor3 = Color3.fromRGB(100, 40, 180)
+invDragBar.BackgroundTransparency = 0.3
+invDragBar.Text = "⠿  Invisible"
+invDragBar.TextColor3 = Color3.fromRGB(220, 200, 255)
+invDragBar.TextSize = 12
+invDragBar.Font = Enum.Font.GothamBold
+invDragBar.ZIndex = 10
+invDragBar.Parent = invPanel
+Instance.new("UICorner", invDragBar).CornerRadius = UDim.new(0, 10)
 
-local adjustHint = Instance.new("TextLabel")
-adjustHint.BackgroundTransparency = 1
-adjustHint.Position = UDim2.new(0, 9, 0, 26)
-adjustHint.Size = UDim2.new(1, -16, 0, 19)
-adjustHint.Font = Enum.Font.Gotham
-adjustHint.Text = "Drag 👻 to move • Close to lock"
-adjustHint.TextSize = 9
-adjustHint.TextTruncate = Enum.TextTruncate.AtEnd
-adjustHint.TextXAlignment = Enum.TextXAlignment.Left
-adjustHint.TextColor3 = Color3.fromRGB(205, 205, 215)
-adjustHint.ZIndex = 20
-adjustHint.Parent = adjustPanel
+-- Toggle button inside panel
+local invInnerBtn = Instance.new("TextButton")
+invInnerBtn.Size = UDim2.new(1, -20, 0, 32)
+invInnerBtn.Position = UDim2.new(0, 10, 0, 28)
+invInnerBtn.BackgroundColor3 = Color3.fromRGB(255, 75, 75)
+invInnerBtn.BackgroundTransparency = 0.2
+invInnerBtn.Text = "● INVISIBLE: OFF"
+invInnerBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+invInnerBtn.TextSize = 13
+invInnerBtn.Font = Enum.Font.GothamBold
+invInnerBtn.ZIndex = 10
+invInnerBtn.Parent = invPanel
+Instance.new("UICorner", invInnerBtn).CornerRadius = UDim.new(0, 8)
 
-local closeAdjust = Instance.new("TextButton")
-closeAdjust.Size = UDim2.new(0, 22, 0, 22)
-closeAdjust.Position = UDim2.new(1, -26, 0, 4)
-closeAdjust.BackgroundColor3 = Color3.fromRGB(160, 55, 65)
-closeAdjust.Text = "×"
-closeAdjust.TextColor3 = Color3.new(1, 1, 1)
-closeAdjust.Font = Enum.Font.GothamBold
-closeAdjust.TextSize = 17
-closeAdjust.ZIndex = 21
-closeAdjust.Parent = adjustPanel
-Instance.new("UICorner", closeAdjust).CornerRadius = UDim.new(1, 0)
+-- Status hint
+local invStatusLabel = Instance.new("TextLabel")
+invStatusLabel.Size = UDim2.new(1, -20, 0, 16)
+invStatusLabel.Position = UDim2.new(0, 10, 0, 66)
+invStatusLabel.BackgroundTransparency = 1
+invStatusLabel.Text = "standing still = more invisible"
+invStatusLabel.TextColor3 = Color3.fromRGB(160, 140, 200)
+invStatusLabel.TextSize = 10
+invStatusLabel.Font = Enum.Font.Gotham
+invStatusLabel.ZIndex = 10
+invStatusLabel.Parent = invPanel
 
-local draggingInv = false
-local dragInputInv = nil
-local dragStartInv = nil
-local startAbsPosInv = nil
-local adjustOpen = false
-
-local function setAdjustOpen(open)
-    adjustOpen = open
-    adjustPanel.Visible = open
-    adjustToggle.BackgroundColor3 = open and Color3.fromRGB(55, 115, 190) or Color3.fromRGB(35, 40, 55)
-    adjustHint.Text = "Drag 👻 to move • Close to lock"
-    if not open then
-        draggingInv = false
-        dragInputInv = nil
-        startAbsPosInv = nil
-    end
-end
-
-adjustToggle.Activated:Connect(function()
-    setAdjustOpen(not adjustOpen)
-end)
-closeAdjust.Activated:Connect(function()
-    setAdjustOpen(false)
+-- Toggle button opens/closes panel
+invToggleBtn.MouseButton1Click:Connect(function()
+    invPanel.Visible = not invPanel.Visible
 end)
 
--- Only allow dragging while the separate adjustment panel is open.
-invisBtn.InputBegan:Connect(function(input)
-    if not adjustOpen then return end
-    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        draggingInv = true
-        dragInputInv = input
-        dragStartInv = input.Position
-        -- Capture the button's actual screen position once. Do not reset its
-        -- origin during movement; that avoids snapping/jumping to the top.
-        startAbsPosInv = invisBtn.AbsolutePosition
-    end
-end)
-
-UserInputService.InputChanged:Connect(function(input)
-    if not adjustOpen or not draggingInv then return end
-    local mouseMove = input.UserInputType == Enum.UserInputType.MouseMovement
-        and dragInputInv and dragInputInv.UserInputType == Enum.UserInputType.MouseButton1
-    local touchMove = input == dragInputInv
-    if mouseMove or touchMove then
-        local delta = input.Position - dragStartInv
-        local camera = workspace.CurrentCamera
-        local viewport = camera and camera.ViewportSize
-        local buttonSize = invisBtn.AbsoluteSize
-        -- Calculate from the original position captured at touch/mouse-down.
-        -- ScreenGui.IgnoreGuiInset is true, so these are matching coordinates.
-        local newX = startAbsPosInv.X + delta.X
-        local newY = startAbsPosInv.Y + delta.Y
-        if viewport then
-            newX = math.clamp(newX, 0, math.max(0, viewport.X - buttonSize.X))
-            newY = math.clamp(newY, 0, math.max(0, viewport.Y - buttonSize.Y))
-        end
-        invisBtn.Position = UDim2.fromOffset(newX, newY)
-    end
-end)
-
-UserInputService.InputEnded:Connect(function(input)
-    if draggingInv and (input == dragInputInv or input.UserInputType == Enum.UserInputType.MouseButton1) then
-        draggingInv = false
-        dragInputInv = nil
-        startAbsPosInv = nil
-    end
-end)
-
--- Normal tap toggles invisibility only while adjustment mode is closed.
-invisBtn.Activated:Connect(function()
-    if adjustOpen then return end
+-- Invisible on/off logic
+invInnerBtn.MouseButton1Click:Connect(function()
     if invisibleEnabled then
         stopInvisible()
-        invStroke.Color = Color3.fromRGB(255, 75, 75)
+        invInnerBtn.BackgroundColor3 = Color3.fromRGB(255, 75, 75)
+        invInnerBtn.Text = "● INVISIBLE: OFF"
+        invToggleStroke.Color = Color3.fromRGB(180, 60, 255)
         notify("Invisible", "OFF", 2)
     else
         startInvisible()
-        invStroke.Color = Color3.fromRGB(75, 255, 75)
+        invInnerBtn.BackgroundColor3 = Color3.fromRGB(75, 200, 75)
+        invInnerBtn.Text = "● INVISIBLE: ON"
+        invToggleStroke.Color = Color3.fromRGB(75, 255, 75)
         notify("Invisible", "ON", 2)
     end
 end)
 
--- Main Draggable
+-- Panel drag — only fires when panel is visible
+local invPanelDragging, invPanelDragStart, invPanelStartPos
+invDragBar.InputBegan:Connect(function(input)
+    if not invPanel.Visible then return end
+    if input.UserInputType == Enum.UserInputType.MouseButton1
+    or input.UserInputType == Enum.UserInputType.Touch then
+        invPanelDragging = true
+        invPanelDragStart = input.Position
+        invPanelStartPos = invPanel.Position
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                invPanelDragging = false
+            end
+        end)
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if invPanelDragging and invPanel.Visible and (
+        input.UserInputType == Enum.UserInputType.MouseMovement
+        or input.UserInputType == Enum.UserInputType.Touch
+    ) then
+        local delta = input.Position - invPanelDragStart
+        invPanel.Position = UDim2.new(
+            invPanelStartPos.X.Scale,
+            invPanelStartPos.X.Offset + delta.X,
+            invPanelStartPos.Y.Scale,
+            invPanelStartPos.Y.Offset + delta.Y
+        )
+    end
+end)
+
+-- Main Panel Drag (header)
 local dragging, dragStart, startPos
 header.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
