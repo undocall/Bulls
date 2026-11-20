@@ -11,7 +11,8 @@ local CollectionService = game:GetService("CollectionService")
 local lp = Players.LocalPlayer
 while not lp do task.wait() lp = Players.LocalPlayer end
 
-local ARENA_TELEPORT = Vector3.new(-760, 14, 2040)
+-- UPDATED TO YOUR EXACT SCREENSHOT COORDINATES
+local ARENA_TELEPORT = Vector3.new(-635.2, 33.4, 1774.3) 
 local LOBBY_MAX_Z    = 100
 
 local function isEnemy(player)
@@ -654,10 +655,6 @@ addToggleRow(mainPage, "Enable Hitbox", function(enabled) toggleHitboxes(enabled
 
 -- COMBAT
 local combatPage = addPage("Combat")
-addButtonRow(combatPage, "Force Teleport to Arena", function()
-    if not keyVerified then notify("Locked", "Enter key first", 3); return end
-    local ok, msg = teleportToArena(true); if ok then notify("Teleported", "At arena", 2) else notify("Failed", msg, 3) end
-end)
 
 local killAuraToggle = addToggleRow(combatPage, "Kill Aura", function(enabled)
     if enabled and not keyVerified then notify("Locked", "Enter key first", 3); killAuraToggle.set(false); return end
@@ -666,13 +663,10 @@ local killAuraToggle = addToggleRow(combatPage, "Kill Aura", function(enabled)
 end)
 
 -- ═══════════ KILL AURA: SPAWNER ON DEATH + ONE-CLICK TRICK ═══════════
--- As you described it: the game itself fires RespawnRemoteEvent when you die (or respawn
--- outside) and puts you in the arena. We only fire SpawnerRemoteEvent, once, and never
--- fire RespawnRemoteEvent ourselves.
 local TRICK = {
-    SpawnerFires = 1,     -- once, as you said
-    RespawnTimeout = 8,   -- seconds, uncalibrated
-    HoldSeconds = 0.8,    -- seconds to keep dismounting you after respawn, uncalibrated
+    SpawnerFires = 1,     
+    RespawnTimeout = 8,   
+    HoldSeconds = 1.5,    -- Increased hold to ensure we teleport and dismount
 }
 local deathBusy = false
 
@@ -684,8 +678,6 @@ local function getLiveParts()
     return nil
 end
 
--- trigger: optional function that kills the character, run after the listener is attached.
--- Returns ok, err, spawnerFires, dismountFrames.
 local function handleDeath(trigger)
     local spawnerFires, dismounts = 0, 0
     local newCharacter
@@ -710,16 +702,14 @@ local function handleDeath(trigger)
 
         local holdUntil = os.clock() + TRICK.HoldSeconds
         while os.clock() < holdUntil and newCharacter.Parent and hum.Health > 0 do
-            if hum.SeatPart then -- seated on a bull anyway: get off
+            if hum.SeatPart then 
                 dismounts = dismounts + 1
                 hum.Sit = false
                 hum:ChangeState(Enum.HumanoidStateType.Jumping)
             end
-            -- safety net only: the game should already put you in the arena
-            if root.Position.Z < LOBBY_MAX_Z then
-                root.CFrame = CFrame.new(ARENA_TELEPORT)
-                root.AssemblyLinearVelocity = Vector3.zero
-            end
+            -- Force teleport to the exact coord from the screenshot
+            root.CFrame = CFrame.new(ARENA_TELEPORT)
+            root.AssemblyLinearVelocity = Vector3.zero
             RunService.Heartbeat:Wait()
         end
     end)
@@ -727,7 +717,6 @@ local function handleDeath(trigger)
     return ok, err, spawnerFires, dismounts
 end
 
--- Every death while Kill Aura is on.
 local function watchDeaths(character)
     local hum = character:WaitForChild("Humanoid", 10)
     if not hum then return end
@@ -744,7 +733,6 @@ end
 if lp.Character then task.spawn(watchDeaths, lp.Character) end
 lp.CharacterAdded:Connect(function(c) task.spawn(watchDeaths, c) end)
 
--- One click: aura on, die on purpose, same path as a real death.
 local function runKillAuraTrick()
     if deathBusy then return end
     if not keyVerified then notify("Locked", "Enter key first", 3) return end
@@ -754,13 +742,13 @@ local function runKillAuraTrick()
     if not oldChar then notify("Trick", "No live character", 3) return end
 
     deathBusy = true
-    if not killAuraOn then killAuraToggle.set(true) end -- same as a normal enable
+    if not killAuraOn then killAuraToggle.set(true) end
     local ok, err, fires, dismounts = handleDeath(function()
         oldHum.Health = 0
         pcall(function() oldChar:BreakJoints() end)
     end)
     deathBusy = false
-    local report = string.format("Spawner x%d, dismount frames: %d", fires, dismounts)
+    local report = string.format("Spawner x%d, dismount: %d", fires, dismounts)
     if ok then notify("Kill Aura Trick", "Done · " .. report, 5)
     else notify("Trick failed", tostring(err) .. " · " .. report, 5) end
 end
