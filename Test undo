@@ -665,16 +665,16 @@ local killAuraToggle = addToggleRow(combatPage, "Kill Aura", function(enabled)
     if enabled then if not FlingRE or not SpawnerRE then findRemotes() end; if SpawnerRE then pcall(function() SpawnerRE:FireServer() end) end end
 end)
 
--- ═══════════ KILL AURA TRICK (one click) ═══════════
--- Sequence read from the recorded video: aura running, reset the character while the
--- bull stays, return to the arena. Why the server accepts it is not visible to us.
+-- ═══════════ KILL AURA: SPAWNER ON DEATH + ONE-CLICK TRICK ═══════════
+-- As you described it: the game itself fires RespawnRemoteEvent when you die (or respawn
+-- outside) and puts you in the arena. We only fire SpawnerRemoteEvent, once, and never
+-- fire RespawnRemoteEvent ourselves.
 local TRICK = {
-    SettleBeforeReset = 1.0,        -- seconds, uncalibrated
-    SettleAfterRespawn = 1.0,       -- seconds, uncalibrated
-    RespawnTimeout = 10,            -- seconds, uncalibrated
-    FireSpawnerAfterRespawn = true, -- guess from Cobalt counts (Spawner 3 -> 6 across the respawn); false if a second bull appears
+    SpawnerFires = 1,     -- once, as you said
+    RespawnTimeout = 8,   -- seconds, uncalibrated
+    HoldSeconds = 0.8,    -- seconds to keep dismounting you after respawn, uncalibrated
 }
-local trickRunning = false
+local deathBusy = false
 
 local function getLiveParts()
     local c = lp.Character
@@ -684,51 +684,85 @@ local function getLiveParts()
     return nil
 end
 
-local function isSanePosition(cf)
-    local p = cf.Position
-    return p.X == p.X and p.Y == p.Y and p.Z == p.Z and p.Magnitude < 1e6
+-- trigger: optional function that kills the character, run after the listener is attached.
+-- Returns ok, err, spawnerFires, dismountFrames.
+local function handleDeath(trigger)
+    local spawnerFires, dismounts = 0, 0
+    local newCharacter
+    local conn = lp.CharacterAdded:Connect(function(c) newCharacter = c end)
+    local ok, err = pcall(function()
+        if not SpawnerRE then findRemotes() end
+        if not SpawnerRE then error("SpawnerRemoteEvent not found") end
+        if trigger then trigger() end
+
+        for _ = 1, TRICK.SpawnerFires do
+            pcall(function() SpawnerRE:FireServer() end)
+            spawnerFires = spawnerFires + 1
+        end
+
+        local deadline = os.clock() + TRICK.RespawnTimeout
+        while not newCharacter and os.clock() < deadline do task.wait() end
+        if not newCharacter then error("no new character after death") end
+
+        local hum = newCharacter:WaitForChild("Humanoid", 3)
+        local root = newCharacter:WaitForChild("HumanoidRootPart", 3)
+        if not hum or not root then error("new character incomplete") end
+
+        local holdUntil = os.clock() + TRICK.HoldSeconds
+        while os.clock() < holdUntil and newCharacter.Parent and hum.Health > 0 do
+            if hum.SeatPart then -- seated on a bull anyway: get off
+                dismounts = dismounts + 1
+                hum.Sit = false
+                hum:ChangeState(Enum.HumanoidStateType.Jumping)
+            end
+            -- safety net only: the game should already put you in the arena
+            if root.Position.Z < LOBBY_MAX_Z then
+                root.CFrame = CFrame.new(ARENA_TELEPORT)
+                root.AssemblyLinearVelocity = Vector3.zero
+            end
+            RunService.Heartbeat:Wait()
+        end
+    end)
+    conn:Disconnect()
+    return ok, err, spawnerFires, dismounts
 end
 
+-- Every death while Kill Aura is on.
+local function watchDeaths(character)
+    local hum = character:WaitForChild("Humanoid", 10)
+    if not hum then return end
+    hum.Died:Connect(function()
+        if not killAuraOn or not keyVerified or deathBusy then return end
+        deathBusy = true
+        task.spawn(function()
+            local ok, err = handleDeath(nil)
+            deathBusy = false
+            if not ok then notify("Aura death handler", tostring(err), 4) end
+        end)
+    end)
+end
+if lp.Character then task.spawn(watchDeaths, lp.Character) end
+lp.CharacterAdded:Connect(function(c) task.spawn(watchDeaths, c) end)
+
+-- One click: aura on, die on purpose, same path as a real death.
 local function runKillAuraTrick()
-    if trickRunning then return end
+    if deathBusy then return end
     if not keyVerified then notify("Locked", "Enter key first", 3) return end
     if not FlingRE or not SpawnerRE then findRemotes() end
     if not FlingRE or not SpawnerRE then notify("Trick", "Remotes not found", 3) return end
-    local oldChar, oldHum, oldRoot = getLiveParts()
+    local oldChar, oldHum = getLiveParts()
     if not oldChar then notify("Trick", "No live character", 3) return end
 
-    trickRunning = true
-    local ok, err = pcall(function()
-        local returnCF = oldRoot.CFrame
-        -- assumption: lobby is Z < LOBBY_MAX_Z, so from the lobby we return to ARENA_TELEPORT
-        if returnCF.Position.Z < LOBBY_MAX_Z then returnCF = CFrame.new(ARENA_TELEPORT) end
-        if not isSanePosition(returnCF) then error("bad return position") end
-
-        if not killAuraOn then killAuraToggle.set(true) end -- same as a normal enable: fires Spawner once
-        task.wait(TRICK.SettleBeforeReset)
-
+    deathBusy = true
+    if not killAuraOn then killAuraToggle.set(true) end -- same as a normal enable
+    local ok, err, fires, dismounts = handleDeath(function()
         oldHum.Health = 0
         pcall(function() oldChar:BreakJoints() end)
-
-        local deadline = os.clock() + TRICK.RespawnTimeout
-        local respawned = false
-        repeat
-            task.wait(0.1)
-            local c = getLiveParts()
-            if c and c ~= oldChar then respawned = true end
-        until respawned or os.clock() > deadline
-        if not respawned then error("respawn timed out") end
-
-        task.wait(TRICK.SettleAfterRespawn)
-        local _, _, newRoot = getLiveParts()
-        if not newRoot then error("character lost before teleport") end
-        if TRICK.FireSpawnerAfterRespawn then pcall(function() SpawnerRE:FireServer() end) end
-        newRoot.CFrame = returnCF
-        newRoot.AssemblyLinearVelocity = Vector3.zero
     end)
-    trickRunning = false
-    if ok then notify("Kill Aura Trick", "Done, aura is on", 3)
-    else notify("Trick failed", tostring(err), 4) end
+    deathBusy = false
+    local report = string.format("Spawner x%d, dismount frames: %d", fires, dismounts)
+    if ok then notify("Kill Aura Trick", "Done · " .. report, 5)
+    else notify("Trick failed", tostring(err) .. " · " .. report, 5) end
 end
 
 addButtonRow(combatPage, "Kill Aura Trick (1-click)", function() task.spawn(runKillAuraTrick) end)
